@@ -1,0 +1,22 @@
+CREATE TABLE IF NOT EXISTS records (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    module_slug TEXT NOT NULL,
+    module_name TEXT NOT NULL,
+    category TEXT NOT NULL,
+    bucket TEXT NOT NULL,
+    item TEXT NOT NULL,
+    name TEXT NOT NULL,
+    amount REAL,
+    quantity REAL,
+    unit TEXT,
+    record_date TEXT,
+    status TEXT NOT NULL DEFAULT 'Draft',
+    payment_method TEXT,
+    bir_status TEXT NOT NULL DEFAULT 'Internal Only',
+    counterparty TEXT,
+    reference_no TEXT,
+    notes TEXT,
+    metadata_json TEXT NOT NULL DEFAULT '{}',
+    created_at TEXT DEFAULT CURRENT_TIMESTAMP,
+    updated_at TEXT DEFAULT CURRENT_TIMESTAMP
+);

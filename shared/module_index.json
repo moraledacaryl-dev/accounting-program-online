@@ -1,0 +1,21 @@
+{
+  "rooms": "Rooms",
+  "restaurant": "Restaurant",
+  "breakfast": "Breakfast",
+  "cafe": "Café",
+  "bar": "Bar",
+  "events": "Events",
+  "inventory": "Inventory",
+  "procurement": "Procurement",
+  "internal": "Internal",
+  "channel_ota": "Channel / OTA",
+  "reconciliation": "Reconciliation",
+  "payroll": "Payroll",
+  "assets": "Assets",
+  "utilities": "Utilities",
+  "finance": "Finance",
+  "other_income": "Other Income",
+  "bir_statutory": "BIR / Statutory",
+  "master_data": "Master Data",
+  "workflow_status_control": "Workflow / Status Control"
+}

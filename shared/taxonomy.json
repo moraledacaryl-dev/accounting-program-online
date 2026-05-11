@@ -1,0 +1,1488 @@
+{
+  "Rooms": {
+    "Revenue": {
+      "Direct Bookings": [
+        "Walk-in",
+        "Phone Booking",
+        "Facebook / Social Booking"
+      ],
+      "OTA Bookings": [
+        "Agoda",
+        "Booking.com",
+        "Airbnb",
+        "Expedia"
+      ],
+      "Corporate / Group": [
+        "Corporate Accounts",
+        "Group Reservations"
+      ]
+    },
+    "Packages": {
+      "Room Only": [
+        "Standard Rate",
+        "Promo Rate"
+      ],
+      "Room + Breakfast": [
+        "Standard Package",
+        "Promo Package"
+      ],
+      "Room + Add-ons": [
+        "Extra Bed Package",
+        "Event Stay Package"
+      ]
+    },
+    "Extras (Operational Charges)": {
+      "Extra Person Fees": [
+        "Adult",
+        "Child"
+      ],
+      "Time-based Charges": [
+        "Late Check-out",
+        "Early Check-in"
+      ],
+      "Add-ons": [
+        "Extra Bed",
+        "Additional Breakfast"
+      ]
+    },
+    "Manual / Custom Income": {
+      "Misc Room Income": [
+        "One-time Charge",
+        "Custom Service Fee"
+      ],
+      "Adjustments": [
+        "Revenue Adjustment",
+        "Rounding Adjustment"
+      ],
+      "Special Charges": [
+        "Unique Guest Charge",
+        "Non-standard Billing"
+      ]
+    },
+    "Deposits": {
+      "Advance Payments": [
+        "Reservation Deposit",
+        "Event Deposit"
+      ],
+      "Forfeited Deposits": [
+        "No-show",
+        "Cancellation Penalty"
+      ]
+    },
+    "Receivables": {
+      "OTA Receivables": [
+        "Agoda",
+        "Booking.com",
+        "Airbnb",
+        "Expedia"
+      ],
+      "Direct Receivables": [
+        "Corporate",
+        "Guest Balance"
+      ]
+    },
+    "Costs": {
+      "Operating Costs": [
+        "Amenities",
+        "Cleaning",
+        "Laundry"
+      ],
+      "Allocations": [
+        "Electricity",
+        "Water"
+      ]
+    },
+    "Amenities": {
+      "Consumables": [
+        "Bottled Water",
+        "Coffee / Tea",
+        "Toiletries"
+      ],
+      "Disposable Items": [
+        "Slippers",
+        "Tissue"
+      ]
+    },
+    "Damages / Charges": {
+      "Guest Damage": [
+        "Furniture",
+        "Linen"
+      ],
+      "Missing Items": [
+        "Towels",
+        "Amenities"
+      ]
+    },
+    "Manual / Custom Expense": {
+      "Adjustments": [
+        "Correction Expense",
+        "Manual Expense Entry"
+      ],
+      "Special Costs": [
+        "Guest Recovery",
+        "Compensation"
+      ]
+    }
+  },
+  "Restaurant": {
+    "Sales": {
+      "Food Sales": [
+        "Pasta",
+        "Rice Meals",
+        "Sandwiches",
+        "Breakfast Meals"
+      ],
+      "Add-ons": [
+        "Extra Rice",
+        "Extra Sauce",
+        "Side Items"
+      ]
+    },
+    "Manual / Custom Income": {
+      "Misc Income": [
+        "Manual Sale Entry",
+        "Special Charge"
+      ],
+      "Adjustments": [
+        "Revenue Correction",
+        "Rounding Adjustment"
+      ]
+    },
+    "Cost of Goods (COGS)": {
+      "Proteins": [
+        "Chicken",
+        "Pork",
+        "Beef"
+      ],
+      "Seafood": [
+        "Fish",
+        "Shrimp"
+      ],
+      "Produce": [
+        "Vegetables",
+        "Fruits"
+      ],
+      "Pantry": [
+        "Dry Goods",
+        "Dairy",
+        "Condiments"
+      ]
+    },
+    "Waste & Loss": {
+      "Spoilage": [
+        "Expired Items",
+        "Rotten Produce"
+      ],
+      "Production Loss": [
+        "Trimmings",
+        "Cooking Loss"
+      ],
+      "Overproduction": [
+        "Unsold Food",
+        "Excess Prep"
+      ]
+    },
+    "Internal Use": {
+      "Staff Meals": [
+        "Kitchen Staff",
+        "Service Staff"
+      ],
+      "Complimentary": [
+        "Guest Recovery",
+        "Promo Items"
+      ]
+    },
+    "Manual / Custom Expense": {
+      "Adjustments": [
+        "Correction Entry",
+        "Manual Ingredient Use"
+      ],
+      "Special Costs": [
+        "Test Kitchen",
+        "Experimental Dish"
+      ]
+    }
+  },
+  "Breakfast": {
+    "Included Breakfast": {
+      "Guest Breakfast": [
+        "Claimed",
+        "Unclaimed"
+      ],
+      "Overuse": [
+        "Extra Portion",
+        "Additional Serving"
+      ]
+    },
+    "Paid Breakfast": {
+      "Guest Paid": [
+        "Additional Breakfast",
+        "Walk-in"
+      ],
+      "Non-Guest": [
+        "External Customers",
+        "Staff Guests"
+      ]
+    },
+    "Breakfast Allocation": {
+      "Package Allocation": [
+        "Included in Room",
+        "Promo Package"
+      ],
+      "Separate Billing": [
+        "Paid Upgrade",
+        "Add-on Breakfast"
+      ]
+    },
+    "Inventory Usage": {
+      "Staples": [
+        "Eggs",
+        "Rice",
+        "Bread"
+      ],
+      "Proteins": [
+        "Meat",
+        "Sausages"
+      ],
+      "Drinks": [
+        "Coffee",
+        "Juice"
+      ]
+    },
+    "Cost": {
+      "Food Cost": [
+        "Ingredient Cost",
+        "Portion Cost"
+      ],
+      "Allocation": [
+        "Labor",
+        "Kitchen Overhead"
+      ]
+    },
+    "Waste": {
+      "Spoilage": [
+        "Expired Ingredients"
+      ],
+      "Overproduction": [
+        "Leftovers",
+        "Unserved Meals"
+      ]
+    }
+  },
+  "Café": {
+    "Sales": {
+      "Coffee": [
+        "Espresso",
+        "Latte"
+      ],
+      "Non-Coffee": [
+        "Chocolate",
+        "Juice"
+      ]
+    },
+    "Manual / Custom Income": {
+      "Custom Drinks": [
+        "Special Orders"
+      ],
+      "Adjustments": [
+        "Revenue Correction"
+      ]
+    },
+    "Inventory Usage": {
+      "Coffee": [
+        "Beans",
+        "Ground Coffee"
+      ],
+      "Dairy": [
+        "Milk",
+        "Cream"
+      ],
+      "Packaging": [
+        "Cups",
+        "Lids"
+      ]
+    },
+    "Waste": {
+      "Dairy Waste": [
+        "Expired Milk"
+      ],
+      "Coffee Waste": [
+        "Over-extraction",
+        "Spillage"
+      ]
+    }
+  },
+  "Bar": {
+    "Sales": {
+      "Alcohol": [
+        "Beer",
+        "Wine",
+        "Spirits"
+      ],
+      "Cocktails": [
+        "Classic",
+        "Signature"
+      ]
+    },
+    "Inventory Usage": {
+      "Liquor": [
+        "Base Spirits",
+        "Premium Spirits"
+      ],
+      "Mixers": [
+        "Syrups",
+        "Juices"
+      ]
+    },
+    "Cost": {
+      "Alcohol Cost": [
+        "Liquor Cost"
+      ],
+      "Mixer Cost": [
+        "Syrup Cost",
+        "Juice Cost"
+      ]
+    },
+    "Waste": {
+      "Spillage": [
+        "Pour Loss"
+      ],
+      "Expiry": [
+        "Spoiled Mixers"
+      ]
+    }
+  },
+  "Events": {
+    "Revenue": {
+      "Venue Rental": [
+        "Hall Rental",
+        "Space Rental"
+      ],
+      "Catering": [
+        "Food Package",
+        "Beverage Package"
+      ]
+    },
+    "Deposits": {
+      "Reservation Deposit": [
+        "Booking Fee"
+      ],
+      "Security Deposit": [
+        "Damage Deposit"
+      ]
+    },
+    "Receivables": {
+      "Event Balance": [
+        "Remaining Balance"
+      ],
+      "Add-ons": [
+        "Additional Services"
+      ]
+    },
+    "Costs": {
+      "Food Cost": [
+        "Ingredients",
+        "Preparation"
+      ],
+      "Setup Cost": [
+        "Equipment",
+        "Decorations"
+      ],
+      "Labor": [
+        "Service Staff",
+        "Kitchen Staff"
+      ]
+    },
+    "Manual / Custom Income": {
+      "Special Charges": [
+        "Custom Requests"
+      ],
+      "Adjustments": [
+        "Revenue Correction"
+      ]
+    },
+    "Manual / Custom Expense": {
+      "Adjustments": [
+        "Correction Entry"
+      ],
+      "Special Costs": [
+        "Complimentary Event",
+        "Discounts"
+      ]
+    }
+  },
+  "Inventory": {
+    "Raw Materials": {
+      "Proteins": [
+        "Chicken",
+        "Pork",
+        "Beef"
+      ],
+      "Seafood": [
+        "Fish",
+        "Shrimp"
+      ],
+      "Produce": [
+        "Vegetables",
+        "Fruits"
+      ],
+      "Pantry": [
+        "Dry Goods",
+        "Dairy",
+        "Condiments"
+      ]
+    },
+    "Beverages": {
+      "Coffee Ingredients": [
+        "Beans",
+        "Ground Coffee"
+      ],
+      "Bar Ingredients": [
+        "Liquor",
+        "Mixers"
+      ],
+      "Other Drinks": [
+        "Juice",
+        "Syrups"
+      ]
+    },
+    "Consumables": {
+      "Cleaning Supplies": [
+        "Detergent",
+        "Disinfectant"
+      ],
+      "Packaging": [
+        "Cups",
+        "Takeout Containers"
+      ]
+    },
+    "Linen": {
+      "Room Linen": [
+        "Bedsheets",
+        "Pillowcases"
+      ],
+      "Towels": [
+        "Bath Towels",
+        "Hand Towels"
+      ]
+    },
+    "Smallwares": {
+      "Kitchen Tools": [
+        "Knives",
+        "Utensils"
+      ],
+      "Dining Items": [
+        "Plates",
+        "Glassware"
+      ]
+    },
+    "Inventory Movements": {
+      "Add (Stock In)": [
+        "Purchase",
+        "Return",
+        "Adjustment Positive"
+      ],
+      "Subtract (Stock Out)": [
+        "Orders",
+        "Staff Meals",
+        "Complimentary",
+        "Spoilage"
+      ]
+    },
+    "Adjustments": {
+      "Positive Adjustment": [
+        "Count Gain",
+        "Correction"
+      ],
+      "Negative Adjustment": [
+        "Count Loss",
+        "Damage"
+      ]
+    },
+    "Stock Tracking": {
+      "Quantity Tracking": [
+        "Total Quantity",
+        "Total Packs"
+      ],
+      "FIFO Tracking": [
+        "Packs Used",
+        "Remaining Packs"
+      ]
+    },
+    "Inventory Status": {
+      "Active Stock": [
+        "Available"
+      ],
+      "Inactive Stock": [
+        "Fully Used",
+        "Expired"
+      ]
+    }
+  },
+  "Procurement": {
+    "Purchase Requests": {
+      "Kitchen Requests": [
+        "Ingredients",
+        "Emergency Requests"
+      ],
+      "Housekeeping Requests": [
+        "Linen",
+        "Supplies"
+      ],
+      "Admin Requests": [
+        "Office Supplies",
+        "Misc Purchases"
+      ]
+    },
+    "Purchase Orders": {
+      "Food PO": [
+        "Fresh Goods",
+        "Dry Goods"
+      ],
+      "Non-Food PO": [
+        "Cleaning Supplies",
+        "Packaging"
+      ],
+      "Asset PO": [
+        "Equipment",
+        "Furniture"
+      ]
+    },
+    "Receiving": {
+      "Inventory Receiving": [
+        "Accepted",
+        "Partial"
+      ],
+      "Variance": [
+        "Short Delivery",
+        "Damaged Items"
+      ]
+    },
+    "Supplier Management": {
+      "Supplier Master": [
+        "Active Supplier",
+        "Inactive Supplier"
+      ],
+      "Pricing": [
+        "Price History",
+        "Latest Cost"
+      ]
+    },
+    "Payables Link": {
+      "Pending Payables": [
+        "Unpaid Bills"
+      ],
+      "Paid Payables": [
+        "Settled Bills"
+      ]
+    }
+  },
+  "Internal": {
+    "Staff Meals": {
+      "Meal Type": [
+        "Breakfast",
+        "Lunch",
+        "Dinner",
+        "Overtime Meal"
+      ],
+      "Meal Records": [
+        "Dish Name",
+        "Quantity Prepared"
+      ],
+      "Headcount": [
+        "Employees Present",
+        "Employees Fed"
+      ],
+      "Costing": [
+        "Ingredient Cost",
+        "Cost per Meal"
+      ]
+    },
+    "Complimentary": {
+      "Guest Recovery": [
+        "Service Recovery"
+      ],
+      "Promotions": [
+        "Free Items"
+      ],
+      "VIP": [
+        "Special Guests"
+      ]
+    },
+    "Owner Use": {
+      "Personal Use": [
+        "Food Consumption"
+      ],
+      "Family Use": [
+        "Room Use",
+        "Food Use"
+      ]
+    },
+    "Testing / R&D": {
+      "Recipe Testing": [
+        "New Dishes"
+      ],
+      "Training Use": [
+        "Staff Training"
+      ],
+      "Product Development": [
+        "Menu Improvement"
+      ]
+    },
+    "Internal Adjustments": {
+      "Inventory Adjustment": [
+        "Manual Correction"
+      ],
+      "Accounting Adjustment": [
+        "Non-BIR Entries"
+      ]
+    }
+  },
+  "Channel / OTA": {
+    "Channel Setup": {
+      "Online Channels": [
+        "Agoda",
+        "Booking.com",
+        "Airbnb",
+        "Expedia"
+      ],
+      "Direct Channels": [
+        "Walk-in",
+        "Website",
+        "Social Media"
+      ]
+    },
+    "Channel Performance": {
+      "Bookings": [
+        "Number of Bookings"
+      ],
+      "Revenue": [
+        "Gross Revenue",
+        "Net Revenue"
+      ]
+    },
+    "Channel Costs": {
+      "Commission": [
+        "Agoda Commission",
+        "Booking.com Commission",
+        "Airbnb Commission"
+      ],
+      "Promotions": [
+        "Discounts",
+        "Sponsored Listings"
+      ]
+    },
+    "Channel Payouts": {
+      "Expected Payout": [
+        "Pending"
+      ],
+      "Actual Payout": [
+        "Received"
+      ],
+      "Issues": [
+        "Missing Payout",
+        "Disputed Amount"
+      ]
+    }
+  },
+  "Reconciliation": {
+    "Cash Reconciliation": {
+      "Daily Cash Count": [
+        "Opening Cash",
+        "Closing Cash"
+      ],
+      "Variance": [
+        "Overage",
+        "Shortage"
+      ]
+    },
+    "Bank Reconciliation": {
+      "Matching": [
+        "Deposits Matched",
+        "Payments Matched"
+      ],
+      "Unmatched": [
+        "Missing Entries",
+        "Bank Differences"
+      ]
+    },
+    "OTA Reconciliation": {
+      "Expected vs Actual": [
+        "Expected Payout",
+        "Actual Received"
+      ],
+      "Variance": [
+        "Commission Difference",
+        "Missing Amount"
+      ]
+    },
+    "Inventory Reconciliation": {
+      "Physical Count": [
+        "Actual Count"
+      ],
+      "Variance": [
+        "Gain",
+        "Loss"
+      ],
+      "Adjustment": [
+        "Correction Entry"
+      ]
+    },
+    "Payroll Reconciliation": {
+      "Attendance vs Payroll": [
+        "Hours Comparison"
+      ],
+      "Payroll vs Payment": [
+        "Paid vs Computed"
+      ]
+    },
+    "Revenue Reconciliation": {
+      "System vs Cash": [
+        "POS vs Cash"
+      ],
+      "Rooms vs Payments": [
+        "Booking vs Collection"
+      ]
+    }
+  },
+  "Payroll": {
+    "Employee Master": {
+      "Employment Profile": [
+        "Regular",
+        "Probationary",
+        "Casual / On-call"
+      ],
+      "Position Details": [
+        "Department",
+        "Job Title"
+      ],
+      "Compensation Setup": [
+        "Monthly Rate",
+        "Daily Rate",
+        "Hourly Rate"
+      ],
+      "Government Details": [
+        "TIN",
+        "SSS Number",
+        "PhilHealth Number",
+        "Pag-IBIG Number"
+      ]
+    },
+    "Attendance Inputs": {
+      "Daily Attendance": [
+        "Time In",
+        "Time Out"
+      ],
+      "Time Variance": [
+        "Late",
+        "Undertime"
+      ],
+      "Work Day Type": [
+        "Regular Day",
+        "Rest Day",
+        "Holiday"
+      ],
+      "Attendance Exceptions": [
+        "Absence",
+        "Leave",
+        "Missing Log"
+      ]
+    },
+    "Earnings": {
+      "Basic Pay": [
+        "Monthly Basic",
+        "Daily Basic",
+        "Hourly Basic"
+      ],
+      "Additional Pay": [
+        "Overtime",
+        "Night Differential",
+        "Holiday Pay",
+        "Rest Day Pay",
+        "Leave Pay"
+      ],
+      "Other Earnings": [
+        "Incentives",
+        "Bonuses",
+        "Custom Payroll Adjustment"
+      ]
+    },
+    "Allowances": {
+      "Fixed Allowances": [
+        "Meal Allowance",
+        "Transport Allowance"
+      ],
+      "Variable Allowances": [
+        "Duty Allowance",
+        "Position Allowance"
+      ],
+      "Other Allowances": [
+        "Custom Allowance",
+        "One-time Allowance"
+      ]
+    },
+    "Benefits / Contributions": {
+      "Employee Share": [
+        "SSS Employee",
+        "PhilHealth Employee",
+        "Pag-IBIG Employee"
+      ],
+      "Employer Share": [
+        "SSS Employer",
+        "PhilHealth Employer",
+        "Pag-IBIG Employer"
+      ],
+      "Other Benefits": [
+        "Service Charge Share",
+        "Other Benefit Allocation"
+      ]
+    },
+    "Deductions": {
+      "Government Deductions": [
+        "SSS",
+        "PhilHealth",
+        "Pag-IBIG"
+      ],
+      "Internal Deductions": [
+        "Salary Loan",
+        "Cash Advance",
+        "Uniform Deduction",
+        "Other Payroll Deduction"
+      ],
+      "Adjustments": [
+        "Payroll Correction",
+        "Penalty / Charge if used"
+      ]
+    },
+    "Leave Management": {
+      "Paid Leave": [
+        "Vacation Leave",
+        "Sick Leave"
+      ],
+      "Unpaid Leave": [
+        "Approved Unpaid Leave",
+        "Leave Without Pay"
+      ],
+      "Leave Balances": [
+        "Earned Leave",
+        "Used Leave",
+        "Remaining Leave"
+      ]
+    },
+    "Payroll Outputs": {
+      "Employee Outputs": [
+        "Payslip",
+        "Payroll Summary per Employee"
+      ],
+      "Batch Outputs": [
+        "Payroll Register",
+        "Payroll Journal"
+      ],
+      "Liability Outputs": [
+        "Payroll Payable",
+        "Government Contribution Payable"
+      ]
+    },
+    "Payroll Allocation": {
+      "Department Allocation": [
+        "Rooms",
+        "Restaurant",
+        "Breakfast",
+        "Café",
+        "Bar",
+        "Housekeeping",
+        "Maintenance",
+        "Admin"
+      ],
+      "Labor Analysis": [
+        "Labor Cost per Department",
+        "Labor Cost Percentage"
+      ]
+    },
+    "Payroll Releasing": {
+      "Release Method": [
+        "Cash",
+        "Bank Transfer",
+        "GCash"
+      ],
+      "Release Status": [
+        "Pending",
+        "Released",
+        "Partially Released"
+      ]
+    }
+  },
+  "Assets": {
+    "Asset Classes": {
+      "Furniture": [
+        "Beds",
+        "Chairs",
+        "Tables",
+        "Cabinets",
+        "Sofas"
+      ],
+      "Fixtures": [
+        "Lighting Fixtures",
+        "Built-in Fixtures",
+        "Bathroom Fixtures"
+      ],
+      "Equipment": [
+        "Freezer",
+        "Refrigerator",
+        "Oven",
+        "Coffee Machine",
+        "Air Conditioner",
+        "Television",
+        "Generator",
+        "Pump",
+        "CCTV",
+        "Router / IT Equipment"
+      ],
+      "Linen / Reusable Operational Assets": [
+        "Mattress",
+        "Duvet",
+        "Heavy-duty Reusables if tracked as asset"
+      ]
+    },
+    "Asset Acquisition": {
+      "Purchase": [
+        "New Purchase",
+        "Imported / Special Purchase"
+      ],
+      "Capitalization": [
+        "Capitalized Expense",
+        "Initial Recognition"
+      ],
+      "Receiving": [
+        "Delivered",
+        "Installed"
+      ]
+    },
+    "Asset Assignment": {
+      "Location Assignment": [
+        "Room Assignment",
+        "Kitchen Assignment",
+        "Bar Assignment",
+        "Storage Assignment",
+        "Office Assignment"
+      ],
+      "Movement": [
+        "Internal Transfer",
+        "Reassignment"
+      ]
+    },
+    "Depreciation": {
+      "Depreciation Setup": [
+        "Useful Life",
+        "Salvage Value",
+        "Depreciation Method"
+      ],
+      "Depreciation Tracking": [
+        "Monthly Depreciation",
+        "Accumulated Depreciation",
+        "Book Value"
+      ]
+    },
+    "Condition Tracking": {
+      "Physical Condition": [
+        "New",
+        "Good",
+        "Fair",
+        "Worn",
+        "Damaged",
+        "For Replacement"
+      ],
+      "Operational Status": [
+        "Active",
+        "Under Repair",
+        "Retired"
+      ]
+    },
+    "Maintenance": {
+      "Preventive Maintenance": [
+        "Scheduled Service",
+        "Inspection"
+      ],
+      "Corrective Maintenance": [
+        "Repair",
+        "Emergency Repair"
+      ],
+      "Service History": [
+        "Parts Replaced",
+        "Service Cost"
+      ]
+    },
+    "Disposal / Retirement": {
+      "Disposal Type": [
+        "Scrapped",
+        "Sold",
+        "Donated",
+        "Written Off"
+      ],
+      "Disposal Accounting": [
+        "Gain on Disposal",
+        "Loss on Disposal"
+      ]
+    },
+    "Replacement Planning": {
+      "Future Replacement": [
+        "Budgeted Replacement",
+        "Immediate Replacement Needed"
+      ],
+      "Risk Monitoring": [
+        "High Maintenance Asset",
+        "End-of-Life Asset"
+      ]
+    }
+  },
+  "Utilities": {
+    "Electricity": {
+      "Main Bill": [
+        "Monthly Bill",
+        "Adjustment"
+      ],
+      "Allocation": [
+        "Rooms Allocation",
+        "Restaurant Allocation",
+        "Common Area Allocation"
+      ]
+    },
+    "Water": {
+      "Main Bill": [
+        "Monthly Bill",
+        "Adjustment"
+      ],
+      "Allocation": [
+        "Rooms Allocation",
+        "Kitchen Allocation",
+        "Laundry Allocation"
+      ]
+    },
+    "Internet / Telecom": {
+      "Internet": [
+        "Monthly Internet Bill",
+        "Add-on Charges"
+      ],
+      "Telecom": [
+        "Phone Load / Postpaid",
+        "Other Telecom Expense"
+      ]
+    },
+    "Fuel / Gas": {
+      "LPG": [
+        "Kitchen LPG",
+        "Backup LPG"
+      ],
+      "Fuel": [
+        "Generator Fuel",
+        "Vehicle Fuel if ever used"
+      ]
+    },
+    "Recurring Expense Tracking": {
+      "Due Monitoring": [
+        "Upcoming Due",
+        "Overdue"
+      ],
+      "Payment Status": [
+        "Unpaid",
+        "Paid",
+        "Partially Paid"
+      ]
+    }
+  },
+  "Finance": {
+    "Cash": {
+      "Operating Cash": [
+        "Cash on Hand",
+        "Cash Drawer"
+      ],
+      "Petty Cash": [
+        "Petty Cash Fund",
+        "Petty Cash Replenishment"
+      ],
+      "Cash Movements": [
+        "Cash In",
+        "Cash Out",
+        "Cash Transfer"
+      ]
+    },
+    "Bank": {
+      "Bank Accounts": [
+        "Main Operating Account",
+        "Savings / Reserve Account"
+      ],
+      "Bank Transactions": [
+        "Deposit",
+        "Withdrawal",
+        "Transfer"
+      ],
+      "Bank Monitoring": [
+        "Bank Balance",
+        "Unreconciled Items"
+      ]
+    },
+    "Receivables": {
+      "Guest Receivables": [
+        "Guest Balance",
+        "Unpaid Booking"
+      ],
+      "OTA Receivables": [
+        "Agoda Receivable",
+        "Booking.com Receivable",
+        "Airbnb Receivable",
+        "Expedia Receivable"
+      ],
+      "Event Receivables": [
+        "Event Balance",
+        "Add-on Balance"
+      ],
+      "Corporate Receivables": [
+        "Corporate Billing",
+        "Group Billing"
+      ]
+    },
+    "Payables": {
+      "Supplier Payables": [
+        "Inventory Suppliers",
+        "Asset Suppliers",
+        "Service Suppliers"
+      ],
+      "Operational Payables": [
+        "Utility Payable",
+        "Rent Payable if ever",
+        "Service Contract Payable"
+      ],
+      "Payroll / Government Payables": [
+        "Payroll Payable",
+        "SSS Payable",
+        "PhilHealth Payable",
+        "Pag-IBIG Payable"
+      ],
+      "Tax Payables": [
+        "VAT Payable",
+        "Withholding Payable",
+        "Other Tax Payable"
+      ]
+    },
+    "Forecasting": {
+      "Expected Inflows": [
+        "OTA Payout Forecast",
+        "Receivable Collection Forecast",
+        "Reservation Deposit Forecast"
+      ],
+      "Expected Outflows": [
+        "Payroll Forecast",
+        "Utility Forecast",
+        "Supplier Payment Forecast"
+      ],
+      "Alerts": [
+        "Cash Shortfall",
+        "Upcoming Large Payment",
+        "Low Liquidity Warning"
+      ]
+    },
+    "Transfers and Adjustments": {
+      "Internal Transfers": [
+        "Cash to Bank",
+        "Bank to Cash",
+        "Account to Account"
+      ],
+      "Finance Adjustments": [
+        "Bank Correction",
+        "Cash Correction",
+        "Manual Finance Adjustment"
+      ]
+    }
+  },
+  "Other Income": {
+    "Miscellaneous Income": {
+      "One-time Income": [
+        "Misc Service Income",
+        "Unclassified Income"
+      ],
+      "Adjustment Income": [
+        "Revenue Correction",
+        "Accounting Adjustment Income"
+      ]
+    },
+    "Charges": {
+      "Damage Charges": [
+        "Room Damage Charge",
+        "Asset Damage Charge"
+      ],
+      "Fees": [
+        "Late Fee",
+        "Penalty Charge",
+        "Custom Service Fee"
+      ]
+    },
+    "Rentals": {
+      "Equipment Rental": [
+        "Projector Rental",
+        "Event Equipment Rental"
+      ],
+      "Space Rental": [
+        "Hall Space",
+        "Special Area Rental"
+      ]
+    },
+    "Non-Operating Income": {
+      "Asset Disposal Proceeds": [
+        "Sale of Asset"
+      ],
+      "Other Non-Core Income": [
+        "Commission Income",
+        "Referral Income"
+      ]
+    }
+  },
+  "BIR / Statutory": {
+    "Official Sales": {
+      "BIR-Included Sales": [
+        "Official Room Sales",
+        "Official Restaurant Sales",
+        "Official Event Sales",
+        "Official Other Sales"
+      ],
+      "Sales Adjustments": [
+        "Official Revenue Correction",
+        "Official Rounding Adjustment"
+      ],
+      "Sales Batches": [
+        "Posted Sales Batch",
+        "Pending Review Batch"
+      ]
+    },
+    "Official Expenses": {
+      "BIR-Included Expenses": [
+        "Official Operating Expense",
+        "Official COGS",
+        "Official Utility Expense",
+        "Official Payroll Expense"
+      ],
+      "Expense Adjustments": [
+        "Official Correction Entry",
+        "Official Reclassification Entry"
+      ],
+      "Expense Batches": [
+        "Posted Expense Batch",
+        "Pending Review Batch"
+      ]
+    },
+    "Official Books": {
+      "Sales Book": [
+        "Daily Sales Book",
+        "Monthly Sales Summary"
+      ],
+      "Purchase Book": [
+        "Purchases Book",
+        "Expense Book"
+      ],
+      "Cash Books": [
+        "Cash Receipts Book",
+        "Cash Disbursements Book"
+      ],
+      "Accounting Books": [
+        "General Journal",
+        "General Ledger"
+      ]
+    },
+    "Tax Mapping": {
+      "Tax Type": [
+        "VATable",
+        "Non-VAT",
+        "VAT-Exempt",
+        "Zero-rated if ever needed"
+      ],
+      "Withholding": [
+        "Subject to Withholding",
+        "Not Subject to Withholding"
+      ],
+      "Input / Output Mapping": [
+        "Output Tax",
+        "Input Tax"
+      ]
+    },
+    "Filing Support": {
+      "Monthly Support": [
+        "Monthly Sales Summary",
+        "Monthly Expense Summary",
+        "Monthly Tax Schedule"
+      ],
+      "Quarterly / Annual Support": [
+        "Quarterly Totals",
+        "Annual Totals",
+        "Accountant Export"
+      ]
+    },
+    "Official Review / Posting": {
+      "Review Queue": [
+        "Ready for BIR",
+        "Missing Document",
+        "Needs Review"
+      ],
+      "Posting Status": [
+        "Approved for Posting",
+        "Posted to Official Books",
+        "Reversed / Corrected"
+      ]
+    }
+  },
+  "Master Data": {
+    "Departments": {
+      "Revenue Departments": [
+        "Rooms",
+        "Restaurant",
+        "Breakfast",
+        "Café",
+        "Bar",
+        "Events",
+        "Pool / Day Use"
+      ],
+      "Support Departments": [
+        "Housekeeping",
+        "Maintenance",
+        "Admin",
+        "Marketing",
+        "Accounting"
+      ]
+    },
+    "Payment Methods": {
+      "Direct Payments": [
+        "Cash",
+        "GCash",
+        "Bank Transfer",
+        "Card"
+      ],
+      "Deferred / Indirect": [
+        "OTA Payout",
+        "Corporate Billing",
+        "Deposit Applied"
+      ]
+    },
+    "Units of Measure": {
+      "Count Units": [
+        "pcs",
+        "packs",
+        "sets"
+      ],
+      "Weight Units": [
+        "g",
+        "kg"
+      ],
+      "Volume Units": [
+        "mL",
+        "L"
+      ]
+    },
+    "Channels": {
+      "OTA Channels": [
+        "Agoda",
+        "Booking.com",
+        "Airbnb",
+        "Expedia"
+      ],
+      "Direct Channels": [
+        "Walk-in",
+        "Phone",
+        "Facebook / Social",
+        "Website"
+      ]
+    },
+    "Suppliers / Counterparties": {
+      "Suppliers": [
+        "Food Supplier",
+        "Non-Food Supplier",
+        "Asset Supplier",
+        "Service Provider"
+      ],
+      "Customers / Clients": [
+        "Corporate Client",
+        "Event Client",
+        "Guest Account"
+      ]
+    },
+    "Reasons / Tags": {
+      "Inventory Reasons": [
+        "Spoilage",
+        "Wastage",
+        "Complimentary",
+        "Adjustment",
+        "Testing",
+        "Staff Meal"
+      ],
+      "Finance Reasons": [
+        "Refund",
+        "Reversal",
+        "Correction",
+        "Write-off"
+      ],
+      "Operations Reasons": [
+        "Damage",
+        "Missing Item",
+        "Service Recovery"
+      ]
+    },
+    "Chart / Mapping Controls": {
+      "Accounting Mapping": [
+        "Internal Mapping",
+        "BIR Mapping"
+      ],
+      "Tax Defaults": [
+        "Default Tax Type",
+        "Default Withholding Rule"
+      ]
+    }
+  },
+  "Workflow / Status Control": {
+    "Record Status": {
+      "Draft Flow": [
+        "Draft",
+        "Pending Review"
+      ],
+      "Approval Flow": [
+        "Approved",
+        "Rejected"
+      ],
+      "Finalization Flow": [
+        "Posted",
+        "Archived"
+      ]
+    },
+    "Cancellation / Reversal": {
+      "Void Actions": [
+        "Cancelled Before Posting",
+        "Voided Entry"
+      ],
+      "Reversal Actions": [
+        "Reversed Entry",
+        "Adjustment Entry"
+      ]
+    },
+    "BIR Control Status": {
+      "Internal Only": [
+        "Excluded from BIR"
+      ],
+      "BIR Candidate": [
+        "Ready for BIR",
+        "Needs Supporting Document"
+      ],
+      "Official": [
+        "Posted to BIR",
+        "Locked Official Entry"
+      ]
+    },
+    "Month-End / Period Control": {
+      "Open Period": [
+        "Current Open Month"
+      ],
+      "Review Period": [
+        "Pending Close"
+      ],
+      "Closed Period": [
+        "Locked Month",
+        "Reopened with Reason"
+      ]
+    }
+  }
+}

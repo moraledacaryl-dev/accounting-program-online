@@ -1,0 +1,19 @@
+[Unit]
+Description=Hidden Oasis Accounting Frontend
+After=network.target hiddenoasis-accounting-backend.service
+
+[Service]
+Type=simple
+User=hiddenoasis
+Group=hiddenoasis
+WorkingDirectory=/opt/accounting-program-online/frontend
+EnvironmentFile=/etc/hiddenoasis/accounting-frontend.env
+ExecStart=/usr/bin/npm run start
+Restart=always
+RestartSec=5
+NoNewPrivileges=true
+PrivateTmp=true
+ProtectSystem=full
+
+[Install]
+WantedBy=multi-user.target

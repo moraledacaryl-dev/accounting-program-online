@@ -1,0 +1,22 @@
+[Unit]
+Description=Hidden Oasis Accounting Backend
+After=network.target postgresql.service
+Requires=postgresql.service
+
+[Service]
+Type=simple
+User=hiddenoasis
+Group=hiddenoasis
+WorkingDirectory=/opt/accounting-program-online/backend
+EnvironmentFile=/etc/hiddenoasis/accounting-backend.env
+Environment=PYTHONDONTWRITEBYTECODE=1
+ExecStart=/opt/accounting-program-online/backend/.venv/bin/uvicorn app.main:app --host 127.0.0.1 --port 8100 --proxy-headers --forwarded-allow-ips=127.0.0.1
+Restart=always
+RestartSec=5
+NoNewPrivileges=true
+PrivateTmp=true
+ProtectSystem=full
+ReadWritePaths=/var/lib/hiddenoasis/accounting/uploads
+
+[Install]
+WantedBy=multi-user.target
