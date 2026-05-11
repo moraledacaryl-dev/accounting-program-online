@@ -128,6 +128,7 @@ export default function Beds24IntegrationPage() {
     include_invoice_items: true,
     dry_run: true,
     chunk_days: 31,
+    request_delay_seconds: 4,
   });
 
   const canManage = can('integrations.manage');
@@ -324,9 +325,13 @@ export default function Beds24IntegrationPage() {
         include_invoice_items: !!backfillForm.include_invoice_items,
         dry_run: !!backfillForm.dry_run,
         chunk_days: Number(backfillForm.chunk_days || 31),
+        request_delay_seconds: Number(backfillForm.request_delay_seconds || 0),
       });
       setBackfillResult(result || null);
-      setNotice(`${result?.dry_run ? 'Backfill preview' : 'Historical import'} complete: ${result?.fetched || 0} fetched, ${result?.created || 0} created, ${result?.updated || 0} updated, ${result?.skipped || 0} skipped, ${result?.failed || 0} failed.`);
+      const rateLimitText = result?.rate_limited
+        ? ` Stopped at Beds24 rate limit${result?.retry_after_seconds ? `; retry in about ${result.retry_after_seconds} seconds` : ''}.`
+        : '';
+      setNotice(`${result?.dry_run ? 'Backfill preview' : 'Historical import'} ${result?.rate_limited ? 'paused' : 'complete'}: ${result?.fetched || 0} fetched, ${result?.created || 0} created, ${result?.updated || 0} updated, ${result?.skipped || 0} skipped, ${result?.failed || 0} failed.${rateLimitText}`);
       if (canViewLogs) await refreshDebugData();
     } catch (err) {
       setError(err.message || 'Failed to run historical import.');
@@ -718,13 +723,17 @@ export default function Beds24IntegrationPage() {
             Chunk Size (days)
             <input type="number" min="1" max="92" value={backfillForm.chunk_days} onChange={(e) => setBackfillForm((prev) => ({ ...prev, chunk_days: Number(e.target.value || 31) }))} />
           </label>
+          <label>
+            API Delay (seconds)
+            <input type="number" min="0" max="30" step="0.5" value={backfillForm.request_delay_seconds} onChange={(e) => setBackfillForm((prev) => ({ ...prev, request_delay_seconds: Number(e.target.value || 0) }))} />
+          </label>
         </div>
         <div className="row wrap">
           <button type="button" onClick={runBackfill} disabled={!canSync || backfillRunning}>
             {backfillRunning ? 'Running Import...' : (backfillForm.dry_run ? 'Preview Backfill' : 'Run Historical Import')}
           </button>
           <span className="muted small">
-            Date ranges are fetched in chunks and paged internally. Re-runs update existing Beds24 bookings instead of duplicating them.
+            Date ranges are fetched in chunks and paged internally. The delay keeps requests within Beds24 API credit limits; re-runs update existing bookings.
           </span>
         </div>
         {!!backfillResult && (
@@ -733,6 +742,7 @@ export default function Beds24IntegrationPage() {
               <table className="table dense-table">
                 <tbody>
                   <tr><th>Mode</th><td>{backfillResult.dry_run ? 'Preview only' : 'Imported'}</td></tr>
+                  {backfillResult.rate_limited && <tr><th>Rate Limit</th><td>Stopped by Beds24 credit limit{backfillResult.retry_after_seconds ? ` · retry in about ${backfillResult.retry_after_seconds} seconds` : ''}</td></tr>}
                   <tr><th>Range</th><td>{backfillResult.from_date} to {backfillResult.to_date}</td></tr>
                   <tr><th>Fetched</th><td>{backfillResult.fetched || 0}</td></tr>
                   <tr><th>Created</th><td>{backfillResult.created || 0}</td></tr>

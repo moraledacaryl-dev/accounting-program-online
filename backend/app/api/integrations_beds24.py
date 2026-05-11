@@ -156,6 +156,7 @@ def beds24_sync_backfill(
             include_invoice_items=payload.include_invoice_items,
             dry_run=payload.dry_run,
             chunk_days=payload.chunk_days,
+            request_delay_seconds=payload.request_delay_seconds,
             source_type='backfill_preview' if payload.dry_run else 'backfill',
             triggered_by=getattr(user, 'username', None),
         )

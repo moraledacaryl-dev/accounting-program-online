@@ -3,6 +3,7 @@ from __future__ import annotations
 import hashlib
 import json
 import re
+import time
 import unicodedata
 from datetime import datetime, timedelta
 from typing import Any
@@ -1310,6 +1311,7 @@ def backfill_bookings_by_date_range(
     include_invoice_items: bool | None = None,
     dry_run: bool = False,
     chunk_days: int = 31,
+    request_delay_seconds: float = 4.0,
     source_type: str = 'backfill',
     triggered_by: str | None = None,
 ) -> dict[str, Any]:
@@ -1332,6 +1334,7 @@ def backfill_bookings_by_date_range(
             'include_invoice_items': include_invoice_items,
             'dry_run': bool(dry_run),
             'chunk_days': chunk_days,
+            'request_delay_seconds': request_delay_seconds,
             'triggered_by': triggered_by,
         },
     )
@@ -1342,6 +1345,10 @@ def backfill_bookings_by_date_range(
     chunk_summaries: list[dict[str, Any]] = []
     sample: list[dict[str, Any]] = []
     page_limit = 99 if include_invoice_items else 200
+    safe_delay = max(0.0, min(float(request_delay_seconds or 0), 30.0))
+    last_request_at: float | None = None
+    rate_limited = False
+    retry_after_seconds: int | None = None
 
     for chunk_from, chunk_to in chunks:
         for status in status_values:
@@ -1349,6 +1356,10 @@ def backfill_bookings_by_date_range(
             chunk_fetched = chunk_created = chunk_updated = chunk_skipped = chunk_failed = 0
             while True:
                 try:
+                    if last_request_at is not None and safe_delay > 0:
+                        elapsed = time.monotonic() - last_request_at
+                        if elapsed < safe_delay:
+                            time.sleep(safe_delay - elapsed)
                     bookings, _payload, _settings = fetch_beds24_bookings(
                         db,
                         status=status,
@@ -1359,15 +1370,24 @@ def backfill_bookings_by_date_range(
                         property_id=property_id,
                         include_invoice_items=include_invoice_items,
                     )
+                    last_request_at = time.monotonic()
                 except Exception as exc:
+                    last_request_at = time.monotonic()
                     failed += 1
                     chunk_failed += 1
-                    errors.append({
+                    error_row = {
                         'range': f'{chunk_from} to {chunk_to}',
                         'status': status,
                         'offset': offset,
                         'error': str(exc),
-                    })
+                    }
+                    if isinstance(exc, Beds24ApiError) and exc.status_code == 429:
+                        rate_limited = True
+                        retry_after_seconds = exc.retry_after_seconds
+                        error_row['rate_limited'] = True
+                        if retry_after_seconds:
+                            error_row['retry_after_seconds'] = retry_after_seconds
+                    errors.append(error_row)
                     break
 
                 if not bookings:
@@ -1463,10 +1483,16 @@ def backfill_bookings_by_date_range(
                 'skipped': chunk_skipped,
                 'failed': chunk_failed,
             })
+            if rate_limited:
+                break
+        if rate_limited:
+            break
 
     summary = {
         'ok': failed == 0,
         'dry_run': bool(dry_run),
+        'rate_limited': bool(rate_limited),
+        'retry_after_seconds': retry_after_seconds,
         'from_date': from_date,
         'to_date': to_date,
         'property_id': property_id,
@@ -1482,11 +1508,13 @@ def backfill_bookings_by_date_range(
         'chunk_summaries': chunk_summaries,
         'sample': sample,
     }
+    if rate_limited:
+        summary['stopped_reason'] = 'Beds24 rate limit reached. Wait for the API credit window to reset, then rerun the same range; imported bookings remain idempotent.'
     _upsert_sync_log(
         db,
         event_type='backfill_finish',
         source_type=source_type,
-        status='success' if failed == 0 else 'partial',
+        status='success' if failed == 0 else 'rate_limited' if rate_limited else 'partial',
         message=(
             f'Beds24 historical import finished: {fetched} fetched, '
             f'{created} created, {updated} updated, {skipped} skipped, {failed} failed.'

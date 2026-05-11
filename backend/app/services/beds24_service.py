@@ -42,10 +42,20 @@ DEFAULT_BEDS24_SETTINGS: dict[str, Any] = {
 
 
 class Beds24ApiError(RuntimeError):
-    def __init__(self, message: str, *, status_code: int | None = None, payload: Any = None):
+    def __init__(
+        self,
+        message: str,
+        *,
+        status_code: int | None = None,
+        payload: Any = None,
+        headers: dict[str, str] | None = None,
+        retry_after_seconds: int | None = None,
+    ):
         super().__init__(message)
         self.status_code = status_code
         self.payload = payload
+        self.headers = headers or {}
+        self.retry_after_seconds = retry_after_seconds
 
 
 def _now_iso() -> str:
@@ -86,6 +96,29 @@ def _normalize_str(value: Any, fallback: str = '') -> str:
         return fallback
     text = str(value).strip()
     return text if text else fallback
+
+
+def _normalize_headers(headers: Any) -> dict[str, str]:
+    try:
+        return {str(key).lower(): str(value) for key, value in headers.items()}
+    except Exception:
+        return {}
+
+
+def _as_positive_int(value: Any) -> int | None:
+    try:
+        parsed = int(float(str(value).strip()))
+        return parsed if parsed > 0 else None
+    except Exception:
+        return None
+
+
+def _rate_limit_retry_after(headers: dict[str, str]) -> int | None:
+    for key in ('retry-after', 'x-five-min-limit-resets-in'):
+        parsed = _as_positive_int(headers.get(key))
+        if parsed:
+            return parsed
+    return None
 
 
 def _normalize_int_map(value: Any) -> dict[str, int]:
@@ -190,6 +223,7 @@ def _api_get(base_url: str, path: str, *, headers: dict[str, str] | None = None,
                 return {}
             return json.loads(raw)
     except HTTPError as exc:
+        response_headers = _normalize_headers(exc.headers)
         try:
             detail_raw = exc.read().decode('utf-8')
             detail = json.loads(detail_raw) if detail_raw else None
@@ -200,7 +234,30 @@ def _api_get(base_url: str, path: str, *, headers: dict[str, str] | None = None,
             detail_message = detail.get('message') or detail.get('detail') or detail.get('error')
             if detail_message:
                 message = f'{message}: {detail_message}'
-        raise Beds24ApiError(message, status_code=exc.code, payload=detail) from exc
+        retry_after = _rate_limit_retry_after(response_headers)
+        if exc.code == 429:
+            message = 'Beds24 rate limit reached (429).'
+            if retry_after:
+                message = f'{message} Wait about {retry_after} seconds before retrying.'
+            remaining = response_headers.get('x-five-min-limit-remaining')
+            reset = response_headers.get('x-five-min-limit-resets-in')
+            request_cost = response_headers.get('x-request-cost')
+            header_bits = []
+            if remaining is not None:
+                header_bits.append(f'remaining credits: {remaining}')
+            if reset is not None:
+                header_bits.append(f'resets in: {reset}s')
+            if request_cost is not None:
+                header_bits.append(f'request cost: {request_cost}')
+            if header_bits:
+                message = f'{message} ({", ".join(header_bits)})'
+        raise Beds24ApiError(
+            message,
+            status_code=exc.code,
+            payload={'detail': detail, 'headers': response_headers},
+            headers=response_headers,
+            retry_after_seconds=retry_after,
+        ) from exc
     except URLError as exc:
         raise Beds24ApiError(f'Beds24 connection failed: {exc.reason}') from exc
     except Exception as exc:

@@ -52,6 +52,7 @@ class Beds24BackfillPayload(BaseModel):
     include_invoice_items: bool | None = None
     dry_run: bool = False
     chunk_days: int = Field(default=31, ge=1, le=92)
+    request_delay_seconds: float = Field(default=4, ge=0, le=30)
 
 
 class Beds24WebhookPayload(BaseModel):
