@@ -2,7 +2,9 @@ from __future__ import annotations
 
 import hashlib
 import json
-from datetime import datetime
+import re
+import unicodedata
+from datetime import datetime, timedelta
 from typing import Any
 
 from sqlalchemy import func, or_
@@ -77,6 +79,43 @@ def _norm(value: Any) -> str:
 
 def _norm_lower(value: Any) -> str:
     return _norm(value).lower()
+
+
+def _canonical_guest_name(value: Any) -> str:
+    text = unicodedata.normalize('NFKC', _norm(value))
+    text = re.sub(r'\s+', ' ', text).strip()
+    text = re.sub(r'^[\W_]+|[\W_]+$', '', text, flags=re.UNICODE).strip()
+    return text.casefold()
+
+
+def _is_placeholder_guest_name(value: Any) -> bool:
+    text = _canonical_guest_name(value)
+    if not text:
+        return True
+    compact = re.sub(r'[\W_]+', '', text, flags=re.UNICODE)
+    return compact in {
+        'unnamedguest',
+        'unknown',
+        'unknownguest',
+        'guest',
+        'noguest',
+        'n/a',
+        'na',
+        'none',
+        'tba',
+        'pending',
+    }
+
+
+def _guest_name_is_distinct_enough(value: Any) -> bool:
+    text = _canonical_guest_name(value)
+    if _is_placeholder_guest_name(text):
+        return False
+    pieces = [piece for piece in text.split(' ') if piece]
+    common_single_names = {'john', 'jane', 'maria', 'juan', 'guest', 'test'}
+    if len(pieces) <= 1 and (len(text) < 8 or text in common_single_names):
+        return False
+    return True
 
 
 def _as_int(value: Any) -> int | None:
@@ -302,6 +341,29 @@ def _guest_identity_hash(payload: dict[str, Any]) -> str:
     return f'beds24:{digest}'
 
 
+def _beds24_guest_stable_keys(payload: dict[str, Any]) -> list[str]:
+    keys: list[str] = []
+    for key in ('guestId', 'guest_id', 'guestID', 'guestCode', 'guestKey', 'bookerId', 'customerId'):
+        value = _norm(payload.get(key))
+        if value:
+            keys.append(f'beds24:{key}:{value}')
+    return keys
+
+
+def _guest_sort_key(row: Guest) -> tuple[int, int, int]:
+    active_score = 0 if bool(row.is_active) else 1
+    has_contact_score = 0 if (_norm(row.email) or _norm(row.phone)) else 1
+    return (active_score, has_contact_score, int(row.id or 0))
+
+
+def _find_guest_by_map(db: Session, keys: list[str]) -> Guest | None:
+    for key in keys:
+        row = db.query(Beds24GuestMap).filter(Beds24GuestMap.beds24_guest_key == key).first()
+        if row and row.local_guest:
+            return row.local_guest
+    return None
+
+
 def _lookup_explicit_int_map(raw_map: dict[str, Any], key: str | None) -> int | None:
     value = _norm(key)
     if not value:
@@ -349,11 +411,31 @@ def _find_guest_name_email(db: Session, full_name: str, email: str) -> Guest | N
     return db.query(Guest).filter(func.lower(Guest.full_name) == full_name.lower(), func.lower(Guest.email) == email.lower()).first()
 
 
+def _find_guest_normalized_name(db: Session, full_name: str) -> Guest | None:
+    canonical = _canonical_guest_name(full_name)
+    if not canonical or not _guest_name_is_distinct_enough(full_name):
+        return None
+    candidates = (
+        db.query(Guest)
+        .filter(Guest.is_active == True)
+        .all()
+    )
+    matches = [row for row in candidates if _canonical_guest_name(row.full_name) == canonical]
+    if not matches:
+        return None
+    matches.sort(key=_guest_sort_key)
+    return matches[0]
+
+
 def _match_or_create_guest(db: Session, payload: dict[str, Any], *, auto_create_guest: bool) -> tuple[Guest | None, str]:
     email = _extract_guest_value(payload, 'email', 'guestEmail')
     phone = _extract_guest_value(payload, 'phone', 'guestPhone')
     mobile = _extract_guest_value(payload, 'mobile', 'guestMobile')
     full_name, _name_strategy = _compose_guest_name(payload)
+
+    mapped = _find_guest_by_map(db, _beds24_guest_stable_keys(payload))
+    if mapped:
+        return mapped, 'beds24_guest_map'
 
     match = _find_guest_exact_email(db, email)
     if match:
@@ -375,8 +457,15 @@ def _match_or_create_guest(db: Session, payload: dict[str, Any], *, auto_create_
     if match:
         return match, 'name_plus_email'
 
+    match = _find_guest_normalized_name(db, full_name)
+    if match:
+        return match, 'normalized_name'
+
     if not auto_create_guest:
         return None, 'not_created_auto_create_disabled'
+
+    if _is_placeholder_guest_name(full_name):
+        return None, 'skipped_placeholder_guest'
 
     row = Guest(
         first_name=_extract_guest_value(payload, 'firstName', 'guestFirstName') or None,
@@ -413,6 +502,11 @@ def _upsert_guest_map(db: Session, guest_key: str, guest_id: int, strategy: str)
     row.matching_strategy = _norm(strategy) or None
     row.last_synced_at = _now_iso()
     db.add(row)
+
+
+def _upsert_guest_maps(db: Session, payload: dict[str, Any], guest_id: int, strategy: str):
+    for key in [*_beds24_guest_stable_keys(payload), _guest_identity_hash(payload)]:
+        _upsert_guest_map(db, key, guest_id, strategy)
 
 
 def _update_guest_non_destructive(guest: Guest | None, payload: dict[str, Any]):
@@ -909,9 +1003,11 @@ def sync_booking_payload(
     guest, strategy = _match_or_create_guest(db, booking_payload, auto_create_guest=bool(settings.get('auto_create_guest')))
     _update_guest_non_destructive(guest, booking_payload)
     if guest:
-        _upsert_guest_map(db, _guest_identity_hash(booking_payload), guest.id, strategy)
+        _upsert_guest_maps(db, booking_payload, guest.id, strategy)
     else:
         warnings.append('guest not linked')
+        if strategy == 'skipped_placeholder_guest':
+            warnings.append('placeholder guest not auto-merged')
 
     room, room_warnings = _resolve_room(db, settings, booking_payload)
     warnings.extend(room_warnings)
@@ -934,6 +1030,7 @@ def sync_booking_payload(
             .first()
         )
 
+    booking_existed = bool(booking)
     if not booking:
         booking = Booking(
             guest_name=guest_name,
@@ -1048,6 +1145,7 @@ def sync_booking_payload(
         'local_booking_id': booking.id,
         'local_guest_id': booking.guest_id,
         'status': 'synced',
+        'action': 'updated' if booking_existed else 'created',
         'guest_match_strategy': strategy,
         'guest_name_strategy': guest_name_strategy,
         'resolved_guest_name': booking.guest_name,
@@ -1176,6 +1274,224 @@ def sync_recent_bookings(
         status='success' if not failed else 'partial',
         message=f'Recent Beds24 sync finished: {len(results)} synced, {len(failed)} failed.',
         payload={'status': status, 'filter': filter_value, 'limit': safe_limit},
+    )
+    return summary
+
+
+def _parse_date(value: str, label: str) -> datetime:
+    try:
+        return datetime.strptime(_norm(value), '%Y-%m-%d')
+    except Exception as exc:
+        raise ValueError(f'{label} must be in YYYY-MM-DD format.') from exc
+
+
+def _date_chunks(from_date: str, to_date: str, chunk_days: int) -> list[tuple[str, str]]:
+    start = _parse_date(from_date, 'from_date')
+    end = _parse_date(to_date, 'to_date')
+    if end < start:
+        raise ValueError('to_date cannot be earlier than from_date.')
+    chunks: list[tuple[str, str]] = []
+    cursor = start
+    step = max(1, min(int(chunk_days or 31), 92))
+    while cursor <= end:
+        chunk_end = min(cursor + timedelta(days=step - 1), end)
+        chunks.append((cursor.strftime('%Y-%m-%d'), chunk_end.strftime('%Y-%m-%d')))
+        cursor = chunk_end + timedelta(days=1)
+    return chunks
+
+
+def backfill_bookings_by_date_range(
+    db: Session,
+    *,
+    from_date: str,
+    to_date: str,
+    property_id: str | None = None,
+    statuses: list[str] | None = None,
+    include_invoice_items: bool | None = None,
+    dry_run: bool = False,
+    chunk_days: int = 31,
+    source_type: str = 'backfill',
+    triggered_by: str | None = None,
+) -> dict[str, Any]:
+    chunks = _date_chunks(from_date, to_date, chunk_days)
+    status_values = [_norm(value) for value in (statuses or []) if _norm(value)]
+    if not status_values:
+        status_values = [None]  # type: ignore[list-item]
+
+    _upsert_sync_log(
+        db,
+        event_type='backfill_start',
+        source_type=source_type,
+        status='info',
+        message=f'Beds24 historical import started for {from_date} to {to_date}.',
+        payload={
+            'from_date': from_date,
+            'to_date': to_date,
+            'property_id': property_id,
+            'statuses': [value for value in status_values if value],
+            'include_invoice_items': include_invoice_items,
+            'dry_run': bool(dry_run),
+            'chunk_days': chunk_days,
+            'triggered_by': triggered_by,
+        },
+    )
+
+    seen_ids: set[str] = set()
+    fetched = created = updated = skipped = failed = 0
+    errors: list[dict[str, Any]] = []
+    chunk_summaries: list[dict[str, Any]] = []
+    sample: list[dict[str, Any]] = []
+    page_limit = 99 if include_invoice_items else 200
+
+    for chunk_from, chunk_to in chunks:
+        for status in status_values:
+            offset = 0
+            chunk_fetched = chunk_created = chunk_updated = chunk_skipped = chunk_failed = 0
+            while True:
+                try:
+                    bookings, _payload, _settings = fetch_beds24_bookings(
+                        db,
+                        status=status,
+                        limit=page_limit,
+                        offset=offset,
+                        arrival_from=chunk_from,
+                        arrival_to=chunk_to,
+                        property_id=property_id,
+                        include_invoice_items=include_invoice_items,
+                    )
+                except Exception as exc:
+                    failed += 1
+                    chunk_failed += 1
+                    errors.append({
+                        'range': f'{chunk_from} to {chunk_to}',
+                        'status': status,
+                        'offset': offset,
+                        'error': str(exc),
+                    })
+                    break
+
+                if not bookings:
+                    break
+
+                fetched += len(bookings)
+                chunk_fetched += len(bookings)
+                for booking_payload in bookings:
+                    beds24_id = _extract_booking_id(booking_payload)
+                    if not beds24_id:
+                        skipped += 1
+                        chunk_skipped += 1
+                        continue
+                    if beds24_id in seen_ids:
+                        skipped += 1
+                        chunk_skipped += 1
+                        continue
+                    seen_ids.add(beds24_id)
+
+                    existing = (
+                        db.query(Beds24BookingMap)
+                        .filter(Beds24BookingMap.beds24_booking_id == beds24_id)
+                        .first()
+                    )
+                    if dry_run:
+                        action = 'updated' if existing and existing.local_booking_id else 'created'
+                        if action == 'updated':
+                            updated += 1
+                            chunk_updated += 1
+                        else:
+                            created += 1
+                            chunk_created += 1
+                        if len(sample) < 25:
+                            sample.append({
+                                'beds24_booking_id': beds24_id,
+                                'action': action,
+                                'guest_name': _compose_guest_name(booking_payload)[0],
+                                'check_in': _extract_check_in(booking_payload),
+                                'check_out': _extract_check_out(booking_payload),
+                            })
+                        continue
+
+                    try:
+                        result = sync_booking_payload(
+                            db,
+                            booking_payload,
+                            source_type=source_type,
+                            triggered_by=triggered_by,
+                            force_folio_mirror=include_invoice_items is True,
+                        )
+                        if result.get('action') == 'created':
+                            created += 1
+                            chunk_created += 1
+                        else:
+                            updated += 1
+                            chunk_updated += 1
+                        if len(sample) < 25:
+                            sample.append({
+                                'beds24_booking_id': beds24_id,
+                                'local_booking_id': result.get('local_booking_id'),
+                                'action': result.get('action'),
+                                'guest_match_strategy': result.get('guest_match_strategy'),
+                            })
+                    except Exception as exc:
+                        db.rollback()
+                        failed += 1
+                        chunk_failed += 1
+                        errors.append({'beds24_booking_id': beds24_id, 'error': str(exc)})
+                        try:
+                            _mark_sync_error(db, beds24_id, str(exc))
+                            _upsert_sync_log(
+                                db,
+                                event_type='booking_upsert',
+                                source_type=source_type,
+                                status='error',
+                                message=f'Failed backfill syncing Beds24 booking {beds24_id}: {exc}',
+                                beds24_booking_id=beds24_id,
+                            )
+                        except Exception:
+                            db.rollback()
+
+                if len(bookings) < page_limit:
+                    break
+                offset += page_limit
+
+            chunk_summaries.append({
+                'from_date': chunk_from,
+                'to_date': chunk_to,
+                'status': status,
+                'fetched': chunk_fetched,
+                'created': chunk_created,
+                'updated': chunk_updated,
+                'skipped': chunk_skipped,
+                'failed': chunk_failed,
+            })
+
+    summary = {
+        'ok': failed == 0,
+        'dry_run': bool(dry_run),
+        'from_date': from_date,
+        'to_date': to_date,
+        'property_id': property_id,
+        'statuses': [value for value in status_values if value],
+        'chunks': len(chunks),
+        'fetched': fetched,
+        'unique_seen': len(seen_ids),
+        'created': created,
+        'updated': updated,
+        'skipped': skipped,
+        'failed': failed,
+        'errors': errors[:100],
+        'chunk_summaries': chunk_summaries,
+        'sample': sample,
+    }
+    _upsert_sync_log(
+        db,
+        event_type='backfill_finish',
+        source_type=source_type,
+        status='success' if failed == 0 else 'partial',
+        message=(
+            f'Beds24 historical import finished: {fetched} fetched, '
+            f'{created} created, {updated} updated, {skipped} skipped, {failed} failed.'
+        ),
+        payload=summary,
     )
     return summary
 

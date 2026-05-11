@@ -9,6 +9,7 @@ import {
   fetchBeds24SyncLogs,
   previewBeds24Reset,
   rebuildBeds24BookingMirror,
+  syncBeds24Backfill,
   syncBeds24Booking,
   syncBeds24Recent,
   testBeds24IntegrationConnection,
@@ -49,6 +50,16 @@ const RESET_MODE_OPTIONS = [
   { value: 'beds24_all', label: 'Reset Beds24 Bookings + Folios + Maps + Logs' },
   { value: 'local_test_full', label: 'Full Local Test Reset (Bookings + Guests)' },
 ];
+
+function todayISO() {
+  return new Date().toISOString().slice(0, 10);
+}
+
+function addMonthsISO(months) {
+  const date = new Date();
+  date.setMonth(date.getMonth() + months);
+  return date.toISOString().slice(0, 10);
+}
 
 function pretty(value) {
   return JSON.stringify(value || {}, null, 2);
@@ -106,6 +117,17 @@ export default function Beds24IntegrationPage() {
     status: '',
     filter: '',
     include_invoice_items: true,
+  });
+  const [backfillRunning, setBackfillRunning] = useState(false);
+  const [backfillResult, setBackfillResult] = useState(null);
+  const [backfillForm, setBackfillForm] = useState({
+    from_date: addMonthsISO(-3),
+    to_date: todayISO(),
+    property_id: '',
+    statuses: '',
+    include_invoice_items: true,
+    dry_run: true,
+    chunk_days: 31,
   });
 
   const canManage = can('integrations.manage');
@@ -280,6 +302,36 @@ export default function Beds24IntegrationPage() {
       setError(err.message || 'Failed to run recent sync.');
     } finally {
       setSyncing(false);
+    }
+  }
+
+  async function runBackfill() {
+    if (!canSync) return;
+    setBackfillRunning(true);
+    setBackfillResult(null);
+    setError('');
+    setNotice('');
+    try {
+      const statuses = String(backfillForm.statuses || '')
+        .split(',')
+        .map((value) => value.trim())
+        .filter(Boolean);
+      const result = await syncBeds24Backfill({
+        from_date: backfillForm.from_date,
+        to_date: backfillForm.to_date,
+        property_id: backfillForm.property_id || null,
+        statuses,
+        include_invoice_items: !!backfillForm.include_invoice_items,
+        dry_run: !!backfillForm.dry_run,
+        chunk_days: Number(backfillForm.chunk_days || 31),
+      });
+      setBackfillResult(result || null);
+      setNotice(`${result?.dry_run ? 'Backfill preview' : 'Historical import'} complete: ${result?.fetched || 0} fetched, ${result?.created || 0} created, ${result?.updated || 0} updated, ${result?.skipped || 0} skipped, ${result?.failed || 0} failed.`);
+      if (canViewLogs) await refreshDebugData();
+    } catch (err) {
+      setError(err.message || 'Failed to run historical import.');
+    } finally {
+      setBackfillRunning(false);
     }
   }
 
@@ -627,6 +679,102 @@ export default function Beds24IntegrationPage() {
             {syncing ? 'Syncing...' : 'Sync Recent Bookings'}
           </button>
         </div>
+      </section>
+
+      <section className="section">
+        <h2>Backfill / Historical Import</h2>
+        <div className="form-grid">
+          <label>
+            From Date
+            <input type="date" value={backfillForm.from_date} onChange={(e) => setBackfillForm((prev) => ({ ...prev, from_date: e.target.value }))} />
+          </label>
+          <label>
+            To Date
+            <input type="date" value={backfillForm.to_date} onChange={(e) => setBackfillForm((prev) => ({ ...prev, to_date: e.target.value }))} />
+          </label>
+          <label>
+            Property ID Filter
+            <input value={backfillForm.property_id} onChange={(e) => setBackfillForm((prev) => ({ ...prev, property_id: e.target.value }))} placeholder="Optional Beds24 propertyId" />
+          </label>
+          <label>
+            Statuses to Include
+            <input value={backfillForm.statuses} onChange={(e) => setBackfillForm((prev) => ({ ...prev, statuses: e.target.value }))} placeholder="Optional: new, confirmed, cancelled" />
+          </label>
+          <label>
+            Include Invoice Items
+            <select value={String(!!backfillForm.include_invoice_items)} onChange={(e) => setBackfillForm((prev) => ({ ...prev, include_invoice_items: e.target.value === 'true' }))}>
+              <option value="true">Yes</option>
+              <option value="false">No</option>
+            </select>
+          </label>
+          <label>
+            Dry Run / Preview Only
+            <select value={String(!!backfillForm.dry_run)} onChange={(e) => setBackfillForm((prev) => ({ ...prev, dry_run: e.target.value === 'true' }))}>
+              <option value="true">Yes</option>
+              <option value="false">No, import now</option>
+            </select>
+          </label>
+          <label>
+            Chunk Size (days)
+            <input type="number" min="1" max="92" value={backfillForm.chunk_days} onChange={(e) => setBackfillForm((prev) => ({ ...prev, chunk_days: Number(e.target.value || 31) }))} />
+          </label>
+        </div>
+        <div className="row wrap">
+          <button type="button" onClick={runBackfill} disabled={!canSync || backfillRunning}>
+            {backfillRunning ? 'Running Import...' : (backfillForm.dry_run ? 'Preview Backfill' : 'Run Historical Import')}
+          </button>
+          <span className="muted small">
+            Date ranges are fetched in chunks and paged internally. Re-runs update existing Beds24 bookings instead of duplicating them.
+          </span>
+        </div>
+        {!!backfillResult && (
+          <div className="stack" style={{ marginTop: 12 }}>
+            <div className="table-wrap">
+              <table className="table dense-table">
+                <tbody>
+                  <tr><th>Mode</th><td>{backfillResult.dry_run ? 'Preview only' : 'Imported'}</td></tr>
+                  <tr><th>Range</th><td>{backfillResult.from_date} to {backfillResult.to_date}</td></tr>
+                  <tr><th>Fetched</th><td>{backfillResult.fetched || 0}</td></tr>
+                  <tr><th>Created</th><td>{backfillResult.created || 0}</td></tr>
+                  <tr><th>Updated</th><td>{backfillResult.updated || 0}</td></tr>
+                  <tr><th>Skipped</th><td>{backfillResult.skipped || 0}</td></tr>
+                  <tr><th>Failed</th><td>{backfillResult.failed || 0}</td></tr>
+                </tbody>
+              </table>
+            </div>
+            {Array.isArray(backfillResult.errors) && backfillResult.errors.length > 0 && (
+              <div className="ops-alert-list">
+                <h3>Import Errors</h3>
+                {backfillResult.errors.slice(0, 10).map((row, idx) => (
+                  <p key={`backfill-error-${idx}`} className="error-text">{row.beds24_booking_id || row.range || 'chunk'}: {row.error || 'Unknown error'}</p>
+                ))}
+              </div>
+            )}
+            {Array.isArray(backfillResult.chunk_summaries) && backfillResult.chunk_summaries.length > 0 && (
+              <details className="quiet-details">
+                <summary>Chunk summary</summary>
+                <div className="table-wrap">
+                  <table className="table dense-table">
+                    <thead><tr><th>Range</th><th>Status</th><th>Fetched</th><th>Created</th><th>Updated</th><th>Skipped</th><th>Failed</th></tr></thead>
+                    <tbody>
+                      {backfillResult.chunk_summaries.map((row, idx) => (
+                        <tr key={`chunk-${idx}`}>
+                          <td>{row.from_date} to {row.to_date}</td>
+                          <td>{row.status || 'all'}</td>
+                          <td>{row.fetched || 0}</td>
+                          <td>{row.created || 0}</td>
+                          <td>{row.updated || 0}</td>
+                          <td>{row.skipped || 0}</td>
+                          <td>{row.failed || 0}</td>
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
+                </div>
+              </details>
+            )}
+          </div>
+        )}
       </section>
 
       {canManage && (

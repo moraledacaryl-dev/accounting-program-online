@@ -293,6 +293,10 @@ def fetch_beds24_bookings(
     status: str | None = None,
     filter_value: str | None = None,
     limit: int | None = None,
+    offset: int | None = None,
+    arrival_from: str | None = None,
+    arrival_to: str | None = None,
+    property_id: str | None = None,
     include_invoice_items: bool | None = None,
 ) -> tuple[list[dict[str, Any]], dict[str, Any], dict[str, Any]]:
     settings = load_beds24_settings(db)
@@ -311,6 +315,14 @@ def fetch_beds24_bookings(
         params['filter'] = _normalize_str(filter_value)
     if limit and int(limit) > 0:
         params['limit'] = int(limit)
+    if offset and int(offset) > 0:
+        params['offset'] = int(offset)
+    if arrival_from:
+        params['arrivalFrom'] = _normalize_str(arrival_from)
+    if arrival_to:
+        params['arrivalTo'] = _normalize_str(arrival_to)
+    if property_id:
+        params['propertyId'] = _normalize_str(property_id)
 
     use_invoice_items = settings.get('include_invoice_items', True) if include_invoice_items is None else bool(include_invoice_items)
     if use_invoice_items:
@@ -342,4 +354,3 @@ def test_beds24_connection(db: Session) -> dict[str, Any]:
         'sample_booking_id': str(bookings[0].get('id')) if bookings else None,
         'response_keys': sorted(list(payload.keys())) if isinstance(payload, dict) else [],
     }
-

@@ -421,6 +421,7 @@ export default function BookingsPage() {
             <p className="muted">Create and manage stays with guest CRM, room setup, folios, and accounting-ready posting. This flow keeps booking, folio, and finance data connected.</p>
           </div>
           <div className="row wrap">
+            <Link className="button-link secondary-link" href="/bookings/calendar">Calendar</Link>
             <Link className="button-link secondary-link" href="/guests">Open Guest CRM</Link>
             <Link className="button-link secondary-link" href="/room-folios">Open Folios</Link>
           </div>
@@ -623,7 +624,7 @@ export default function BookingsPage() {
                   <button type="button" className="secondary" onClick={() => lifecycleUpdate(row, 'checked_in')}>Check In</button>
                   <button type="button" className="secondary" onClick={() => lifecycleUpdate(row, 'checked_out')}>Check Out</button>
                   <button type="button" className="secondary" onClick={() => lifecycleUpdate(row, 'cancelled')}>Cancel</button>
-                  <Link className="button-link secondary-link" href={`/room-folios?booking_id=${row.id}`}>Folio</Link>
+                  <Link className="button-link secondary-link" href={row.primary_folio_id ? `/room-folios/${row.primary_folio_id}` : `/room-folios?booking_id=${row.id}`}>Folio</Link>
                 </td>
               </tr>
             ))}

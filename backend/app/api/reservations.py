@@ -7,6 +7,8 @@ from app.schemas.common import BookingCreate, BookingUpdate, RoomBreakfastCreate
 from app.services.hospitality_service import (
     create_booking_with_accounting,
     create_room_breakfast_log,
+    get_booking,
+    list_booking_calendar,
     list_bookings,
     list_room_breakfast_logs,
     update_booking_with_accounting,
@@ -18,6 +20,37 @@ router = APIRouter()
 @router.get('/bookings')
 def bookings(db: Session = Depends(get_db), user=Depends(require_permissions('bookings.view'))):
     return list_bookings(db)
+
+
+@router.get('/bookings/calendar')
+def booking_calendar(
+    start_date: str,
+    end_date: str,
+    room_id: int | None = None,
+    status: str | None = None,
+    channel_id: int | None = None,
+    db: Session = Depends(get_db),
+    user=Depends(require_permissions('bookings.view')),
+):
+    try:
+        return list_booking_calendar(
+            db,
+            start_date=start_date,
+            end_date=end_date,
+            room_id=room_id,
+            status=status,
+            channel_id=channel_id,
+        )
+    except ValueError as e:
+        raise HTTPException(status_code=400, detail=str(e))
+
+
+@router.get('/bookings/{booking_id}')
+def booking_detail(booking_id: int, db: Session = Depends(get_db), user=Depends(require_permissions('bookings.view'))):
+    try:
+        return get_booking(db, booking_id)
+    except ValueError as e:
+        raise HTTPException(status_code=404, detail=str(e))
 
 
 @router.post('/bookings')

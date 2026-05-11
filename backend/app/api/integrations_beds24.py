@@ -6,6 +6,7 @@ from sqlalchemy.orm import Session
 from app.api.deps import require_any_permissions, require_permissions
 from app.db.database import get_db
 from app.schemas.beds24 import (
+    Beds24BackfillPayload,
     Beds24ResetExecutePayload,
     Beds24ResetPreviewPayload,
     Beds24SettingsUpdate,
@@ -20,6 +21,7 @@ from app.services.beds24_sync_service import (
     preview_reset_mode,
     execute_reset_mode,
     rebuild_booking_mirror_by_id,
+    backfill_bookings_by_date_range,
     sync_booking_by_id,
     sync_from_webhook,
     sync_recent_bookings,
@@ -128,6 +130,33 @@ def beds24_sync_recent(
             filter_value=payload.filter,
             include_invoice_items=payload.include_invoice_items,
             source_type='manual',
+            triggered_by=getattr(user, 'username', None),
+        )
+    except Beds24ApiError as exc:
+        raise HTTPException(status_code=400, detail=str(exc))
+    except ValueError as exc:
+        raise HTTPException(status_code=400, detail=str(exc))
+    except Exception as exc:
+        raise HTTPException(status_code=500, detail=str(exc))
+
+
+@router.post('/sync/backfill')
+def beds24_sync_backfill(
+    payload: Beds24BackfillPayload,
+    db: Session = Depends(get_db),
+    user=Depends(require_permissions('integrations.sync')),
+):
+    try:
+        return backfill_bookings_by_date_range(
+            db,
+            from_date=payload.from_date,
+            to_date=payload.to_date,
+            property_id=payload.property_id,
+            statuses=payload.statuses,
+            include_invoice_items=payload.include_invoice_items,
+            dry_run=payload.dry_run,
+            chunk_days=payload.chunk_days,
+            source_type='backfill_preview' if payload.dry_run else 'backfill',
             triggered_by=getattr(user, 'username', None),
         )
     except Beds24ApiError as exc:

@@ -1,6 +1,7 @@
 'use client';
 
 import Link from 'next/link';
+import { useSearchParams } from 'next/navigation';
 import { useEffect, useMemo, useState } from 'react';
 import {
   createRoomFolio,
@@ -24,12 +25,13 @@ function php(value) {
 }
 
 export default function RoomFoliosPage() {
+  const searchParams = useSearchParams();
   const [rows, setRows] = useState([]);
   const [bookings, setBookings] = useState([]);
   const [guests, setGuests] = useState([]);
   const [statusFilter, setStatusFilter] = useState(STATUS_ALL);
-  const [bookingFilter, setBookingFilter] = useState('');
-  const [guestFilter, setGuestFilter] = useState('');
+  const [bookingFilter, setBookingFilter] = useState(searchParams.get('booking_id') || '');
+  const [guestFilter, setGuestFilter] = useState(searchParams.get('guest_id') || '');
   const [form, setForm] = useState({ ...EMPTY_FORM });
   const [error, setError] = useState('');
   const [notice, setNotice] = useState('');
@@ -52,6 +54,13 @@ export default function RoomFoliosPage() {
   useEffect(() => {
     load().catch((e) => setError(e.message || 'Failed to load folios.'));
   }, [statusFilter, bookingFilter, guestFilter]);
+
+  useEffect(() => {
+    const nextBookingId = searchParams.get('booking_id') || '';
+    const nextGuestId = searchParams.get('guest_id') || '';
+    if (nextBookingId !== bookingFilter) setBookingFilter(nextBookingId);
+    if (nextGuestId !== guestFilter) setGuestFilter(nextGuestId);
+  }, [searchParams]);
 
   const bookingById = useMemo(() => {
     const map = new Map();

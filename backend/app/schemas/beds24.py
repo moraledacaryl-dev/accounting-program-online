@@ -44,6 +44,16 @@ class Beds24SyncRecentPayload(BaseModel):
     include_invoice_items: bool | None = None
 
 
+class Beds24BackfillPayload(BaseModel):
+    from_date: str = Field(min_length=10, max_length=10)
+    to_date: str = Field(min_length=10, max_length=10)
+    property_id: str | None = None
+    statuses: list[str] = Field(default_factory=list)
+    include_invoice_items: bool | None = None
+    dry_run: bool = False
+    chunk_days: int = Field(default=31, ge=1, le=92)
+
+
 class Beds24WebhookPayload(BaseModel):
     event_type: str | None = None
     booking_id: str | None = None

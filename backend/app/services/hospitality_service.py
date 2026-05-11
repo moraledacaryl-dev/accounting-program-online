@@ -110,6 +110,7 @@ def _serialize_booking(booking: Booking) -> dict:
         'created_at': booking.created_at,
         'updated_at': booking.updated_at,
         'accounting_links': [_serial_record_link(x) for x in (booking.accounting_links or [])],
+        'primary_folio_id': (sorted(booking.folios or [], key=lambda x: x.id, reverse=True)[0].id if booking.folios else None),
     }
 
 
@@ -264,12 +265,66 @@ def list_bookings(db: Session, limit: int = 400):
             selectinload(Booking.room_type_obj),
             selectinload(Booking.rate_plan),
             selectinload(Booking.channel_obj),
+            selectinload(Booking.folios),
         )
         .order_by(Booking.id.desc())
         .limit(limit)
         .all()
     )
     return [_serialize_booking(x) for x in rows]
+
+
+def get_booking(db: Session, booking_id: int) -> dict:
+    row = (
+        db.query(Booking)
+        .options(
+            selectinload(Booking.accounting_links).selectinload(BookingAccountingLink.record),
+            selectinload(Booking.guest),
+            selectinload(Booking.room),
+            selectinload(Booking.room_type_obj),
+            selectinload(Booking.rate_plan),
+            selectinload(Booking.channel_obj),
+            selectinload(Booking.folios),
+        )
+        .filter(Booking.id == int(booking_id))
+        .first()
+    )
+    if not row:
+        raise ValueError('Booking not found.')
+    return _serialize_booking(row)
+
+
+def list_booking_calendar(
+    db: Session,
+    *,
+    start_date: str,
+    end_date: str,
+    room_id: int | None = None,
+    status: str | None = None,
+    channel_id: int | None = None,
+):
+    _parse_iso_date(start_date, 'start_date')
+    _parse_iso_date(end_date, 'end_date')
+    query = (
+        db.query(Booking)
+        .options(
+            selectinload(Booking.guest),
+            selectinload(Booking.room),
+            selectinload(Booking.room_type_obj),
+            selectinload(Booking.channel_obj),
+            selectinload(Booking.folios),
+        )
+        .filter(Booking.check_in <= end_date)
+        .filter(Booking.check_out >= start_date)
+    )
+    if room_id:
+        query = query.filter(Booking.room_id == int(room_id))
+    if status:
+        query = query.filter(Booking.status == status)
+    if channel_id:
+        query = query.filter(Booking.channel_id == int(channel_id))
+    rows = query.order_by(Booking.check_in.asc(), Booking.room_name.asc(), Booking.id.asc()).limit(2500).all()
+    return [_serialize_booking(row) for row in rows]
 
 
 def create_booking_with_accounting(db: Session, payload, username: str | None = None) -> dict:
@@ -371,6 +426,7 @@ def create_booking_with_accounting(db: Session, payload, username: str | None = 
             selectinload(Booking.room_type_obj),
             selectinload(Booking.rate_plan),
             selectinload(Booking.channel_obj),
+            selectinload(Booking.folios),
         )
         .filter(Booking.id == booking.id)
         .first()
@@ -388,6 +444,7 @@ def update_booking_with_accounting(db: Session, booking_id: int, payload, userna
             selectinload(Booking.room_type_obj),
             selectinload(Booking.rate_plan),
             selectinload(Booking.channel_obj),
+            selectinload(Booking.folios),
         )
         .filter(Booking.id == booking_id)
         .first()

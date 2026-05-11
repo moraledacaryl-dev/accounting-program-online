@@ -21,11 +21,23 @@ async function request(path, init = {}) {
   const res = await fetch(`${API_BASE}${path}`, { cache: 'no-store', ...init, headers });
   let data = null;
   try { data = await res.json(); } catch { data = null; }
-  if (!res.ok) throw new Error(data?.detail || 'Request failed');
+  if (!res.ok) throw new Error(readApiMessage(data?.detail || data?.message || data?.error || data) || 'Request failed');
   return data;
 }
 
-export { API_BASE, getToken, setToken, clearToken, request };
+function readApiMessage(value) {
+  if (!value) return '';
+  if (typeof value === 'string') return value;
+  if (value instanceof Error) return value.message || '';
+  if (typeof value === 'object') {
+    const direct = value.message || value.detail || value.error || value.msg;
+    if (typeof direct === 'string' && direct.trim()) return direct;
+    try { return JSON.stringify(value, null, 2); } catch { return 'Request failed with an unreadable response.'; }
+  }
+  return String(value);
+}
+
+export { API_BASE, getToken, setToken, clearToken, request, readApiMessage };
 
 export const bootstrap = () => request('/auth/bootstrap', { method: 'POST' });
 export const login = (payload) => request('/auth/login', { method: 'POST', body: JSON.stringify(payload) });
@@ -42,6 +54,7 @@ export const testBeds24IntegrationConnection = () => request('/integrations/beds
 export const syncBeds24Booking = (payload) => request('/integrations/beds24/sync/booking', { method: 'POST', body: JSON.stringify(payload) });
 export const rebuildBeds24BookingMirror = (payload) => request('/integrations/beds24/sync/booking/rebuild', { method: 'POST', body: JSON.stringify(payload) });
 export const syncBeds24Recent = (payload) => request('/integrations/beds24/sync/recent', { method: 'POST', body: JSON.stringify(payload) });
+export const syncBeds24Backfill = (payload) => request('/integrations/beds24/sync/backfill', { method: 'POST', body: JSON.stringify(payload) });
 export const fetchBeds24SyncLogs = (params = {}) => request(`/integrations/beds24/logs${Object.keys(params).length ? `?${new URLSearchParams(Object.entries(params).filter(([, v]) => v !== '' && v !== null && typeof v !== 'undefined')).toString()}` : ''}`);
 export const fetchBeds24SyncState = (params = {}) => request(`/integrations/beds24/sync-state${Object.keys(params).length ? `?${new URLSearchParams(Object.entries(params).filter(([, v]) => v !== '' && v !== null && typeof v !== 'undefined')).toString()}` : ''}`);
 export const fetchBeds24MappingHelpers = () => request('/integrations/beds24/mapping-helpers');
@@ -93,6 +106,8 @@ export const fetchDisposalLogs = (assetId='') => request(`/asset-registry/dispos
 export const disposeAsset = (assetId, payload) => request(`/asset-registry/assets/${assetId}/dispose`, { method:'POST', body: JSON.stringify(payload)});
 
 export const fetchBookings = () => request('/reservations/bookings');
+export const fetchBooking = (id) => request(`/reservations/bookings/${id}`);
+export const fetchBookingCalendar = (params = {}) => request(`/reservations/bookings/calendar${Object.keys(params).length ? `?${new URLSearchParams(Object.entries(params).filter(([, v]) => v !== '' && v !== null && typeof v !== 'undefined')).toString()}` : ''}`);
 export const createBooking = (payload) => request('/reservations/bookings', { method:'POST', body: JSON.stringify(payload)});
 export const updateBooking = (id, payload) => request(`/reservations/bookings/${id}`, { method:'PUT', body: JSON.stringify(payload)});
 export const fetchBreakfastLogs = () => request('/reservations/breakfast-logs');
@@ -180,7 +195,7 @@ export async function fetchManagementCsv({ startDate = '', endDate = '' } = {}) 
   if (!res.ok) {
     let data = null;
     try { data = await res.json(); } catch { data = null; }
-    throw new Error(data?.detail || 'Failed to export management CSV');
+    throw new Error(readApiMessage(data?.detail || data?.message || data?.error || data) || 'Failed to export management CSV');
   }
   return await res.text();
 }

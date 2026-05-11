@@ -938,6 +938,72 @@ button.secondary,
   line-height: 1.4;
 }
 
+.calendar-grid {
+  display: grid;
+  grid-template-columns: repeat(7, minmax(120px, 1fr));
+  gap: 1px;
+  background: var(--line);
+  border: 1px solid var(--line);
+  overflow-x: auto;
+}
+
+.calendar-weekday,
+.calendar-day {
+  background: #fff;
+  min-width: 120px;
+}
+
+.calendar-weekday {
+  padding: 8px 10px;
+  font-size: 12px;
+  font-weight: 700;
+  color: var(--muted);
+}
+
+.calendar-day {
+  min-height: 150px;
+  padding: 8px;
+  display: grid;
+  grid-template-rows: auto 1fr;
+  gap: 6px;
+}
+
+.calendar-day.muted-day {
+  background: #f8fafc;
+}
+
+.calendar-date {
+  font-weight: 700;
+  font-size: 13px;
+  color: var(--ink);
+}
+
+.calendar-events {
+  display: grid;
+  align-content: start;
+  gap: 6px;
+}
+
+.calendar-event {
+  display: grid;
+  gap: 3px;
+  padding: 7px;
+  border-radius: 8px;
+  background: #f8fafc;
+  border: 1px solid var(--line);
+  color: var(--ink);
+  text-decoration: none;
+  font-size: 12px;
+  line-height: 1.25;
+}
+
+.calendar-event strong,
+.calendar-event span {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
 @media (max-width: 1280px) {
   .workspace-grid {
     grid-template-columns: 250px 1fr;
