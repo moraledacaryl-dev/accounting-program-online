@@ -6,6 +6,7 @@ from sqlalchemy import func, or_
 from sqlalchemy.orm import Session, selectinload
 
 from app.models.entities import (
+    Beds24GuestMap,
     Booking,
     BookingChannel,
     BookingFolio,
@@ -333,16 +334,17 @@ def update_guest(db: Session, guest_id: int, payload: GuestUpdate):
     return _serialize_guest(row, db)
 
 
-def merge_guests(db: Session, payload: GuestMergePayload, username: str | None = None):
-    if int(payload.source_guest_id) == int(payload.target_guest_id):
+def _merge_one_guest(db: Session, *, source_guest_id: int, target_guest_id: int, reason: str | None, username: str | None = None):
+    if int(source_guest_id) == int(target_guest_id):
         raise ValueError('Cannot merge the same guest.')
-    source = db.get(Guest, int(payload.source_guest_id))
-    target = db.get(Guest, int(payload.target_guest_id))
+    source = db.get(Guest, int(source_guest_id))
+    target = db.get(Guest, int(target_guest_id))
     if not source or not target:
         raise ValueError('source_guest_id or target_guest_id not found.')
 
     db.query(Booking).filter(Booking.guest_id == source.id).update({'guest_id': target.id, 'guest_name': target.full_name})
     db.query(BookingFolio).filter(BookingFolio.guest_id == source.id).update({'guest_id': target.id})
+    db.query(Beds24GuestMap).filter(Beds24GuestMap.local_guest_id == source.id).update({'local_guest_id': target.id})
 
     source.is_active = False
     source.notes = f'{source.notes or ""}\nMerged into guest #{target.id} ({target.full_name})'.strip()
@@ -351,16 +353,47 @@ def merge_guests(db: Session, payload: GuestMergePayload, username: str | None =
     db.add(GuestMergeHistory(
         source_guest_id=source.id,
         target_guest_id=target.id,
-        reason=payload.reason,
+        reason=reason,
         merged_by=username,
     ))
-    db.commit()
     return {
-        'ok': True,
         'source_guest_id': source.id,
         'target_guest_id': target.id,
     }
 
+
+def merge_guests(db: Session, payload: GuestMergePayload, username: str | None = None):
+    target_guest_id = int(payload.target_guest_id)
+    source_ids = [int(value) for value in (payload.source_guest_ids or [])]
+    if payload.source_guest_id:
+        source_ids.append(int(payload.source_guest_id))
+    source_ids = sorted(set(source_ids))
+    if not source_ids:
+        raise ValueError('Select at least one source guest to merge.')
+    if target_guest_id in source_ids:
+        raise ValueError('Target guest cannot also be a source guest.')
+
+    target = db.get(Guest, target_guest_id)
+    if not target:
+        raise ValueError('target_guest_id not found.')
+
+    merged = [
+        _merge_one_guest(
+            db,
+            source_guest_id=source_id,
+            target_guest_id=target_guest_id,
+            reason=payload.reason,
+            username=username,
+        )
+        for source_id in source_ids
+    ]
+    db.commit()
+    return {
+        'ok': True,
+        'source_guest_ids': [row['source_guest_id'] for row in merged],
+        'target_guest_id': target_guest_id,
+        'merged_count': len(merged),
+    }
 
 def guest_history(db: Session, guest_id: int):
     guest = db.get(Guest, int(guest_id))

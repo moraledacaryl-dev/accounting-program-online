@@ -1,7 +1,7 @@
 'use client';
 
 import Link from 'next/link';
-import { useEffect, useState } from 'react';
+import { useEffect, useMemo, useState } from 'react';
 import {
   createGuest,
   fetchGuests,
@@ -80,7 +80,7 @@ export default function GuestsPage() {
   const [notice, setNotice] = useState('');
 
   const [mergeForm, setMergeForm] = useState({
-    source_guest_id: '',
+    source_guest_ids: [],
     target_guest_id: '',
     reason: '',
   });
@@ -100,6 +100,15 @@ export default function GuestsPage() {
   useEffect(() => {
     load().catch((e) => setError(e.message || 'Failed to load guests.'));
   }, [query, vipOnly, activeOnly]);
+
+  const selectedMergeSources = useMemo(() => {
+    const byId = new Map();
+    for (const row of rows) byId.set(String(row.id), row);
+    for (const row of mergeSourceOptions) byId.set(String(row.id), row);
+    return (mergeForm.source_guest_ids || [])
+      .map((id) => byId.get(String(id)) || { id, full_name: `Guest #${id}` })
+      .filter(Boolean);
+  }, [rows, mergeSourceOptions, mergeForm.source_guest_ids]);
 
   function formPayload() {
     return {
@@ -214,17 +223,23 @@ export default function GuestsPage() {
     setError('');
     setNotice('');
     try {
-      if (!mergeForm.source_guest_id || !mergeForm.target_guest_id) {
-        setError('Select both source and target guests for merge.');
+      const sourceIds = (mergeForm.source_guest_ids || []).map((value) => Number(value)).filter((value) => value > 0);
+      const targetId = Number(mergeForm.target_guest_id || 0);
+      if (!sourceIds.length || !targetId) {
+        setError('Select at least one source guest and one target guest for merge.');
         return;
       }
-      await mergeGuests({
-        source_guest_id: Number(mergeForm.source_guest_id),
-        target_guest_id: Number(mergeForm.target_guest_id),
+      if (sourceIds.includes(targetId)) {
+        setError('Target guest cannot also be selected as a source guest.');
+        return;
+      }
+      const result = await mergeGuests({
+        source_guest_ids: sourceIds,
+        target_guest_id: targetId,
         reason: mergeForm.reason || null,
       });
-      setNotice('Guest merge completed. Source guest is now inactive.');
-      setMergeForm({ source_guest_id: '', target_guest_id: '', reason: '' });
+      setNotice(`Guest merge completed. ${result?.merged_count || sourceIds.length} source guest(s) are now inactive.`);
+      setMergeForm({ source_guest_ids: [], target_guest_id: '', reason: '' });
       setMergeSourceOptions([]);
       setMergeTargetOptions([]);
       await load();
@@ -241,10 +256,12 @@ export default function GuestsPage() {
   }
 
   function isMergeSubmittable() {
+    const sourceIds = (mergeForm.source_guest_ids || []).map((value) => Number(value)).filter((value) => value > 0);
+    const targetId = Number(mergeForm.target_guest_id || 0);
     return !!(
-      Number(mergeForm.source_guest_id || 0) > 0
-      && Number(mergeForm.target_guest_id || 0) > 0
-      && Number(mergeForm.source_guest_id || 0) !== Number(mergeForm.target_guest_id || 0)
+      sourceIds.length > 0
+      && targetId > 0
+      && !sourceIds.includes(targetId)
     );
   }
 
@@ -333,21 +350,36 @@ export default function GuestsPage() {
           <h2>Merge Guests</h2>
           <p className="muted small">Merge duplicate guest records into a single target profile.</p>
           <form onSubmit={submitMerge} className="stack" style={{ marginTop: 10 }} onKeyDown={(event) => shouldPreventEnterSubmit(event, isMergeSubmittable)}>
-            <label>Search Source Guest
+            <label>Search Source Guests
               <input
                 data-enter-context="search"
                 placeholder="Type name/phone/email"
                 onChange={(e) => lookupMergeSource(e.target.value)}
               />
             </label>
-            <label>Source Guest
-              <select value={mergeForm.source_guest_id} onChange={(e) => setMergeForm((f) => ({ ...f, source_guest_id: e.target.value }))}>
-                <option value="">Select source</option>
+            <label>Source Guests
+              <select
+                multiple
+                size={Math.max(4, Math.min(8, mergeSourceOptions.length || 4))}
+                value={mergeForm.source_guest_ids}
+                onChange={(e) => {
+                  const selected = Array.from(e.target.selectedOptions).map((option) => option.value);
+                  setMergeForm((f) => ({ ...f, source_guest_ids: selected }));
+                }}
+              >
                 {mergeSourceOptions.map((row) => (
                   <option key={row.id} value={row.id}>{row.full_name} ({row.phone || '-'})</option>
                 ))}
               </select>
             </label>
+            {selectedMergeSources.length > 0 && (
+              <div className="ops-alert-list">
+                <h3>Selected Sources</h3>
+                {selectedMergeSources.map((row) => (
+                  <div key={`merge-source-${row.id}`} className="small muted">{row.full_name} · Guest #{row.id}</div>
+                ))}
+              </div>
+            )}
 
             <label>Search Target Guest
               <input

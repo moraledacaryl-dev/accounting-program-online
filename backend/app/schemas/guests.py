@@ -47,7 +47,8 @@ class GuestUpdate(BaseModel):
 
 
 class GuestMergePayload(BaseModel):
-    source_guest_id: int
+    source_guest_id: int | None = None
+    source_guest_ids: list[int] = Field(default_factory=list)
     target_guest_id: int
     reason: str | None = None
 
