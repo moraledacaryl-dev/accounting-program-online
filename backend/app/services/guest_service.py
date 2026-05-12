@@ -250,9 +250,14 @@ def list_guests(db: Session, *, q: str | None = None, vip_only: bool = False, ac
     if vip_only:
         query = query.filter(Guest.vip_flag == True)
     if q:
-        like_q = f'%{q.strip()}%'
-        query = query.filter(or_(Guest.full_name.like(like_q), Guest.phone.like(like_q), Guest.email.like(like_q), Guest.company.like(like_q)))
-    rows = query.order_by(Guest.vip_flag.desc(), Guest.full_name.asc()).limit(max(1, min(int(limit or 300), 2000))).all()
+        like_q = f'%{q.strip().lower()}%'
+        query = query.filter(or_(
+            func.lower(func.coalesce(Guest.full_name, '')).like(like_q),
+            func.lower(func.coalesce(Guest.phone, '')).like(like_q),
+            func.lower(func.coalesce(Guest.email, '')).like(like_q),
+            func.lower(func.coalesce(Guest.company, '')).like(like_q),
+        ))
+    rows = query.order_by(Guest.vip_flag.desc(), func.lower(Guest.full_name).asc()).limit(max(1, min(int(limit or 300), 2000))).all()
     return [_serialize_guest(row, db) for row in rows]
 
 
@@ -260,13 +265,17 @@ def search_guests(db: Session, q: str, limit: int = 30):
     text = _norm(q)
     if not text:
         return []
-    like_q = f'%{text}%'
+    like_q = f'%{text.lower()}%'
     rows = (
         db.query(Guest)
         .options(selectinload(Guest.tags))
         .filter(Guest.is_active == True)
-        .filter(or_(Guest.full_name.like(like_q), Guest.phone.like(like_q), Guest.email.like(like_q)))
-        .order_by(Guest.vip_flag.desc(), Guest.full_name.asc())
+        .filter(or_(
+            func.lower(func.coalesce(Guest.full_name, '')).like(like_q),
+            func.lower(func.coalesce(Guest.phone, '')).like(like_q),
+            func.lower(func.coalesce(Guest.email, '')).like(like_q),
+        ))
+        .order_by(Guest.vip_flag.desc(), func.lower(Guest.full_name).asc())
         .limit(max(1, min(int(limit or 30), 200)))
         .all()
     )
