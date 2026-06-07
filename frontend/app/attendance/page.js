@@ -11,6 +11,7 @@ import {
   updateAttendance,
 } from '../../lib/api';
 import { shouldPreventEnterSubmit } from '../../lib/formBehavior';
+import { useConfirmAction } from '../../components/ConfirmActionProvider';
 
 const EMPTY_FORM = {
   employee_id: '',
@@ -82,6 +83,7 @@ function parseBulkCsv(text) {
 }
 
 export default function AttendancePage() {
+  const confirmAction = useConfirmAction();
   const [employees, setEmployees] = useState([]);
   const [periods, setPeriods] = useState([]);
   const [rows, setRows] = useState([]);
@@ -200,7 +202,7 @@ export default function AttendancePage() {
   }
 
   async function remove(id) {
-    if (!window.confirm('Delete this attendance entry?')) return;
+    if (!await confirmAction({ title: 'Delete this attendance entry?', description: 'This can change payroll calculations for the affected employee.' })) return;
     setError('');
     setNotice('');
     try {

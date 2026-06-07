@@ -1,9 +1,11 @@
 from fastapi import APIRouter, Depends, HTTPException
 from sqlalchemy.orm import Session
 
-from app.api.deps import require_permissions
+from app.api.deps import require_any_permissions, require_permissions
 from app.db.database import get_db
+from app.schemas.beds24 import Beds24FolioLineReclassifyPayload
 from app.schemas.common import BookingCreate, BookingUpdate, RoomBreakfastCreate
+from app.services.beds24_sync_service import reclassify_historical_folio_lines
 from app.services.hospitality_service import (
     create_booking_with_accounting,
     create_room_breakfast_log,
@@ -51,6 +53,31 @@ def booking_detail(booking_id: int, db: Session = Depends(get_db), user=Depends(
         return get_booking(db, booking_id)
     except ValueError as e:
         raise HTTPException(status_code=404, detail=str(e))
+
+
+@router.post('/bookings/{booking_id}/folio-lines/reclassify')
+def reclassify_booking_folio_lines(
+    booking_id: int,
+    payload: Beds24FolioLineReclassifyPayload,
+    db: Session = Depends(get_db),
+    user=Depends(require_any_permissions('bookings.edit', 'folios.manage')),
+):
+    try:
+        return reclassify_historical_folio_lines(
+            db,
+            dry_run=payload.dry_run,
+            include_manual_source=True,
+            include_payment_lines=payload.include_payment_lines,
+            booking_id=booking_id,
+            limit=payload.limit,
+            triggered_by=getattr(user, 'username', None),
+        )
+    except ValueError as e:
+        db.rollback()
+        raise HTTPException(status_code=400, detail=str(e))
+    except Exception as e:
+        db.rollback()
+        raise HTTPException(status_code=500, detail=str(e))
 
 
 @router.post('/bookings')

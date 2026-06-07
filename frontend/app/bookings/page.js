@@ -618,14 +618,21 @@ export default function BookingsPage() {
                 </td>
                 <td>{row.check_in || '-'} → {row.check_out || '-'}</td>
                 <td>{row.status}</td>
-                <td>{currency(row.gross_amount || 0)}<br /><span className="small muted">Deposit {currency(row.deposit_amount || 0)}</span></td>
-                <td className="row wrap">
-                  <button type="button" className="secondary" onClick={() => editBooking(row)}>Edit</button>
-                  <button type="button" className="secondary" onClick={() => lifecycleUpdate(row, 'checked_in')}>Check In</button>
-                  <button type="button" className="secondary" onClick={() => lifecycleUpdate(row, 'checked_out')}>Check Out</button>
-                  <button type="button" className="secondary" onClick={() => lifecycleUpdate(row, 'cancelled')}>Cancel</button>
-                  <Link className="button-link secondary-link" href={row.primary_folio_id ? `/room-folios/${row.primary_folio_id}` : `/room-folios?booking_id=${row.id}`}>Folio</Link>
-                </td>
+	                <td>{currency(row.gross_amount || 0)}<br /><span className="small muted">Deposit {currency(row.deposit_amount || 0)}</span></td>
+	                <td className="row wrap">
+	                  <Link className="button-link secondary-link" href={`/bookings/${row.id}`}>Open</Link>
+	                  <button type="button" className="secondary" onClick={() => editBooking(row)}>Edit</button>
+	                  {!['checked_in', 'checked_out', 'cancelled'].includes(row.status) && (
+	                    <button type="button" className="secondary" onClick={() => lifecycleUpdate(row, 'checked_in')}>Check In</button>
+	                  )}
+	                  {row.status !== 'checked_out' && row.status !== 'cancelled' && (
+	                    <button type="button" className="secondary" onClick={() => lifecycleUpdate(row, 'checked_out')}>Check Out</button>
+	                  )}
+	                  {row.status !== 'cancelled' && row.status !== 'checked_out' && (
+	                    <button type="button" className="secondary" onClick={() => lifecycleUpdate(row, 'cancelled')}>Cancel</button>
+	                  )}
+	                  <Link className="button-link secondary-link" href={row.primary_folio_id ? `/room-folios/${row.primary_folio_id}` : `/room-folios?booking_id=${row.id}`}>Folio</Link>
+	                </td>
               </tr>
             ))}
             {!bookings.length && <tr><td colSpan="8" className="muted">No bookings yet.</td></tr>}

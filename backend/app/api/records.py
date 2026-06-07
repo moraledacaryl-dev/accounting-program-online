@@ -70,7 +70,11 @@ def single_update(
 def approve_record(record_id: int, payload: ApprovalPayload, db: Session = Depends(get_db), user=Depends(require_permissions('approvals.act'))):
     status = 'approved' if payload.approved else 'rejected'
     try:
-        record = update_record(db, record_id, RecordUpdate(workflow_status=status), approver=user.username)
+        current = get_record_obj(db, record_id)
+        notes = current.notes if current else None
+        if payload.note:
+            notes = '\n'.join(filter(None, [notes, f'{status.title()} by {user.username}: {payload.note.strip()}']))
+        record = update_record(db, record_id, RecordUpdate(workflow_status=status, notes=notes), approver=user.username)
         if not record:
             raise HTTPException(status_code=404, detail='Record not found')
         return record

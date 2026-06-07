@@ -2,6 +2,7 @@
 
 import { useEffect, useMemo, useState } from 'react';
 import { approveRecord, createRecord, deleteRecord, fetchModuleTaxonomy, getModuleRecords, updateRecord } from '../lib/api';
+import { useConfirmAction } from './ConfirmActionProvider';
 
 function scopeTaxonomy(rawTaxonomy, categoryFilter) {
   if (!Array.isArray(categoryFilter) || !categoryFilter.length) {
@@ -28,6 +29,7 @@ export default function ClientModulePage({
   defaultCategory = '',
   defaultBucket = '',
 }) {
+  const confirmAction = useConfirmAction();
   const [taxonomy, setTaxonomy] = useState({});
   const [records, setRecords] = useState([]);
   const [search, setSearch] = useState('');
@@ -221,7 +223,7 @@ export default function ClientModulePage({
                 <td className="row wrap">
                   <button className="secondary" onClick={()=>editRow(r)}>Edit</button>
                   <button className="secondary" onClick={async()=>{await approveRecord(r.id,true); await load();}}>Approve</button>
-                  <button className="secondary" onClick={async()=>{if(confirm('Delete record?')) {await deleteRecord(r.id); await load();}}}>Delete</button>
+                  <button className="secondary" onClick={async()=>{if (await confirmAction({ title: `Delete record #${r.id}?`, description: 'Remove only records that were entered in error.' })) {await deleteRecord(r.id); await load();}}}>Delete</button>
                 </td>
               </tr>
             ))}

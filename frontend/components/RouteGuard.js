@@ -1,5 +1,6 @@
 'use client';
 
+import { useEffect } from 'react';
 import { usePathname } from 'next/navigation';
 import { useCurrentUser } from '../lib/useCurrentUser';
 
@@ -8,7 +9,8 @@ const PERMISSION_RULES = [
   { prefix: '/start-of-day', any: ['dashboard.view', 'cashflow.view'] },
   { prefix: '/staff-guide', any: ['dashboard.view', 'cashflow.view', 'bookings.view', 'guests.view', 'folios.view', 'inventory.view', 'receiving.view', 'payroll_periods.view', 'restaurant.view'] },
   { prefix: '/workspace/rooms', any: ['bookings.view', 'guests.view', 'folios.view'] },
-  { prefix: '/workspace/events', any: ['bookings.view', 'cashflow.view'] },
+  { prefix: '/workspace/events', any: ['events.view', 'bookings.view', 'cashflow.view'] },
+  { prefix: '/events', any: ['events.view', 'bookings.view', 'cashflow.view'] },
   { prefix: '/bookings', any: ['bookings.view'] },
   { prefix: '/guests', any: ['guests.view'] },
   { prefix: '/room-folios', any: ['folios.view'] },
@@ -30,6 +32,7 @@ const PERMISSION_RULES = [
   { prefix: '/menu-categories', any: ['menu.view'] },
   { prefix: '/recipes', any: ['recipes.manage', 'menu.view'] },
   { prefix: '/staff-meals', any: ['staff_meals.view'] },
+  { prefix: '/setup-imports', any: ['inventory.view', 'menu.view', 'recipes.manage'] },
 
   { prefix: '/workspace/inventory', any: ['inventory.view', 'suppliers.view', 'purchase_requests.view', 'purchase_orders.view', 'receiving.view'] },
   { prefix: '/inventory-items', any: ['inventory.view'] },
@@ -75,9 +78,28 @@ function pathHasAccess(pathname, can) {
   return (match.any || []).some((key) => can(key));
 }
 
+function defaultRouteForUser(can) {
+  const preferred = [
+    ['/dashboard', ['dashboard.view']],
+    ['/start-of-day', ['dashboard.view', 'cashflow.view']],
+    ['/workspace/rooms', ['bookings.view', 'guests.view', 'folios.view']],
+    ['/workspace/restaurant', ['restaurant.view', 'menu.view', 'staff_meals.view']],
+    ['/workspace/inventory', ['inventory.view', 'suppliers.view', 'purchase_requests.view', 'purchase_orders.view', 'receiving.view']],
+    ['/workspace/finance', ['cashflow.view', 'journals.view', 'reports.view', 'assets.view', 'bir.view']],
+  ];
+  const match = preferred.find(([, permissions]) => permissions.some((key) => can(key)));
+  return match?.[0] || '/login';
+}
+
 export default function RouteGuard({ children }) {
   const pathname = usePathname();
-  const { loaded, can } = useCurrentUser();
+  const { loaded, can, user } = useCurrentUser();
+
+  useEffect(() => {
+    if (!loaded || !user || pathname === '/login' || pathHasAccess(pathname, can)) return;
+    const target = defaultRouteForUser(can);
+    if (target && target !== pathname) window.location.replace(target);
+  }, [loaded, user, pathname, can]);
 
   if (!loaded && pathname !== '/login') {
     return (
@@ -87,12 +109,21 @@ export default function RouteGuard({ children }) {
       </section>
     );
   }
+  if (pathname !== '/login' && !user) {
+    return (
+      <section className="section">
+        <h1>Opening Login</h1>
+        <p className="muted">Your session is not active.</p>
+      </section>
+    );
+  }
+
   if (pathHasAccess(pathname, can)) return children;
 
   return (
     <section className="section">
       <h1>Access Restricted</h1>
-      <p className="muted">Your account does not have permission for this page.</p>
+      <p className="muted">Your account does not have permission for this page. Opening your allowed workspace...</p>
     </section>
   );
 }

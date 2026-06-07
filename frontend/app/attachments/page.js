@@ -1,9 +1,10 @@
 'use client';
 
 import { useEffect, useMemo, useRef, useState } from 'react';
-import { API_BASE, deleteAttachment, fetchAttachments, uploadAttachment } from '../../lib/api';
+import { deleteAttachment, downloadAttachment, fetchAttachments, uploadAttachment } from '../../lib/api';
 import { shouldPreventEnterSubmit } from '../../lib/formBehavior';
 import { useCurrentUser } from '../../lib/useCurrentUser';
+import { useConfirmAction } from '../../components/ConfirmActionProvider';
 
 const ENTITY_TYPES = [
   'record',
@@ -27,12 +28,8 @@ function currencyBytes(value) {
   return `${(bytes / (1024 * 1024)).toFixed(2)} MB`;
 }
 
-function uploadUrl(filePath) {
-  const base = API_BASE.replace(/\/api\/?$/, '');
-  return `${base}${filePath}`;
-}
-
 export default function AttachmentsPage() {
+  const confirmAction = useConfirmAction();
   const { can } = useCurrentUser();
   const [rows, setRows] = useState([]);
   const [filters, setFilters] = useState({
@@ -117,6 +114,7 @@ export default function AttachmentsPage() {
   }
 
   async function removeAttachment(id) {
+    if (!await confirmAction({ title: `Delete attachment #${id}?`, description: 'The supporting document will no longer be available from its linked record.' })) return;
     setError('');
     setNotice('');
     try {
@@ -125,6 +123,25 @@ export default function AttachmentsPage() {
       await load();
     } catch (e) {
       setError(e.message || 'Failed to delete attachment.');
+    }
+  }
+
+  async function openAttachment(row) {
+    setError('');
+    const openedWindow = window.open('', '_blank');
+    if (!openedWindow) {
+      setError('Browser blocked the attachment window. Allow pop-ups for this site and try again.');
+      return;
+    }
+    openedWindow.opener = null;
+    try {
+      const { blob } = await downloadAttachment(row.id);
+      const url = URL.createObjectURL(blob);
+      openedWindow.location.href = url;
+      setTimeout(() => URL.revokeObjectURL(url), 60000);
+    } catch (e) {
+      openedWindow.close();
+      setError(e.message || 'Failed to open attachment.');
     }
   }
 
@@ -196,7 +213,7 @@ export default function AttachmentsPage() {
             {filteredRows.map((row) => (
               <tr key={row.id}>
                 <td>{row.entity_type} · {row.entity_id}</td>
-                <td><a href={uploadUrl(row.file_path)} target="_blank" rel="noreferrer">{row.file_name}</a></td>
+                <td><button type="button" className="button-link secondary-link" onClick={() => openAttachment(row)}>{row.file_name}</button></td>
                 <td>{currencyBytes(row.size_bytes)}</td>
                 <td>{row.note || '-'}</td>
                 <td>{row.created_at || '-'}</td>

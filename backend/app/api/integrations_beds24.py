@@ -7,6 +7,7 @@ from app.api.deps import require_any_permissions, require_permissions
 from app.db.database import get_db
 from app.schemas.beds24 import (
     Beds24BackfillPayload,
+    Beds24FolioLineReclassifyPayload,
     Beds24ResetExecutePayload,
     Beds24ResetPreviewPayload,
     Beds24SettingsUpdate,
@@ -19,6 +20,7 @@ from app.services.beds24_sync_service import (
     list_sync_logs,
     list_sync_state,
     preview_reset_mode,
+    reclassify_historical_folio_lines,
     execute_reset_mode,
     rebuild_booking_mirror_by_id,
     backfill_bookings_by_date_range,
@@ -165,6 +167,29 @@ def beds24_sync_backfill(
     except ValueError as exc:
         raise HTTPException(status_code=400, detail=str(exc))
     except Exception as exc:
+        raise HTTPException(status_code=500, detail=str(exc))
+
+
+@router.post('/folio-lines/reclassify')
+def beds24_reclassify_folio_lines(
+    payload: Beds24FolioLineReclassifyPayload,
+    db: Session = Depends(get_db),
+    user=Depends(require_permissions('integrations.manage')),
+):
+    try:
+        return reclassify_historical_folio_lines(
+            db,
+            dry_run=payload.dry_run,
+            include_manual_source=payload.include_manual_source,
+            include_payment_lines=payload.include_payment_lines,
+            limit=payload.limit,
+            triggered_by=getattr(user, 'username', None),
+        )
+    except ValueError as exc:
+        db.rollback()
+        raise HTTPException(status_code=400, detail=str(exc))
+    except Exception as exc:
+        db.rollback()
         raise HTTPException(status_code=500, detail=str(exc))
 
 

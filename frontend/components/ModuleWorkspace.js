@@ -78,16 +78,15 @@ const CONFIG = {
 
   events: {
     title: 'Events',
-    description: 'Simple event tracking for clients, deposits, balances, add-ons, and payment follow-up.',
+    description: 'Dedicated event workflow for quotes, confirmation, deposits, AR balances, and completion.',
     tabs: [
       {
         key: 'overview',
         label: 'Overview',
         type: 'links',
         links: [
-          ['/records/events', 'Event Records', 'Track event clients, deposits, balances, and notes'],
-          ['/cashflow/receivables?action=collect', 'Receive Event Payment', 'Collect event deposits or balances'],
-          ['/cashflow/receivables', 'Event Balances', 'Review unpaid event balances'],
+          ['/events', 'Events Workflow', 'Quote, confirm, collect deposits, and complete events'],
+          ['/cashflow/receivables', 'Event Balances', 'Review unpaid event balances created from events'],
           ['/reports', 'Reports', 'Review event-related income when posted'],
         ],
       },
@@ -96,9 +95,9 @@ const CONFIG = {
         label: 'Workflows',
         type: 'links',
         links: [
-          ['/records/events', 'Create Event Record', 'Record the event/client details first'],
-          ['/cashflow/receivables', 'Create Balance to Collect', 'Add an event balance when payment is not yet collected'],
-          ['/cashflow/receivables?action=collect', 'Receive Payment', 'Collect deposits or balances'],
+          ['/events', 'Create Event Quote', 'Capture client, schedule, venue, package, and quote lines'],
+          ['/events', 'Confirm Event', 'Post event income to AR and create the collection balance'],
+          ['/events', 'Receive Event Payment', 'Collect deposits or balances without duplicate revenue'],
         ],
       },
       { key: 'records', label: 'Records', type: 'records' },
@@ -114,9 +113,10 @@ const CONFIG = {
         label: 'Overview',
         type: 'links',
         links: [
-          ['/restaurant-ops', 'Operations', 'Sales flow with stock deduction'],
+          ['/restaurant-ops', 'Operations & Advanced Tools', 'POS-outage sales, quick restock, variants, components, and promotions'],
           ['/menu-items', 'Menu & Recipes', 'Manage menu items, recipes, and SKUs'],
           ['/menu-categories', 'Menu Categories', 'Maintain category grouping for menu items'],
+          ['/setup-imports', 'Excel Setup Import', 'Upload menu, variants, recipes, and ingredients'],
           ['/recipes', 'Recipes', 'Quick route to recipe maintenance'],
           ['/staff-meals', 'Staff Meals', 'Track staff meal ingredient usage'],
           ['/workspace/breakfast', 'Breakfast', 'Breakfast record workspace'],
@@ -129,7 +129,7 @@ const CONFIG = {
         label: 'Workflows',
         type: 'links',
         links: [
-          ['/restaurant-ops', 'Sales Workflow', 'Post sales and consume ingredients'],
+          ['/restaurant-ops', 'Fallback Sales Workflow', 'Use only when Cloud POS is unavailable'],
           ['/menu-items', 'Menu Workflow', 'Create dishes and update recipes'],
           ['/staff-meals', 'Staff Meal Workflow', 'Post internal meal consumption'],
         ],
@@ -148,6 +148,7 @@ const CONFIG = {
         type: 'links',
         links: [
           ['/inventory-items', 'Inventory Items', 'Item setup and reorder levels'],
+          ['/setup-imports', 'Excel Setup Import', 'Upload inventory items, units, categories, and recipes'],
           ['/stock-movements', 'Stock Movements', 'FIFO stock-in/out movement log'],
           ['/suppliers', 'Suppliers', 'Supplier master linked to procurement/payables'],
           ['/purchase-requests', 'Purchase Requests', 'PR workflow with status'],

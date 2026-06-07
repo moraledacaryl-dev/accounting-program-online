@@ -1,4 +1,7 @@
-from fastapi import APIRouter, Depends, HTTPException
+import secrets
+from time import monotonic
+
+from fastapi import APIRouter, Depends, HTTPException, Request, Response
 from sqlalchemy.orm import Session
 from app.db.database import get_db
 from app.models.entities import User
@@ -22,30 +25,129 @@ from app.services.permission_service import assign_user_roles, get_user_effectiv
 
 router = APIRouter()
 
+LOGIN_FAILURE_WINDOW_SECONDS = 5 * 60
+LOGIN_MAX_FAILURES = 8
+_login_failures: dict[str, list[float]] = {}
+
+
+def _login_failure_key(request: Request, username: str) -> str:
+    client_host = request.client.host if request.client else 'unknown'
+    normalized_username = (username or '').strip().lower()
+    return f'{client_host}:{normalized_username}'
+
+
+def _recent_login_failures(key: str) -> list[float]:
+    cutoff = monotonic() - LOGIN_FAILURE_WINDOW_SECONDS
+    recent = [stamp for stamp in _login_failures.get(key, []) if stamp >= cutoff]
+    if recent:
+        _login_failures[key] = recent
+    else:
+        _login_failures.pop(key, None)
+    return recent
+
+
+def _assert_login_allowed(key: str):
+    if len(_recent_login_failures(key)) >= LOGIN_MAX_FAILURES:
+        raise HTTPException(status_code=429, detail='Too many failed login attempts. Please wait a few minutes and try again.')
+
+
+def _record_login_failure(key: str):
+    recent = _recent_login_failures(key)
+    recent.append(monotonic())
+    _login_failures[key] = recent
+
+
+def _clear_login_failures(key: str):
+    _login_failures.pop(key, None)
+
+
+def _set_session_cookie(response: Response, token: str):
+    max_age = int(settings.access_token_expire_minutes) * 60
+    response.set_cookie(
+        key=settings.auth_cookie_name,
+        value=token,
+        max_age=max_age,
+        expires=max_age,
+        path='/',
+        domain=settings.auth_cookie_domain_value,
+        secure=settings.auth_cookie_secure_effective,
+        httponly=True,
+        samesite=settings.auth_cookie_samesite_value,
+    )
+
+
+def _set_csrf_cookie(response: Response) -> str:
+    token = secrets.token_urlsafe(32)
+    max_age = int(settings.access_token_expire_minutes) * 60
+    response.set_cookie(
+        key=settings.csrf_cookie_name,
+        value=token,
+        max_age=max_age,
+        expires=max_age,
+        path='/',
+        domain=settings.auth_cookie_domain_value,
+        secure=settings.auth_cookie_secure_effective,
+        httponly=False,
+        samesite=settings.auth_cookie_samesite_value,
+    )
+    return token
+
+
+def _clear_session_cookie(response: Response):
+    response.delete_cookie(
+        key=settings.auth_cookie_name,
+        path='/',
+        domain=settings.auth_cookie_domain_value,
+        secure=settings.auth_cookie_secure_effective,
+        httponly=True,
+        samesite=settings.auth_cookie_samesite_value,
+    )
+    response.delete_cookie(
+        key=settings.csrf_cookie_name,
+        path='/',
+        domain=settings.auth_cookie_domain_value,
+        secure=settings.auth_cookie_secure_effective,
+        httponly=False,
+        samesite=settings.auth_cookie_samesite_value,
+    )
+
 @router.post('/bootstrap')
 def bootstrap(db: Session = Depends(get_db)):
     if not settings.bootstrap_enabled:
         raise HTTPException(status_code=403, detail='Default admin bootstrap is disabled in this environment')
-    ensure_admin_user(db)
+    admin_result = ensure_admin_user(db)
     if settings.integration_enabled:
         ensure_integration_user(db)
-    return {
+    response = {
         'ok': True,
-        'default_admin': 'admin',
-        'default_password': 'admin123',
+        'admin_username': 'admin',
+        'admin_created': bool(admin_result.get('created')),
         'integration_user': settings.integration_username,
-        'integration_password': settings.integration_password,
+        'integration_user_ready': bool(settings.integration_enabled),
+        'message': 'Admin bootstrap is ready. Store the temporary password now if one was generated.',
     }
+    if admin_result.get('temporary_password'):
+        response['temporary_password'] = admin_result['temporary_password']
+        response['temporary_password_shown_once'] = True
+    return response
 
 @router.post('/login')
-def login(payload: LoginPayload, db: Session = Depends(get_db)):
+def login(payload: LoginPayload, request: Request, response: Response, db: Session = Depends(get_db)):
+    failure_key = _login_failure_key(request, payload.username)
+    _assert_login_allowed(failure_key)
     user = authenticate_user(db, payload.username, payload.password)
     if not user:
+        _record_login_failure(failure_key)
         raise HTTPException(status_code=401, detail='Incorrect username or password')
+    _clear_login_failures(failure_key)
     perms = get_user_effective_permissions(db, user.id)
+    token = create_access_token(user.username)
+    _set_session_cookie(response, token)
+    csrf_token = _set_csrf_cookie(response)
     return {
-        'access_token': create_access_token(user.username),
+        'access_token': token,
         'token_type': 'bearer',
+        'csrf_token': csrf_token,
         'user': {
             'id': user.id,
             'username': user.username,
@@ -55,6 +157,18 @@ def login(payload: LoginPayload, db: Session = Depends(get_db)):
             'permissions': perms.get('permissions', []),
         },
     }
+
+
+@router.post('/logout')
+def logout(response: Response, user: User = Depends(get_current_user)):
+    _clear_session_cookie(response)
+    return {'ok': True}
+
+
+@router.get('/csrf')
+def csrf(response: Response, user: User = Depends(get_current_user)):
+    return {'csrf_token': _set_csrf_cookie(response)}
+
 
 @router.get('/me')
 def me(user: User = Depends(get_current_user), db: Session = Depends(get_db)):
@@ -74,7 +188,7 @@ def me(user: User = Depends(get_current_user), db: Session = Depends(get_db)):
 def integration_token(payload: IntegrationTokenPayload, db: Session = Depends(get_db)):
     if not settings.integration_enabled:
         raise HTTPException(status_code=403, detail='Integration tokens are disabled in this environment')
-    if settings.is_production and settings.integration_secret in {'', 'pos-integration-secret'}:
+    if settings.is_production and settings.integration_secret_is_placeholder:
         raise HTTPException(status_code=503, detail='Integration secret is not configured for production')
     if payload.secret != settings.integration_secret:
         raise HTTPException(status_code=401, detail='Invalid integration secret')

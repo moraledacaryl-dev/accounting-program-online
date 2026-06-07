@@ -9,6 +9,7 @@ import {
   updateAccountMapping,
 } from '../../lib/api';
 import { shouldPreventEnterSubmit } from '../../lib/formBehavior';
+import { useConfirmAction } from '../../components/ConfirmActionProvider';
 
 const EMPTY_FORM = {
   module_slug: '',
@@ -25,6 +26,7 @@ const EMPTY_FORM = {
 };
 
 export default function AccountMappingPage() {
+  const confirmAction = useConfirmAction();
   const [rows, setRows] = useState([]);
   const [accounts, setAccounts] = useState([]);
   const [editingId, setEditingId] = useState(null);
@@ -105,7 +107,7 @@ export default function AccountMappingPage() {
   }
 
   async function removeRow(row) {
-    if (!window.confirm(`Delete mapping #${row.id}?`)) return;
+    if (!await confirmAction({ title: `Delete account mapping #${row.id}?`, description: 'Future automated accounting entries will no longer use this rule.' })) return;
     setError('');
     try {
       await deleteAccountMapping(row.id);

@@ -2,7 +2,7 @@ from __future__ import annotations
 
 from datetime import datetime
 
-from sqlalchemy import func
+from sqlalchemy import func, or_
 from sqlalchemy.orm import Session, selectinload
 
 from app.models.entities import (
@@ -315,7 +315,12 @@ def list_booking_calendar(
             selectinload(Booking.folios),
         )
         .filter(Booking.check_in <= end_date)
-        .filter(Booking.check_out >= start_date)
+        .filter(or_(
+            Booking.check_out.is_(None),
+            Booking.check_out == '',
+            Booking.check_out > start_date,
+            Booking.check_in == Booking.check_out,
+        ))
     )
     if room_id:
         query = query.filter(Booking.room_id == int(room_id))

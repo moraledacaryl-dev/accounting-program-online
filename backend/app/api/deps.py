@@ -1,5 +1,7 @@
+from hmac import compare_digest
+
 from jose import JWTError, jwt
-from fastapi import Depends, HTTPException
+from fastapi import Cookie, Depends, HTTPException, Request
 from fastapi.security import OAuth2PasswordBearer
 from sqlalchemy.orm import Session
 from app.core.settings import settings
@@ -7,10 +9,35 @@ from app.db.database import get_db
 from app.models.entities import User
 from app.services.permission_service import get_user_permission_keys
 
-oauth2_scheme = OAuth2PasswordBearer(tokenUrl="/api/auth/login")
+oauth2_scheme = OAuth2PasswordBearer(tokenUrl="/api/auth/login", auto_error=False)
+SAFE_METHODS = {'GET', 'HEAD', 'OPTIONS', 'TRACE'}
 
-def get_current_user(db: Session = Depends(get_db), token: str = Depends(oauth2_scheme)):
+
+def _csrf_tokens_match(cookie_token: str | None, header_token: str | None) -> bool:
+    if not cookie_token or not header_token:
+        return False
+    return compare_digest(str(cookie_token), str(header_token))
+
+
+def _enforce_cookie_csrf(request: Request, bearer_token: str | None, cookie_token: str | None):
+    if bearer_token or not cookie_token or request.method.upper() in SAFE_METHODS:
+        return
+    csrf_cookie = request.cookies.get(settings.csrf_cookie_name)
+    csrf_header = request.headers.get(settings.csrf_header_name)
+    if not _csrf_tokens_match(csrf_cookie, csrf_header):
+        raise HTTPException(status_code=403, detail='CSRF token missing or invalid')
+
+def get_current_user(
+    request: Request,
+    db: Session = Depends(get_db),
+    bearer_token: str | None = Depends(oauth2_scheme),
+    cookie_token: str | None = Cookie(default=None, alias=settings.auth_cookie_name),
+):
     credentials_exception = HTTPException(status_code=401, detail="Could not validate credentials")
+    _enforce_cookie_csrf(request, bearer_token, cookie_token)
+    token = bearer_token or cookie_token
+    if not token:
+        raise credentials_exception
     try:
         payload = jwt.decode(token, settings.secret_key, algorithms=["HS256"])
         username = payload.get("sub")

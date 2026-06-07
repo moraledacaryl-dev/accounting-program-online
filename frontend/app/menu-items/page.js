@@ -1,5 +1,6 @@
 'use client';
 import { useEffect, useMemo, useState } from 'react';
+import { useConfirmAction } from '../../components/ConfirmActionProvider';
 import { createMenuItem, createRecipeLine, deleteMenuItem, deleteRecipeLine, fetchInventoryItems, fetchMasterValues, fetchMenuItems, fetchRecipe, updateMenuItem } from '../../lib/api';
 import { shouldPreventEnterSubmit } from '../../lib/formBehavior';
 
@@ -11,6 +12,7 @@ const MODULE_OPTIONS = [
 ];
 
 export default function MenuItemsPage() {
+  const confirmAction = useConfirmAction();
   const [items, setItems] = useState([]);
   const [inv, setInv] = useState([]);
   const [masterRows, setMasterRows] = useState([]);
@@ -76,11 +78,12 @@ export default function MenuItemsPage() {
       return;
     }
     try {
+      const selectedInventoryItem = invById[Number(recipeForm.inventory_item_id)];
       await createRecipeLine(selected, {
         ...recipeForm,
         inventory_item_id: Number(recipeForm.inventory_item_id),
         quantity: Number(recipeForm.quantity || 0),
-        unit: recipeForm.unit || undefined,
+        unit: selectedInventoryItem?.unit || recipeForm.unit || undefined,
       });
       setNotice('Recipe line added.');
       setRecipeForm({ inventory_item_id: '', quantity: '', unit: '' });
@@ -97,9 +100,6 @@ export default function MenuItemsPage() {
   }, {}), [masterRows]);
 
   const currentCategoryOptions = categoryMap[`${form.module_slug}_categories`] || [];
-  const unitsOfMeasure = useMemo(() => masterRows.filter((row) => row.group_name === 'units_of_measure'), [masterRows]);
-  const inventoryUnits = useMemo(() => Array.from(new Set(inv.map((row) => row.unit).filter(Boolean))).sort(), [inv]);
-  const unitOptions = useMemo(() => Array.from(new Set([...inventoryUnits, ...unitsOfMeasure.map((row) => row.value)])).filter(Boolean).sort(), [inventoryUnits, unitsOfMeasure]);
   const invById = useMemo(() => Object.fromEntries(inv.map((row) => [row.id, row])), [inv]);
   const selectedItem = selected ? items.find((item) => item.id === selected) : null;
 
@@ -163,7 +163,7 @@ export default function MenuItemsPage() {
                     <button className="secondary" onClick={() => { setEditingId(i.id); setForm({ name: i.name, module_slug: i.module_slug, category: i.category || '', price: i.price || '', notes: i.notes || '' }); }}>
                       Edit
                     </button>
-                    <button className="secondary" onClick={async () => { if (confirm('Delete this menu item?')) { await deleteMenuItem(i.id); if (selected === i.id) setSelected(null); await load(); } }}>
+                    <button className="secondary" onClick={async () => { if (await confirmAction({ title: `Delete menu item ${i.name}?`, description: 'Items already used by POS sales should be made unavailable instead of removed.' })) { await deleteMenuItem(i.id); if (selected === i.id) setSelected(null); await load(); } }}>
                       Delete
                     </button>
                   </td>
@@ -196,10 +196,7 @@ export default function MenuItemsPage() {
                 {inv.map((i) => <option key={i.id} value={i.id}>{i.name}</option>)}
               </select></label>
               <label>Quantity<input required type="number" step="0.01" min="0.01" inputMode="decimal" value={recipeForm.quantity} onChange={e => setRecipeForm(f => ({ ...f, quantity: e.target.value }))} /></label>
-              <label>Unit<select required value={recipeForm.unit} onChange={e => setRecipeForm(f => ({ ...f, unit: e.target.value }))}>
-                <option value="">Choose unit</option>
-                {unitOptions.map((unit) => <option key={unit} value={unit}>{unit}</option>)}
-              </select></label>
+              <label>Unit<input required readOnly value={recipeForm.unit || ''} placeholder="Choose ingredient first" /></label>
             </div>
             <button type="submit">Add ingredient</button>
           </form>
@@ -213,7 +210,7 @@ export default function MenuItemsPage() {
                   <td>{r.quantity}</td>
                   <td>{r.unit || '-'}</td>
                   <td>
-                    <button className="secondary" onClick={async () => { await deleteRecipeLine(r.id); setRecipe(await fetchRecipe(selected)); }}>
+                    <button className="secondary" onClick={async () => { if (await confirmAction({ title: 'Delete this recipe ingredient?', description: 'Removing it changes costing and future inventory deductions for this menu item.' })) { await deleteRecipeLine(r.id); setRecipe(await fetchRecipe(selected)); } }}>
                       Delete
                     </button>
                   </td>

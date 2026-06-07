@@ -1,5 +1,6 @@
 'use client';
 import { useEffect, useMemo, useState } from 'react';
+import { useConfirmAction } from '../../components/ConfirmActionProvider';
 import { createMasterValue, deleteMasterValue, fetchMasterValues, updateMasterValue } from '../../lib/api';
 
 const GROUPS = [
@@ -10,6 +11,7 @@ const GROUPS = [
 ];
 
 export default function MenuCategoriesPage() {
+  const confirmAction = useConfirmAction();
   const [groupName, setGroupName] = useState(GROUPS[0].key);
   const [value, setValue] = useState('');
   const [code, setCode] = useState('');
@@ -86,7 +88,7 @@ export default function MenuCategoriesPage() {
   }
 
   async function removeCategory(row) {
-    if (!confirm('Remove this archived category?')) return;
+    if (!await confirmAction({ title: 'Remove this archived category?', description: 'This permanently removes the category after it has been archived.' })) return;
     setError('');
     setNotice('');
     try {

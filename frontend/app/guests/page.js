@@ -10,6 +10,7 @@ import {
   updateGuest,
 } from '../../lib/api';
 import { shouldPreventEnterSubmit } from '../../lib/formBehavior';
+import { useConfirmAction } from '../../components/ConfirmActionProvider';
 
 const EMPTY_FORM = {
   first_name: '',
@@ -70,6 +71,7 @@ function php(value) {
 }
 
 export default function GuestsPage() {
+  const confirmAction = useConfirmAction();
   const [rows, setRows] = useState([]);
   const [editingId, setEditingId] = useState(null);
   const [form, setForm] = useState({ ...EMPTY_FORM });
@@ -175,7 +177,7 @@ export default function GuestsPage() {
   }
 
   async function deactivateRow(row) {
-    if (!window.confirm(`Set guest ${row.full_name} as inactive?`)) return;
+    if (!await confirmAction({ title: `Set guest ${row.full_name} as inactive?`, description: 'The guest history remains available, but the profile will no longer appear in active lists.', confirmLabel: 'Set Inactive' })) return;
     setError('');
     try {
       await updateGuest(row.id, { is_active: false });

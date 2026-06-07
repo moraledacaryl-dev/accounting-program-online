@@ -11,11 +11,20 @@ from sqlalchemy.orm import Session
 from app.api.deps import require_any_permissions, require_permissions
 from app.db.database import get_db
 from app.models.entities import (
+    AccountTransfer,
     AttendanceEntry,
+    Asset,
+    AssetDepreciationLog,
     BIRBookEntry,
     Booking,
     ChannelPayout,
+    ChartAccount,
+    FinancialAccount,
     InventoryItem,
+    JournalEntry,
+    JournalLine,
+    MoneyTransaction,
+    Payable,
     PeriodLock,
     PayrollLine,
     PayrollPeriod,
@@ -26,6 +35,7 @@ from app.models.entities import (
     Record,
     RecordSettlement,
     ReceivingRecord,
+    Receivable,
     SaleOrder,
     SaleOrderLine,
     StaffMealLog,
@@ -68,6 +78,307 @@ def _parse_iso_date(value: str | None) -> datetime | None:
         return datetime.strptime(text, '%Y-%m-%d')
     except ValueError:
         return None
+
+
+def _round_money(value) -> float:
+    return round(float(value or 0), 4)
+
+
+def _account_family(account_code: str | None, account_type: str | None = None) -> str:
+    raw_type = _norm(account_type)
+    if raw_type:
+        if 'asset' in raw_type:
+            return 'assets'
+        if 'liabil' in raw_type or 'payable' in raw_type:
+            return 'liabilities'
+        if 'equity' in raw_type or 'capital' in raw_type:
+            return 'equity'
+        if 'revenue' in raw_type or 'income' in raw_type or 'sales' in raw_type:
+            return 'revenue'
+        if 'expense' in raw_type or 'cost' in raw_type:
+            return 'expenses'
+    code = (account_code or '').strip()
+    if code.startswith('1'):
+        return 'assets'
+    if code.startswith('2'):
+        return 'liabilities'
+    if code.startswith('3'):
+        return 'equity'
+    if code.startswith('4'):
+        return 'revenue'
+    if code.startswith(('5', '6', '8')):
+        return 'expenses'
+    return 'other'
+
+
+def _chart_account_map(db: Session) -> dict[str, ChartAccount]:
+    return {row.code: row for row in db.query(ChartAccount).all()}
+
+
+def _posted_journal_rows(
+    db: Session,
+    *,
+    start_date: str | None = None,
+    end_date: str | None = None,
+    as_of_date: str | None = None,
+) -> list[tuple[JournalEntry, JournalLine]]:
+    query = (
+        db.query(JournalEntry, JournalLine)
+        .join(JournalLine, JournalLine.journal_entry_id == JournalEntry.id)
+        .filter(JournalEntry.status.notin_(['draft', 'cancelled', 'voided', 'reversed']))
+    )
+    if as_of_date:
+        query = query.filter(JournalEntry.entry_date <= as_of_date)
+    else:
+        if start_date:
+            query = query.filter(JournalEntry.entry_date >= start_date)
+        if end_date:
+            query = query.filter(JournalEntry.entry_date <= end_date)
+    return query.order_by(JournalEntry.entry_date.asc(), JournalEntry.id.asc(), JournalLine.id.asc()).all()
+
+
+def _group_lines(rows: list[tuple[JournalEntry, JournalLine]], chart_map: dict[str, ChartAccount]) -> list[dict]:
+    grouped: dict[str, dict] = {}
+    for _entry, line in rows:
+        account = chart_map.get(line.account_code)
+        key = line.account_code or 'unmapped'
+        item = grouped.setdefault(
+            key,
+            {
+                'account_code': line.account_code,
+                'account_name': (account.name if account else line.account_name) or 'Unmapped',
+                'account_type': account.account_type if account else None,
+                'family': _account_family(line.account_code, account.account_type if account else None),
+                'debit': 0.0,
+                'credit': 0.0,
+            },
+        )
+        item['debit'] += float(line.debit or 0)
+        item['credit'] += float(line.credit or 0)
+
+    result = []
+    for item in grouped.values():
+        family = item['family']
+        if family in {'assets', 'expenses'}:
+            balance = float(item['debit']) - float(item['credit'])
+        else:
+            balance = float(item['credit']) - float(item['debit'])
+        result.append({
+            **item,
+            'debit': _round_money(item['debit']),
+            'credit': _round_money(item['credit']),
+            'balance': _round_money(balance),
+        })
+    return sorted(result, key=lambda row: (row.get('account_code') or ''))
+
+
+def _sum_family(items: list[dict], family: str) -> float:
+    return _round_money(sum(float(row.get('balance') or 0) for row in items if row.get('family') == family))
+
+
+def _build_profit_and_loss(period_items: list[dict]) -> dict:
+    revenue = [row for row in period_items if row.get('family') == 'revenue' and abs(float(row.get('balance') or 0)) > 0.0001]
+    expenses = [row for row in period_items if row.get('family') == 'expenses' and abs(float(row.get('balance') or 0)) > 0.0001]
+    revenue_total = _round_money(sum(float(row['balance']) for row in revenue))
+    expense_total = _round_money(sum(float(row['balance']) for row in expenses))
+    return {
+        'revenue': revenue,
+        'expenses': expenses,
+        'totals': {
+            'revenue': revenue_total,
+            'expenses': expense_total,
+            'gross_profit': revenue_total,
+            'net_income': _round_money(revenue_total - expense_total),
+        },
+    }
+
+
+def _build_balance_sheet(as_of_items: list[dict]) -> dict:
+    assets = [row for row in as_of_items if row.get('family') == 'assets' and abs(float(row.get('balance') or 0)) > 0.0001]
+    liabilities = [row for row in as_of_items if row.get('family') == 'liabilities' and abs(float(row.get('balance') or 0)) > 0.0001]
+    equity = [row for row in as_of_items if row.get('family') == 'equity' and abs(float(row.get('balance') or 0)) > 0.0001]
+    current_earnings = _round_money(_sum_family(as_of_items, 'revenue') - _sum_family(as_of_items, 'expenses'))
+    if abs(current_earnings) > 0.0001:
+        equity.append({
+            'account_code': '3999',
+            'account_name': 'Current Earnings',
+            'account_type': 'equity',
+            'family': 'equity',
+            'debit': 0,
+            'credit': 0,
+            'balance': current_earnings,
+        })
+
+    total_assets = _round_money(sum(float(row['balance']) for row in assets))
+    total_liabilities = _round_money(sum(float(row['balance']) for row in liabilities))
+    total_equity = _round_money(sum(float(row['balance']) for row in equity))
+    return {
+        'assets': assets,
+        'liabilities': liabilities,
+        'equity': equity,
+        'totals': {
+            'assets': total_assets,
+            'liabilities': total_liabilities,
+            'equity': total_equity,
+            'liabilities_and_equity': _round_money(total_liabilities + total_equity),
+            'balance_check': _round_money(total_assets - total_liabilities - total_equity),
+        },
+    }
+
+
+def _build_trial_balance(as_of_items: list[dict]) -> dict:
+    debit_total = _round_money(sum(float(row.get('debit') or 0) for row in as_of_items))
+    credit_total = _round_money(sum(float(row.get('credit') or 0) for row in as_of_items))
+    return {
+        'lines': as_of_items,
+        'totals': {
+            'debit': debit_total,
+            'credit': credit_total,
+            'variance': _round_money(debit_total - credit_total),
+            'is_balanced': abs(debit_total - credit_total) <= 0.01,
+        },
+    }
+
+
+def _build_cash_flow_statement(db: Session, start_date: str | None, end_date: str | None) -> dict:
+    tx_query = db.query(MoneyTransaction).filter(
+        MoneyTransaction.status == 'posted',
+        MoneyTransaction.is_reversed == False,
+    )
+    if start_date:
+        tx_query = tx_query.filter(MoneyTransaction.transaction_date >= start_date)
+    if end_date:
+        tx_query = tx_query.filter(MoneyTransaction.transaction_date <= end_date)
+    transactions = tx_query.order_by(MoneyTransaction.transaction_date.asc(), MoneyTransaction.id.asc()).all()
+
+    grouped: dict[str, dict] = {}
+    for tx in transactions:
+        activity = (tx.module or 'finance').strip() or 'finance'
+        category = (tx.category or 'Uncategorized').strip() or 'Uncategorized'
+        key = f'{activity}::{category}'
+        row = grouped.setdefault(key, {'activity': activity, 'category': category, 'cash_in': 0.0, 'cash_out': 0.0, 'net': 0.0})
+        amount = float(tx.amount or 0)
+        if _norm(tx.direction) == 'in':
+            row['cash_in'] += amount
+        else:
+            row['cash_out'] += amount
+        row['net'] = row['cash_in'] - row['cash_out']
+
+    transfer_query = db.query(AccountTransfer).filter(AccountTransfer.status == 'posted', AccountTransfer.is_reversed == False)
+    if start_date:
+        transfer_query = transfer_query.filter(AccountTransfer.transfer_date >= start_date)
+    if end_date:
+        transfer_query = transfer_query.filter(AccountTransfer.transfer_date <= end_date)
+    transfers = transfer_query.all()
+
+    lines = [
+        {
+            **row,
+            'cash_in': _round_money(row['cash_in']),
+            'cash_out': _round_money(row['cash_out']),
+            'net': _round_money(row['net']),
+        }
+        for row in sorted(grouped.values(), key=lambda item: (item['activity'], item['category']))
+    ]
+    cash_in = _round_money(sum(float(row['cash_in']) for row in lines))
+    cash_out = _round_money(sum(float(row['cash_out']) for row in lines))
+    return {
+        'method': 'direct',
+        'operating_activities': lines,
+        'transfers': {
+            'count': len(transfers),
+            'gross_transfer_amount': _round_money(sum(float(row.amount or 0) for row in transfers)),
+            'net_cash_effect': 0,
+        },
+        'totals': {
+            'cash_in': cash_in,
+            'cash_out': cash_out,
+            'net_cash_flow': _round_money(cash_in - cash_out),
+        },
+    }
+
+
+def _build_operational_supplement(db: Session) -> dict:
+    accounts = db.query(FinancialAccount).order_by(FinancialAccount.account_type.asc(), FinancialAccount.name.asc()).all()
+    receivables = db.query(Receivable).all()
+    payables = db.query(Payable).all()
+    inventory_rows = db.query(InventoryItem).all()
+    asset_rows = db.query(Asset).all()
+    depreciation_total = float(db.query(func.coalesce(func.sum(AssetDepreciationLog.amount), 0)).scalar() or 0)
+    asset_cost = sum(float(row.acquisition_cost or 0) for row in asset_rows)
+
+    return {
+        'cash_position': {
+            'total': _round_money(sum(float(row.current_balance or 0) for row in accounts)),
+            'accounts': [
+                {
+                    'id': row.id,
+                    'name': row.name,
+                    'code': row.code,
+                    'account_type': row.account_type,
+                    'current_balance': float(row.current_balance or 0),
+                }
+                for row in accounts
+            ],
+        },
+        'receivables': {
+            'gross_amount': _round_money(sum(float(row.gross_amount or 0) for row in receivables)),
+            'amount_collected': _round_money(sum(float(row.amount_collected or 0) for row in receivables)),
+            'balance_due': _round_money(sum(float(row.balance_due or 0) for row in receivables)),
+            'open_count': len([row for row in receivables if _norm(row.status) in {'open', 'partial'}]),
+        },
+        'payables': {
+            'gross_amount': _round_money(sum(float(row.gross_amount or 0) for row in payables)),
+            'amount_paid': _round_money(sum(float(row.amount_paid or 0) for row in payables)),
+            'balance_due': _round_money(sum(float(row.balance_due or 0) for row in payables)),
+            'open_count': len([row for row in payables if _norm(row.status) in {'open', 'partial'}]),
+        },
+        'inventory': {
+            'valuation': _round_money(sum(float(row.quantity_on_hand or 0) * float(row.average_cost or 0) for row in inventory_rows)),
+            'item_count': len(inventory_rows),
+        },
+        'assets': {
+            'asset_count': len(asset_rows),
+            'acquisition_cost': _round_money(asset_cost),
+            'accumulated_depreciation': _round_money(depreciation_total),
+            'net_book_value': _round_money(asset_cost - depreciation_total),
+        },
+    }
+
+
+def _build_financial_statements(db: Session, start_date: str | None = None, end_date: str | None = None, as_of_date: str | None = None):
+    as_of = as_of_date or end_date or _today()
+    chart_map = _chart_account_map(db)
+    period_rows = _posted_journal_rows(db, start_date=start_date, end_date=end_date)
+    as_of_rows = _posted_journal_rows(db, as_of_date=as_of)
+    period_items = _group_lines(period_rows, chart_map)
+    as_of_items = _group_lines(as_of_rows, chart_map)
+    unposted_count = int(db.query(JournalEntry).filter(JournalEntry.status.in_(['draft', 'cancelled', 'voided', 'reversed'])).count() or 0)
+
+    return {
+        'period': {
+            'start_date': start_date,
+            'end_date': end_date,
+            'as_of_date': as_of,
+        },
+        'profit_and_loss': _build_profit_and_loss(period_items),
+        'balance_sheet': _build_balance_sheet(as_of_items),
+        'cash_flow': _build_cash_flow_statement(db, start_date, end_date),
+        'trial_balance': _build_trial_balance(as_of_items),
+        'operational_supplement': _build_operational_supplement(db),
+        'ledger_coverage': {
+            'posted_journal_entries_in_period': len({entry.id for entry, _line in period_rows}),
+            'posted_journal_lines_in_period': len(period_rows),
+            'posted_journal_entries_as_of': len({entry.id for entry, _line in as_of_rows}),
+            'posted_journal_lines_as_of': len(as_of_rows),
+            'excluded_unposted_or_reversed_entries': unposted_count,
+        },
+        'notes': [
+            'Profit & Loss, Balance Sheet, and Trial Balance are generated from non-draft journal entries.',
+            'Cash Flow uses posted money-in and money-out transactions, with transfers shown separately at zero net cash effect.',
+            'Operational supplement shows live subledger values for cash accounts, receivables, payables, inventory, and assets where legacy rows may not yet be fully journalized.',
+        ],
+    }
 
 
 def _sum_settlements_by_record(db: Session, record_ids: list[int]) -> dict[int, float]:
@@ -149,6 +460,57 @@ def _build_aging_report(db: Session, as_of_date: str | None = None):
             **summarize(payables_sorted),
             'items': payables_sorted,
         },
+    }
+
+
+def _build_close_readiness(exceptions: dict) -> dict:
+    rules = [
+        ('draft_records', 'Draft or pending records', 'critical', 'Approve, cancel, or correct records before closing the period.'),
+        ('unreconciled_cashflow_accounts', 'Unreconciled cash/bank accounts', 'critical', 'Finish daily cash and bank reconciliation before closing.'),
+        ('unposted_payroll_periods', 'Unposted payroll periods', 'warning', 'Post payroll or confirm it belongs outside this close period.'),
+        ('ar_over_30_days', 'Receivables over 30 days', 'warning', 'Review collection notes, settlement status, or write-off/dispute handling.'),
+        ('ap_over_30_days', 'Payables over 30 days', 'warning', 'Review supplier payment timing and hold reasons.'),
+        ('low_stock_items', 'Low stock items', 'info', 'Review purchasing needs. This does not block financial close.'),
+    ]
+    penalties = {'critical': 24, 'warning': 10, 'info': 3}
+    checks = []
+    score = 100
+    critical_count = 0
+    warning_count = 0
+    for key, label, severity, action in rules:
+        value = int(exceptions.get(key) or 0)
+        passed = value == 0
+        if not passed:
+            score -= min(40, penalties[severity] + max(0, value - 1))
+            if severity == 'critical':
+                critical_count += 1
+            elif severity == 'warning':
+                warning_count += 1
+        checks.append({
+            'key': key,
+            'label': label,
+            'value': value,
+            'severity': severity,
+            'passed': passed,
+            'action': 'OK' if passed else action,
+        })
+    if critical_count:
+        status = 'blocked'
+        summary = 'Do not close yet. Critical reconciliation or approval work remains.'
+    elif warning_count:
+        status = 'review'
+        summary = 'Close is possible after manager review of the warning items.'
+    else:
+        status = 'ready'
+        summary = 'No close-blocking exceptions found for the selected period.'
+    return {
+        'status': status,
+        'score': max(0, min(100, int(round(score)))),
+        'can_close': critical_count == 0,
+        'critical_count': critical_count,
+        'warning_count': warning_count,
+        'summary': summary,
+        'checks': checks,
     }
 
 
@@ -421,6 +783,15 @@ def _build_management_report(db: Session, start_date: str | None = None, end_dat
         .all()
     )
 
+    exceptions = {
+        'draft_records': draft_records_count,
+        'unposted_payroll_periods': len(payroll_periods) - payroll_posted_count,
+        'unreconciled_cashflow_accounts': int(unreconciled_accounts),
+        'low_stock_items': len(low_stock),
+        'ar_over_30_days': len([x for x in aging['receivables']['items'] if int(x['age_days']) > 30]),
+        'ap_over_30_days': len([x for x in aging['payables']['items'] if int(x['age_days']) > 30]),
+    }
+
     return {
         'period': {
             'start_date': start_date,
@@ -557,14 +928,8 @@ def _build_management_report(db: Session, start_date: str | None = None, end_dat
                 for row in bir_lock_rows
             ],
         },
-        'exceptions': {
-            'draft_records': draft_records_count,
-            'unposted_payroll_periods': len(payroll_periods) - payroll_posted_count,
-            'unreconciled_cashflow_accounts': int(unreconciled_accounts),
-            'low_stock_items': len(low_stock),
-            'ar_over_30_days': len([x for x in aging['receivables']['items'] if int(x['age_days']) > 30]),
-            'ap_over_30_days': len([x for x in aging['payables']['items'] if int(x['age_days']) > 30]),
-        },
+        'exceptions': exceptions,
+        'close_readiness': _build_close_readiness(exceptions),
         'settlements_recent': [
             {
                 'id': row.id,
@@ -609,6 +974,17 @@ def management_report(
     user=Depends(require_permissions('reports.view')),
 ):
     return _build_management_report(db, start_date=start_date, end_date=end_date)
+
+
+@router.get('/financial-statements')
+def financial_statements(
+    start_date: str | None = None,
+    end_date: str | None = None,
+    as_of_date: str | None = None,
+    db: Session = Depends(get_db),
+    user=Depends(require_permissions('reports.view')),
+):
+    return _build_financial_statements(db, start_date=start_date, end_date=end_date, as_of_date=as_of_date)
 
 
 @router.get('/management.csv')

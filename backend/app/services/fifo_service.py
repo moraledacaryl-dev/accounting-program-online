@@ -27,6 +27,7 @@ def create_inbound_movement(
     notes: str | None,
     movement_date: str | None,
     supplier: str | None = None,
+    receiving_record_id: int | None = None,
     commit: bool = True,
 ):
     total_item_cost = float(total_item_cost) if total_item_cost is not None else qty * unit_cost
@@ -43,6 +44,7 @@ def create_inbound_movement(
         reference_no=reference_no,
         notes=notes,
         movement_date=movement_date,
+        receiving_record_id=receiving_record_id,
     )
     db.add(mv)
     db.flush()

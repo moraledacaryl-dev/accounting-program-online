@@ -215,6 +215,50 @@ Done when:
 
 - Open issues are visible and ready for manager follow-up.
 
+## Repair Old Booking Charge Types
+
+Where to go for all old bookings: `Beds24 Integration > All Old Booking Folio Classification`
+
+Where to go for one booking: `Bookings > open booking > Review Existing Folio Classifications`
+
+Use this when old imported folio rows look like the wrong type, such as a room charge, breakfast, minibar, room service, deposit, payment, refund, or adjustment.
+
+Steps:
+
+1. Run Preview first.
+2. Read scanned, eligible, would update, and balance adjustment.
+3. Review sample changed lines.
+4. Open a specific booking when the change looks unusual.
+5. Apply only after manager review.
+6. Reopen affected folios and confirm the balance.
+
+Done when:
+
+- Old rows are classified correctly.
+- Amounts were not duplicated.
+- The folio balance matches the real guest situation.
+
+## POS Limited Connection Process
+
+Where to go: `Dedicated POS`
+
+Use this when the browser, Wi-Fi, or POS server connection is unstable.
+
+Steps:
+
+1. Check the POS sync banner and connection badge.
+2. Continue normal selling only when the POS server is reachable.
+3. If the server is unreachable, save only an emergency offline draft for order-taking continuity.
+4. Do not mark payments, refunds, room charges, or session closes as completed while offline.
+5. Restore the draft after connection returns.
+6. Save or settle the order normally.
+
+Done when:
+
+- Order details were preserved.
+- No payment or folio action was falsely recorded.
+- Recovery encoding happens once.
+
 ## Booking Sync
 
 Where to go: `Beds24 Integration`

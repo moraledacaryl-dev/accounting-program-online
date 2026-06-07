@@ -210,18 +210,19 @@ export default function RoomFoliosPage() {
             <p className="muted small">{rows.length} record(s) loaded.</p>
           </div>
           <table className="table">
-          <thead><tr><th>Folio</th><th>Booking</th><th>Guest</th><th>Status</th><th>Charges</th><th>Payments</th><th>Balance</th><th></th></tr></thead>
-          <tbody>
-            {rows.map((row) => (
-              <tr key={row.id}>
-                <td>{row.folio_no}</td>
-                <td>{row.booking_ref || `BOOK-${row.booking_id}`}</td>
-                <td>{row.guest_name || '-'}</td>
-                <td>{row.status}</td>
-                <td>{php(row.charges || 0)}</td>
-                <td>{php(row.payments || 0)}</td>
-                <td>{php(row.balance || 0)}</td>
-                <td className="row wrap">
+	          <thead><tr><th>Folio</th><th>Booking</th><th>Guest</th><th>Status</th><th>Charges</th><th>Deposits</th><th>Other Payments</th><th>Balance</th><th></th></tr></thead>
+	          <tbody>
+	            {rows.map((row) => (
+	              <tr key={row.id}>
+	                <td>{row.folio_no}</td>
+	                <td>{row.booking_ref || `BOOK-${row.booking_id}`}</td>
+	                <td>{row.guest_name || '-'}</td>
+	                <td>{row.status}</td>
+	                <td>{php(row.charges || 0)}</td>
+	                <td>{php(row.deposits || 0)}</td>
+	                <td>{php(Number(row.payments || 0) - Number(row.deposits || 0))}</td>
+	                <td>{php(row.balance || 0)}</td>
+	                <td className="row wrap">
                   <Link className="button-link secondary-link" href={`/room-folios/${row.id}`}>Open</Link>
                   <button type="button" className="secondary" onClick={() => setStatus(row, 'reviewed')}>Review</button>
                   <button type="button" className="secondary" onClick={() => setStatus(row, 'closed')}>Close</button>
@@ -229,7 +230,7 @@ export default function RoomFoliosPage() {
                 </td>
               </tr>
             ))}
-            {!rows.length && <tr><td colSpan="8" className="muted">No folios found.</td></tr>}
+	            {!rows.length && <tr><td colSpan="9" className="muted">No folios found.</td></tr>}
           </tbody>
         </table>
       </section>

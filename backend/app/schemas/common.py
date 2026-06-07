@@ -476,9 +476,14 @@ class SaleOrderCreate(BaseModel):
     payment_method: str | None = 'cash'
     channel: str | None = None
     counterparty: str | None = None
+    booking_id: int | None = None
+    folio_id: int | None = None
     notes: str | None = None
     strict_inventory: bool = True
     auto_post_accounting: bool = False
+    external_source: str | None = None
+    external_id: str | None = None
+    manual_fallback_confirmed: bool = False
     lines: list[SaleOrderLineCreate] = Field(default_factory=list)
 
 

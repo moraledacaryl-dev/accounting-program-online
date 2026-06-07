@@ -1,19 +1,21 @@
 'use client';
 import { useState } from 'react';
-import { login, setToken } from '../../lib/api';
+import { clearToken, login } from '../../lib/api';
 
 export default function LoginPage() {
-  const [username, setUsername] = useState('admin');
-  const [password, setPassword] = useState('admin123');
+  const [username, setUsername] = useState('');
+  const [password, setPassword] = useState('');
   const [error, setError] = useState('');
 
   async function submit(e) {
     e.preventDefault();
     setError('');
     try {
-      const data = await login({ username, password });
-      setToken(data.access_token);
-      window.location.href = '/';
+      await login({ username, password });
+      clearToken();
+      const searchParams = new URLSearchParams(window.location.search);
+      const next = searchParams.get('next') || '/';
+      window.location.href = next.startsWith('/') && !next.startsWith('//') ? next : '/';
     } catch (e) {
       setError(e.message);
     }
@@ -22,7 +24,7 @@ export default function LoginPage() {
   return (
     <section className="section" style={{maxWidth: 520}}>
       <h1>Login</h1>
-      <p className="muted">Use bootstrap on the home page first if this is your first run.</p>
+      <p className="muted">Sign in with your assigned Accounting account.</p>
       <form onSubmit={submit}>
         <div className="form-grid">
           <label>Username<input required autoComplete="username" value={username} onChange={e=>setUsername(e.target.value)} /></label>

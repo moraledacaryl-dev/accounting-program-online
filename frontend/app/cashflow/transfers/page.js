@@ -3,6 +3,7 @@
 import { useEffect, useState } from 'react';
 import CashflowTabs from '../../../components/cashflow/CashflowTabs';
 import TransferForm from '../../../components/cashflow/TransferForm';
+import ConfirmActionModal from '../../../components/ConfirmActionModal';
 import {
   approveTransfer,
   cancelTransfer,
@@ -42,6 +43,7 @@ export default function TransfersPage() {
   const [editingId, setEditingId] = useState(null);
   const [error, setError] = useState('');
   const [notice, setNotice] = useState('');
+  const [pendingAction, setPendingAction] = useState(null);
 
   async function load() {
     const [accountRows, transferRows] = await Promise.all([
@@ -98,15 +100,18 @@ export default function TransfersPage() {
     });
   }
 
-  async function runAction(action, successMessage) {
+  async function confirmPendingAction(reason) {
+    const action = pendingAction;
+    if (!action) return;
     setError('');
     setNotice('');
     try {
-      await action();
-      setNotice(successMessage);
+      await action.work(reason);
+      setNotice(action.successMessage);
       await load();
     } catch (err) {
       setError(err.message || 'Action failed.');
+      throw err;
     }
   }
 
@@ -157,10 +162,10 @@ export default function TransfersPage() {
                       <button type="button" className="secondary" onClick={() => startEdit(row)}>Edit</button>
                       <details className="row-actions-more">
                         <summary>More</summary>
-                        <button type="button" className="secondary" onClick={() => runAction(() => approveTransfer(row.id, {}), `Transfer #${row.id} approved.`)}>Approve</button>
-                        <button type="button" className="secondary" onClick={() => runAction(() => cancelTransfer(row.id, { reason: 'Cancelled from transfer screen' }), `Transfer #${row.id} cancelled.`)}>Cancel</button>
-                        <button type="button" className="secondary" onClick={() => runAction(() => reverseTransfer(row.id, { reason: 'Reversed from transfer screen' }), `Transfer #${row.id} reversed.`)}>Reverse</button>
-                        <button type="button" className="secondary" onClick={() => runAction(() => deleteTransfer(row.id), `Transfer #${row.id} deleted.`)}>Delete</button>
+                        <button type="button" className="secondary" onClick={() => setPendingAction({ title: `Approve transfer #${row.id}?`, description: 'Confirm the source, destination, and amount before changing both balances.', confirmLabel: 'Approve transfer', tone: 'normal', work: () => approveTransfer(row.id, {}), successMessage: `Transfer #${row.id} approved.` })}>Approve</button>
+                        <button type="button" className="danger" onClick={() => setPendingAction({ title: `Cancel transfer #${row.id}?`, description: 'Record why the transfer should be cancelled.', confirmLabel: 'Cancel transfer', reasonRequired: true, work: (reason) => cancelTransfer(row.id, { reason }), successMessage: `Transfer #${row.id} cancelled.` })}>Cancel</button>
+                        <button type="button" className="danger" onClick={() => setPendingAction({ title: `Reverse transfer #${row.id}?`, description: 'This adjusts both balances and remains visible in the audit trail.', confirmLabel: 'Reverse transfer', reasonRequired: true, work: (reason) => reverseTransfer(row.id, { reason }), successMessage: `Transfer #${row.id} reversed.` })}>Reverse</button>
+                        <button type="button" className="danger" onClick={() => setPendingAction({ title: `Delete draft transfer #${row.id}?`, description: 'Only unposted drafts can be deleted. Posted transfers must be reversed.', confirmLabel: 'Delete draft', work: () => deleteTransfer(row.id), successMessage: `Transfer #${row.id} deleted.` })}>Delete</button>
                       </details>
                     </>
                   )}
@@ -171,6 +176,16 @@ export default function TransfersPage() {
           </tbody>
         </table>
       </section>
+      <ConfirmActionModal
+        open={!!pendingAction}
+        title={pendingAction?.title}
+        description={pendingAction?.description}
+        confirmLabel={pendingAction?.confirmLabel}
+        tone={pendingAction?.tone || 'danger'}
+        reasonRequired={!!pendingAction?.reasonRequired}
+        onClose={() => setPendingAction(null)}
+        onConfirm={confirmPendingAction}
+      />
     </div>
   );
 }

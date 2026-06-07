@@ -19,6 +19,8 @@ DEFAULT_PERMISSION_DEFS = [
     ('guests.edit', 'Edit Guests', 'Rooms & Guests'),
     ('room_setup.view', 'View Room Setup', 'Rooms & Guests'),
     ('room_setup.manage', 'Manage Room Setup', 'Rooms & Guests'),
+    ('events.view', 'View Events', 'Events'),
+    ('events.manage', 'Manage Events', 'Events'),
     ('restaurant.view', 'View Restaurant', 'Restaurant & F&B'),
     ('menu.view', 'View Menu', 'Restaurant & F&B'),
     ('menu.manage', 'Manage Menu', 'Restaurant & F&B'),
@@ -81,6 +83,7 @@ DEFAULT_ROLES = [
     ('purchasing_admin', 'Purchasing Admin', 'Suppliers and procurement workflows.'),
     ('payroll_admin', 'Payroll Admin', 'People and payroll period workflows.'),
     ('accounting_admin', 'Accounting Admin', 'Cashflow, journals, reports, and BIR.'),
+    ('pos_integration', 'POS Integration', 'Limited service access for POS to Accounting posting and lookup.'),
 ]
 
 
@@ -96,6 +99,7 @@ ROLE_PERMISSION_PRESETS = {
         'folios.view', 'folios.manage',
         'guests.view', 'guests.create', 'guests.edit',
         'room_setup.view',
+        'events.view', 'events.manage',
         'cashflow.view', 'cashflow.money_in', 'cashflow.reconcile',
     },
     'restaurant_admin': {
@@ -124,10 +128,17 @@ ROLE_PERMISSION_PRESETS = {
         'dashboard.view',
         'cashflow.view', 'cashflow.money_in', 'cashflow.money_out', 'cashflow.transfers', 'cashflow.reconcile',
         'journals.view', 'journals.post', 'reports.view', 'assets.view', 'assets.manage',
+        'events.view', 'events.manage',
         'bir.view', 'bir.manage',
         'chart_of_accounts.manage', 'account_mapping.manage',
         'master_data.manage', 'taxonomy.manage',
         'integrations.view', 'integrations.manage', 'integrations.sync', 'integrations.logs.view',
+    },
+    'pos_integration': {
+        'restaurant.view', 'menu.view',
+        'bookings.view', 'guests.view', 'folios.view', 'folios.manage',
+        'cashflow.view', 'cashflow.money_in', 'cashflow.money_out', 'cashflow.transfers', 'cashflow.reconcile',
+        'inventory.view',
     },
 }
 

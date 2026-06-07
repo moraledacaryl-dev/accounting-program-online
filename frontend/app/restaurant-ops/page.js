@@ -1,5 +1,6 @@
 'use client';
 
+import Link from 'next/link';
 import { useEffect, useMemo, useState } from 'react';
 import {
   createMenuItem,
@@ -13,6 +14,7 @@ import {
   deleteMenuSku,
   deletePrepComponent,
   fetchInventoryItems,
+  fetchBookings,
   fetchMenuItems,
   fetchMenuPromotions,
   fetchMenuSkus,
@@ -27,10 +29,13 @@ import {
   updatePrepComponent,
   voidSaleOrder,
 } from '../../lib/api';
+import VoidSaleModal from '../../components/VoidSaleModal';
+import { useConfirmAction } from '../../components/ConfirmActionProvider';
+import { stayIncludesDay } from '../../lib/stays';
 
 const MODULE_OPTIONS = ['restaurant', 'breakfast', 'cafe', 'bar'];
 const PROMO_TYPES = ['percent_off', 'fixed_discount', 'set_price'];
-const PAYMENT_METHODS = ['cash', 'gcash', 'card', 'bank_transfer', 'on_account'];
+const PAYMENT_METHODS = ['cash', 'gcash', 'card', 'bank_transfer', 'room_charge', 'on_account'];
 const EXPENSE_MODULES = ['procurement', 'inventory', 'finance'];
 const BUILDER_TABS = ['menu', 'components', 'skus', 'promos'];
 
@@ -59,6 +64,7 @@ function shortDate(value) {
 }
 
 export default function RestaurantOpsPage() {
+  const confirmAction = useConfirmAction();
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState('');
   const [notice, setNotice] = useState('');
@@ -70,6 +76,8 @@ export default function RestaurantOpsPage() {
   const [promotions, setPromotions] = useState([]);
   const [sales, setSales] = useState([]);
   const [movements, setMovements] = useState([]);
+  const [bookings, setBookings] = useState([]);
+  const [pendingVoidSale, setPendingVoidSale] = useState(null);
 
   const [builderTab, setBuilderTab] = useState('menu');
 
@@ -151,9 +159,11 @@ export default function RestaurantOpsPage() {
     payment_method: 'cash',
     channel: '',
     counterparty: '',
+    booking_id: '',
     notes: '',
     strict_inventory: true,
     auto_post_accounting: false,
+    manual_fallback_confirmed: false,
   });
   const [saleLineDraft, setSaleLineDraft] = useState({
     menu_item_id: '',
@@ -186,12 +196,25 @@ export default function RestaurantOpsPage() {
 
   const menuById = useMemo(() => Object.fromEntries(menuItems.map((row) => [row.id, row])), [menuItems]);
   const inventoryById = useMemo(() => Object.fromEntries(inventoryItems.map((row) => [row.id, row])), [inventoryItems]);
+  const componentById = useMemo(() => Object.fromEntries(components.map((row) => [row.id, row])), [components]);
 
   const selectedMenuSkus = useMemo(() => {
     const menuItemId = Number(saleLineDraft.menu_item_id || 0);
     if (!menuItemId) return [];
     return skus.filter((row) => Number(row.menu_item_id) === menuItemId);
   }, [saleLineDraft.menu_item_id, skus]);
+
+  const roomChargeBookings = useMemo(() => {
+    const today = todayISO();
+    return bookings
+      .filter((row) => {
+        const status = String(row.status || '').toLowerCase();
+        if (['cancelled', 'no_show', 'noshow', 'checked_out'].includes(status)) return false;
+        if (status === 'checked_in') return true;
+        return stayIncludesDay(row, today);
+      })
+      .sort((a, b) => String(a.room_name || '').localeCompare(String(b.room_name || '')));
+  }, [bookings]);
 
   const skuFilteredForPromo = useMemo(() => {
     if (!promoForm.menu_item_id) return skus;
@@ -231,6 +254,7 @@ export default function RestaurantOpsPage() {
         promoRows,
         saleRows,
         movementRows,
+        bookingRows,
       ] = await Promise.all([
         fetchMenuItems(),
         fetchInventoryItems(),
@@ -239,6 +263,7 @@ export default function RestaurantOpsPage() {
         fetchMenuPromotions(),
         fetchSaleOrders(120),
         fetchStockMovements(),
+        fetchBookings(),
       ]);
       setMenuItems(Array.isArray(menuRows) ? menuRows : []);
       setInventoryItems(Array.isArray(inventoryRows) ? inventoryRows : []);
@@ -247,6 +272,7 @@ export default function RestaurantOpsPage() {
       setPromotions(Array.isArray(promoRows) ? promoRows : []);
       setSales(Array.isArray(saleRows) ? saleRows : []);
       setMovements(Array.isArray(movementRows) ? movementRows : []);
+      setBookings(Array.isArray(bookingRows) ? bookingRows : []);
     } catch (e) {
       setError(e.message || 'Failed to load restaurant operations data.');
     } finally {
@@ -360,7 +386,7 @@ export default function RestaurantOpsPage() {
   }
 
   async function removeMenuItem(id) {
-    if (!confirm('Delete this menu item?')) return;
+    if (!await confirmAction({ title: 'Delete this menu item?', description: 'Items already used by POS sales should be made unavailable instead of removed.' })) return;
     setError('');
     try {
       await deleteMenuItem(id);
@@ -388,7 +414,7 @@ export default function RestaurantOpsPage() {
       {
         inventory_item_id: inventoryItemId,
         quantity: num(componentItemDraft.quantity, 0),
-        unit: componentItemDraft.unit || '',
+        unit: inventoryById[inventoryItemId]?.unit || '',
         wastage_percent: num(componentItemDraft.wastage_percent, 0),
         sort_order: componentItemDraft.sort_order === '' ? prev.length : num(componentItemDraft.sort_order, prev.length),
         notes: componentItemDraft.notes || '',
@@ -416,7 +442,7 @@ export default function RestaurantOpsPage() {
         items: componentItems.map((row, index) => ({
           inventory_item_id: Number(row.inventory_item_id),
           quantity: num(row.quantity, 0),
-          unit: row.unit || '',
+          unit: inventoryById[Number(row.inventory_item_id)]?.unit || row.unit || '',
           wastage_percent: num(row.wastage_percent, 0),
           sort_order: num(row.sort_order, index),
           notes: row.notes || null,
@@ -433,7 +459,7 @@ export default function RestaurantOpsPage() {
   }
 
   async function removeComponent(id) {
-    if (!confirm('Delete this prep component?')) return;
+    if (!await confirmAction({ title: 'Delete this prep component?', description: 'Components already used by recipes should remain available for costing history.' })) return;
     setError('');
     try {
       await deletePrepComponent(id);
@@ -478,7 +504,9 @@ export default function RestaurantOpsPage() {
         inventory_item_id: lineType === 'component' ? null : Number(skuRecipeDraft.inventory_item_id),
         component_id: lineType === 'component' ? Number(skuRecipeDraft.component_id) : null,
         quantity: num(skuRecipeDraft.quantity, 0),
-        unit: skuRecipeDraft.unit || '',
+        unit: lineType === 'component'
+          ? (componentById[Number(skuRecipeDraft.component_id)]?.yield_unit || '')
+          : (inventoryById[Number(skuRecipeDraft.inventory_item_id)]?.unit || ''),
         wastage_percent: num(skuRecipeDraft.wastage_percent, 0),
         sort_order: skuRecipeDraft.sort_order === '' ? prev.length : num(skuRecipeDraft.sort_order, prev.length),
         notes: skuRecipeDraft.notes || '',
@@ -515,7 +543,9 @@ export default function RestaurantOpsPage() {
           inventory_item_id: row.line_type === 'component' ? null : Number(row.inventory_item_id),
           component_id: row.line_type === 'component' ? Number(row.component_id) : null,
           quantity: num(row.quantity, 0),
-          unit: row.unit || '',
+          unit: row.line_type === 'component'
+            ? (componentById[Number(row.component_id)]?.yield_unit || row.unit || '')
+            : (inventoryById[Number(row.inventory_item_id)]?.unit || row.unit || ''),
           wastage_percent: num(row.wastage_percent, 0),
           sort_order: num(row.sort_order, index),
           notes: row.notes || null,
@@ -539,7 +569,7 @@ export default function RestaurantOpsPage() {
   }
 
   async function removeSku(id) {
-    if (!confirm('Delete this SKU?')) return;
+    if (!await confirmAction({ title: 'Delete this SKU?', description: 'SKUs already used by POS sales should be made unavailable instead of removed.' })) return;
     setError('');
     try {
       await deleteMenuSku(id);
@@ -601,7 +631,7 @@ export default function RestaurantOpsPage() {
   }
 
   async function removePromotion(id) {
-    if (!confirm('Delete this promotion?')) return;
+    if (!await confirmAction({ title: 'Delete this promotion?', description: 'This removes the promotion from future sales. Existing sale history is preserved.' })) return;
     setError('');
     try {
       await deleteMenuPromotion(id);
@@ -660,6 +690,14 @@ export default function RestaurantOpsPage() {
       setError('Add at least one line before posting a sale.');
       return;
     }
+    if (saleForm.payment_method === 'room_charge' && !saleForm.booking_id) {
+      setError('Select the guest room before posting a room charge.');
+      return;
+    }
+    if (!saleForm.manual_fallback_confirmed) {
+      setError('Confirm that POS is unavailable before posting a manual fallback sale.');
+      return;
+    }
 
     try {
       const payload = {
@@ -668,9 +706,11 @@ export default function RestaurantOpsPage() {
         payment_method: saleForm.payment_method || null,
         channel: saleForm.channel || null,
         counterparty: saleForm.counterparty || null,
+        booking_id: saleForm.payment_method === 'room_charge' && saleForm.booking_id ? Number(saleForm.booking_id) : null,
         notes: saleForm.notes || null,
         strict_inventory: !!saleForm.strict_inventory,
         auto_post_accounting: !!saleForm.auto_post_accounting,
+        manual_fallback_confirmed: !!saleForm.manual_fallback_confirmed,
         lines: saleLines.map((line) => ({
           menu_item_id: Number(line.menu_item_id),
           sku_id: line.sku_id ? Number(line.sku_id) : null,
@@ -682,7 +722,7 @@ export default function RestaurantOpsPage() {
 
       const posted = await createSaleOrder(payload);
       setSaleLines([]);
-      setSaleForm((prev) => ({ ...prev, order_no: '', notes: '', counterparty: '' }));
+      setSaleForm((prev) => ({ ...prev, order_no: '', notes: '', counterparty: '', booking_id: '', manual_fallback_confirmed: false }));
       await loadAll({ silent: true });
       setSuccess(`Sale posted: ${posted.order_no}`);
     } catch (err) {
@@ -690,16 +730,11 @@ export default function RestaurantOpsPage() {
     }
   }
 
-  async function handleVoidSale(row) {
-    const reason = window.prompt(`Void sale ${row.order_no}\nEnter reason:`, 'Customer cancellation');
-    if (!reason || !reason.trim()) return;
-    const reverseInventory = window.confirm('Reverse inventory deductions for this sale?');
-    const autoPostAccounting = window.confirm('Create accounting reversal records now?');
-
+  async function handleVoidSale(row, { reason, reverseInventory, autoPostAccounting }) {
     setError('');
     try {
       await voidSaleOrder(row.id, {
-        reason: reason.trim(),
+        reason,
         void_date: todayISO(),
         reverse_inventory: !!reverseInventory,
         auto_post_accounting: !!autoPostAccounting,
@@ -708,6 +743,7 @@ export default function RestaurantOpsPage() {
       setSuccess(`Sale voided: ${row.order_no}`);
     } catch (err) {
       setError(err.message || 'Unable to void sale.');
+      throw err;
     }
   }
 
@@ -894,8 +930,8 @@ export default function RestaurantOpsPage() {
 
       <div className="grid">
         <section className="section">
-          <h2>Quick Sale</h2>
-          <p className="muted small">Post sale and deduct inventory FIFO. Optional accounting posting is available when needed.</p>
+          <h2>Manual Fallback Sale</h2>
+          <p className="muted small">Use only while Cloud POS is unavailable. Posting here deducts inventory FIFO and must not be re-entered in POS.</p>
 
           <form onSubmit={submitSale} className="stack">
             <div className="form-grid">
@@ -909,10 +945,32 @@ export default function RestaurantOpsPage() {
               </label>
               <label>
                 Payment Method
-                <select value={saleForm.payment_method} onChange={(e) => setSaleForm((prev) => ({ ...prev, payment_method: e.target.value }))}>
+                <select value={saleForm.payment_method} onChange={(e) => {
+                  const next = e.target.value;
+                  setSaleForm((prev) => ({
+                    ...prev,
+                    payment_method: next,
+                    channel: next === 'room_charge' ? 'Room service' : prev.channel,
+                    booking_id: next === 'room_charge' ? prev.booking_id : '',
+                    auto_post_accounting: next === 'room_charge' ? false : prev.auto_post_accounting,
+                  }));
+                }}>
                   {PAYMENT_METHODS.map((row) => <option key={row} value={row}>{row}</option>)}
                 </select>
               </label>
+              {saleForm.payment_method === 'room_charge' && (
+                <label>
+                  Room / Guest
+                  <select value={saleForm.booking_id} onChange={(e) => setSaleForm((prev) => ({ ...prev, booking_id: e.target.value }))}>
+                    <option value="">Select in-house room</option>
+                    {roomChargeBookings.map((row) => (
+                      <option key={row.id} value={row.id}>
+                        {(row.room_name || row.room_display_name || 'Room')} · {row.guest_name || 'Guest'} · {row.check_out || '-'}
+                      </option>
+                    ))}
+                  </select>
+                </label>
+              )}
               <label>
                 Channel
                 <input value={saleForm.channel} onChange={(e) => setSaleForm((prev) => ({ ...prev, channel: e.target.value }))} placeholder="Dine-in, Grab, etc." />
@@ -940,6 +998,10 @@ export default function RestaurantOpsPage() {
             <label>
               Notes
               <textarea value={saleForm.notes} onChange={(e) => setSaleForm((prev) => ({ ...prev, notes: e.target.value }))} />
+            </label>
+            <label className="row">
+              <input type="checkbox" checked={saleForm.manual_fallback_confirmed} onChange={(e) => setSaleForm((prev) => ({ ...prev, manual_fallback_confirmed: e.target.checked }))} />
+              I confirm Cloud POS is unavailable and this sale has not been entered there.
             </label>
 
             <div className="ops-line-builder">
@@ -1133,8 +1195,8 @@ export default function RestaurantOpsPage() {
       <section className="section">
         <div className="row wrap" style={{ justifyContent: 'space-between' }}>
           <div>
-            <h2>Catalog Builder</h2>
-            <p className="muted small">Manage menu, prep components, SKUs, and promotions in one place.</p>
+            <h2>Advanced Catalog Tools</h2>
+            <p className="muted small">Use <Link className="secondary-link" href="/menu-items">Menu & Recipes</Link> for routine item and base-recipe edits, or <Link className="secondary-link" href="/setup-imports">Excel Setup Import</Link> for bulk data. These advanced tools are for prep components, variants, and promotions.</p>
           </div>
           <div className="segmented">
             {BUILDER_TABS.map((tab) => (
@@ -1263,7 +1325,10 @@ export default function RestaurantOpsPage() {
                 <div className="form-grid">
                   <label>
                     Inventory Item
-                    <select value={componentItemDraft.inventory_item_id} onChange={(e) => setComponentItemDraft((prev) => ({ ...prev, inventory_item_id: e.target.value }))}>
+                    <select value={componentItemDraft.inventory_item_id} onChange={(e) => {
+                      const item = inventoryById[Number(e.target.value)];
+                      setComponentItemDraft((prev) => ({ ...prev, inventory_item_id: e.target.value, unit: item?.unit || '' }));
+                    }}>
                       <option value="">Select</option>
                       {inventoryItems.map((row) => <option key={row.id} value={row.id}>{row.name}</option>)}
                     </select>
@@ -1274,7 +1339,7 @@ export default function RestaurantOpsPage() {
                   </label>
                   <label>
                     Unit
-                    <input value={componentItemDraft.unit} onChange={(e) => setComponentItemDraft((prev) => ({ ...prev, unit: e.target.value }))} />
+                    <input value={componentItemDraft.unit} readOnly placeholder="Choose ingredient first" />
                   </label>
                   <label>
                     Wastage %
@@ -1416,7 +1481,7 @@ export default function RestaurantOpsPage() {
                 <div className="form-grid">
                   <label>
                     Line Type
-                    <select value={skuRecipeDraft.line_type} onChange={(e) => setSkuRecipeDraft((prev) => ({ ...prev, line_type: e.target.value }))}>
+                    <select value={skuRecipeDraft.line_type} onChange={(e) => setSkuRecipeDraft((prev) => ({ ...prev, line_type: e.target.value, inventory_item_id: '', component_id: '', unit: '' }))}>
                       <option value="inventory">inventory</option>
                       <option value="component">component</option>
                     </select>
@@ -1425,7 +1490,10 @@ export default function RestaurantOpsPage() {
                     Inventory Item
                     <select
                       value={skuRecipeDraft.inventory_item_id}
-                      onChange={(e) => setSkuRecipeDraft((prev) => ({ ...prev, inventory_item_id: e.target.value }))}
+                      onChange={(e) => {
+                        const item = inventoryById[Number(e.target.value)];
+                        setSkuRecipeDraft((prev) => ({ ...prev, inventory_item_id: e.target.value, unit: item?.unit || '' }));
+                      }}
                       disabled={skuRecipeDraft.line_type === 'component'}
                     >
                       <option value="">Select</option>
@@ -1436,7 +1504,10 @@ export default function RestaurantOpsPage() {
                     Component
                     <select
                       value={skuRecipeDraft.component_id}
-                      onChange={(e) => setSkuRecipeDraft((prev) => ({ ...prev, component_id: e.target.value }))}
+                      onChange={(e) => {
+                        const component = componentById[Number(e.target.value)];
+                        setSkuRecipeDraft((prev) => ({ ...prev, component_id: e.target.value, unit: component?.yield_unit || '' }));
+                      }}
                       disabled={skuRecipeDraft.line_type !== 'component'}
                     >
                       <option value="">Select</option>
@@ -1449,7 +1520,7 @@ export default function RestaurantOpsPage() {
                   </label>
                   <label>
                     Unit
-                    <input value={skuRecipeDraft.unit} onChange={(e) => setSkuRecipeDraft((prev) => ({ ...prev, unit: e.target.value }))} />
+                    <input value={skuRecipeDraft.unit} readOnly placeholder="Choose ingredient/component first" />
                   </label>
                   <label>
                     Waste %
@@ -1673,7 +1744,7 @@ export default function RestaurantOpsPage() {
                   <td>{currency(row.cogs_amount)}</td>
                   <td>
                     {String(row.status || '').toLowerCase() !== 'voided' ? (
-                      <button className="secondary" type="button" onClick={() => handleVoidSale(row)}>Void</button>
+                      <button className="danger" type="button" onClick={() => setPendingVoidSale(row)}>Void</button>
                     ) : (
                       <span className="small muted">Voided</span>
                     )}
@@ -1712,6 +1783,11 @@ export default function RestaurantOpsPage() {
           </table>
         </div>
       </section>
+      <VoidSaleModal
+        sale={pendingVoidSale}
+        onClose={() => setPendingVoidSale(null)}
+        onConfirm={(payload) => handleVoidSale(pendingVoidSale, payload)}
+      />
     </div>
   );
 }

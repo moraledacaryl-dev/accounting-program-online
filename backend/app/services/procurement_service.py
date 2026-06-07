@@ -13,6 +13,7 @@ from app.models.entities import (
     PurchaseRequestLine,
     ReceivingLine,
     ReceivingRecord,
+    StockMovement,
     Supplier,
 )
 from app.schemas.procurement import (
@@ -28,7 +29,7 @@ from app.schemas.procurement import (
     ReceivingUpdate,
 )
 from app.services.code_service import generate_code
-from app.services.fifo_service import create_inbound_movement
+from app.services.fifo_service import create_inbound_movement, create_outbound_movement
 
 PR_STATUSES = {'draft', 'submitted', 'approved', 'rejected', 'converted_to_po'}
 PO_STATUSES = {'draft', 'issued', 'partially_received', 'fully_received', 'cancelled'}
@@ -183,7 +184,8 @@ def _apply_pr_lines(db: Session, row: PurchaseRequest, lines: list[PurchaseReque
     for old in list(row.lines or []):
         db.delete(old)
     for idx, line in enumerate(lines or []):
-        if line.inventory_item_id and not db.get(InventoryItem, int(line.inventory_item_id)):
+        item = db.get(InventoryItem, int(line.inventory_item_id)) if line.inventory_item_id else None
+        if line.inventory_item_id and not item:
             raise ValueError(f'inventory_item_id {line.inventory_item_id} not found.')
         db.add(
             PurchaseRequestLine(
@@ -191,7 +193,7 @@ def _apply_pr_lines(db: Session, row: PurchaseRequest, lines: list[PurchaseReque
                 inventory_item_id=line.inventory_item_id,
                 description=_norm(line.description),
                 quantity=max(0.0, _to_float(line.quantity)),
-                unit=_norm(line.unit),
+                unit=(item.unit if item else _norm(line.unit)),
                 estimated_unit_cost=max(0.0, _to_float(line.estimated_unit_cost)),
                 notes=line.notes,
                 sort_order=int(line.sort_order if line.sort_order is not None else idx),
@@ -204,7 +206,8 @@ def _apply_po_lines(db: Session, row: PurchaseOrder, lines: list[PurchaseOrderLi
         db.delete(old)
     total_amount = 0.0
     for idx, line in enumerate(lines or []):
-        if line.inventory_item_id and not db.get(InventoryItem, int(line.inventory_item_id)):
+        item = db.get(InventoryItem, int(line.inventory_item_id)) if line.inventory_item_id else None
+        if line.inventory_item_id and not item:
             raise ValueError(f'inventory_item_id {line.inventory_item_id} not found.')
         quantity_ordered = max(0.0, _to_float(line.quantity_ordered))
         unit_cost = max(0.0, _to_float(line.unit_cost))
@@ -218,7 +221,7 @@ def _apply_po_lines(db: Session, row: PurchaseOrder, lines: list[PurchaseOrderLi
                 description=_norm(line.description),
                 quantity_ordered=quantity_ordered,
                 quantity_received=0,
-                unit=_norm(line.unit),
+                unit=(item.unit if item else _norm(line.unit)),
                 unit_cost=unit_cost,
                 line_total=line_total,
                 notes=line.notes,
@@ -234,7 +237,8 @@ def _apply_receiving_lines(db: Session, row: ReceivingRecord, lines: list[Receiv
         db.delete(old)
     total_amount = 0.0
     for idx, line in enumerate(lines or []):
-        if line.inventory_item_id and not db.get(InventoryItem, int(line.inventory_item_id)):
+        item = db.get(InventoryItem, int(line.inventory_item_id)) if line.inventory_item_id else None
+        if line.inventory_item_id and not item:
             raise ValueError(f'inventory_item_id {line.inventory_item_id} not found.')
         qty = max(0.0, _to_float(line.quantity_received))
         unit_cost = max(0.0, _to_float(line.unit_cost))
@@ -247,7 +251,7 @@ def _apply_receiving_lines(db: Session, row: ReceivingRecord, lines: list[Receiv
                 inventory_item_id=line.inventory_item_id,
                 description=_norm(line.description),
                 quantity_received=qty,
-                unit=_norm(line.unit),
+                unit=(item.unit if item else _norm(line.unit)),
                 unit_cost=unit_cost,
                 line_total=line_total,
                 notes=line.notes,
@@ -484,6 +488,8 @@ def delete_purchase_order(db: Session, po_id: int):
     row = db.get(PurchaseOrder, int(po_id))
     if not row:
         raise ValueError('Purchase order not found.')
+    if row.status != 'draft' or any(float(line.quantity_received or 0) > 0 for line in (row.lines or [])):
+        raise ValueError('Only draft purchase orders without receiving activity can be deleted.')
     db.delete(row)
     db.commit()
     return {'ok': True}
@@ -533,8 +539,6 @@ def list_receiving_records(db: Session, *, status: str | None = None, supplier_i
 
 
 def _post_receiving_to_stock(db: Session, receiving: ReceivingRecord):
-    if receiving.posted_by:
-        return
     lines = (
         db.query(ReceivingLine)
         .filter(ReceivingLine.receiving_record_id == int(receiving.id))
@@ -555,12 +559,16 @@ def _post_receiving_to_stock(db: Session, receiving: ReceivingRecord):
             item,
             qty,
             float(line.unit_cost or 0),
+            None,
+            0,
+            0,
             reason='receiving',
             module_slug='procurement',
             reference_no=receiving.receiving_no or receiving.reference_no,
             notes=receiving.notes,
             movement_date=receiving.receiving_date,
             supplier=receiving.supplier.name if receiving.supplier else None,
+            receiving_record_id=receiving.id,
             commit=False,
         )
         if line.purchase_order_line_id:
@@ -568,16 +576,81 @@ def _post_receiving_to_stock(db: Session, receiving: ReceivingRecord):
             if po_line:
                 po_line.quantity_received = round(float(po_line.quantity_received or 0) + qty, 4)
                 db.add(po_line)
-    if receiving.purchase_order_id:
-        po = db.get(PurchaseOrder, int(receiving.purchase_order_id))
-        if po:
-            ordered = sum(float(x.quantity_ordered or 0) for x in po.lines or [])
-            received = sum(float(x.quantity_received or 0) for x in po.lines or [])
-            if ordered > 0 and received >= ordered:
-                po.status = 'fully_received'
-            elif received > 0:
-                po.status = 'partially_received'
-            db.add(po)
+    _recalculate_purchase_order_receiving_status(db, receiving.purchase_order_id)
+
+
+def _recalculate_purchase_order_receiving_status(db: Session, purchase_order_id: int | None):
+    if not purchase_order_id:
+        return
+    po = db.get(PurchaseOrder, int(purchase_order_id))
+    if not po:
+        return
+    ordered = sum(float(line.quantity_ordered or 0) for line in po.lines or [])
+    received = sum(float(line.quantity_received or 0) for line in po.lines or [])
+    if ordered > 0 and received >= ordered:
+        po.status = 'fully_received'
+    elif received > 0:
+        po.status = 'partially_received'
+    else:
+        po.status = 'issued'
+    db.add(po)
+
+
+def _reverse_receiving_effects(db: Session, receiving: ReceivingRecord):
+    if receiving.status != 'posted':
+        raise ValueError('Only posted receiving records can be reversed.')
+
+    payable = db.query(Payable).filter(
+        Payable.source_type == 'receiving',
+        Payable.source_id == int(receiving.id),
+    ).first()
+    if payable and float(payable.amount_paid or 0) > 0.0001:
+        raise ValueError('Receiving cannot be reversed after its supplier bill has payments.')
+
+    if receiving.posted_by:
+        movements = db.query(StockMovement).filter(
+            StockMovement.receiving_record_id == int(receiving.id),
+            StockMovement.movement_type == 'in',
+        ).order_by(StockMovement.id.asc()).all()
+        if not movements:
+            movements = db.query(StockMovement).filter(
+                StockMovement.movement_type == 'in',
+                StockMovement.reason == 'receiving',
+                StockMovement.module_slug == 'procurement',
+                StockMovement.reference_no == (receiving.receiving_no or receiving.reference_no),
+            ).order_by(StockMovement.id.asc()).all()
+        for movement in movements:
+            item = db.get(InventoryItem, int(movement.item_id))
+            if not item:
+                raise ValueError(f'Inventory item {movement.item_id} for receiving reversal was not found.')
+            create_outbound_movement(
+                db,
+                item,
+                float(movement.quantity or 0),
+                reason='receiving_reversal',
+                module_slug='procurement',
+                reference_no=f'REV-{receiving.receiving_no}',
+                notes=f'Reversal of receiving {receiving.receiving_no}',
+                movement_date=_today(),
+                commit=False,
+            )
+
+        for line in receiving.lines or []:
+            if not line.purchase_order_line_id:
+                continue
+            po_line = db.get(PurchaseOrderLine, int(line.purchase_order_line_id))
+            if po_line:
+                po_line.quantity_received = round(max(float(po_line.quantity_received or 0) - float(line.quantity_received or 0), 0), 4)
+                db.add(po_line)
+        _recalculate_purchase_order_receiving_status(db, receiving.purchase_order_id)
+
+    if payable:
+        payable.gross_amount = 0
+        payable.balance_due = 0
+        payable.status = 'cancelled'
+        payable.closed_at = _today()
+        payable.notes = f'{payable.notes or ""}\nCancelled by reversal of receiving {receiving.receiving_no}'.strip()
+        db.add(payable)
 
 
 def _maybe_create_payable_from_receiving(db: Session, receiving: ReceivingRecord):
@@ -616,6 +689,8 @@ def create_receiving_record(db: Session, payload: ReceivingCreate, username: str
     status = (payload.status or 'draft').strip()
     if status not in RECEIVING_STATUSES:
         raise ValueError(f'Invalid status: {status}.')
+    if status == 'reversed':
+        raise ValueError('Create the receiving as draft or posted. Use the reversal action after posting.')
     if payload.supplier_id and not db.get(Supplier, int(payload.supplier_id)):
         raise ValueError('supplier_id not found.')
     if payload.purchase_order_id and not db.get(PurchaseOrder, int(payload.purchase_order_id)):
@@ -662,6 +737,8 @@ def update_receiving_record(db: Session, receiving_id: int, payload: ReceivingUp
     row = db.get(ReceivingRecord, int(receiving_id))
     if not row:
         raise ValueError('Receiving record not found.')
+    if row.status != 'draft':
+        raise ValueError('Posted or reversed receiving records are locked. Reverse a posted record instead of editing it.')
     data = payload.model_dump(exclude_unset=True)
     if 'supplier_id' in data:
         supplier_id = data.get('supplier_id')
@@ -680,6 +757,8 @@ def update_receiving_record(db: Session, receiving_id: int, payload: ReceivingUp
         status = (data.get('status') or '').strip()
         if status not in RECEIVING_STATUSES:
             raise ValueError(f'Invalid status: {status}.')
+        if status == 'reversed':
+            raise ValueError('Use the reversal action to reverse a receiving record.')
         row.status = status
     db.add(row)
     db.flush()
@@ -713,6 +792,8 @@ def delete_receiving_record(db: Session, receiving_id: int):
     row = db.get(ReceivingRecord, int(receiving_id))
     if not row:
         raise ValueError('Receiving record not found.')
+    if row.status != 'draft':
+        raise ValueError('Only draft receiving records can be deleted.')
     db.delete(row)
     db.commit()
     return {'ok': True}
@@ -725,6 +806,26 @@ def set_receiving_status(db: Session, receiving_id: int, payload: ProcurementSta
     status = (payload.status or '').strip()
     if status not in RECEIVING_STATUSES:
         raise ValueError(f'Invalid status: {status}.')
+    if row.status == 'reversed':
+        raise ValueError('Reversed receiving records cannot change status.')
+    if status == 'reversed':
+        _reverse_receiving_effects(db, row)
+        row.status = 'reversed'
+        row.notes = f'{row.notes or ""}\n{payload.notes or "Receiving reversed."}'.strip()
+        db.add(row)
+        db.commit()
+        return _serialize_receiving(
+            db.query(ReceivingRecord)
+            .options(
+                selectinload(ReceivingRecord.lines).selectinload(ReceivingLine.inventory_item),
+                selectinload(ReceivingRecord.supplier),
+                selectinload(ReceivingRecord.purchase_order),
+            )
+            .filter(ReceivingRecord.id == row.id)
+            .first()
+        )
+    if row.status != 'draft':
+        raise ValueError('Posted receiving records can only be reversed.')
     if status == 'posted':
         if not _has_postable_receiving_lines(db, row.id):
             raise ValueError('Receiving cannot be posted without at least one line with quantity.')
@@ -732,8 +833,8 @@ def set_receiving_status(db: Session, receiving_id: int, payload: ProcurementSta
     if payload.notes:
         row.notes = f'{row.notes or ""}\n{payload.notes}'.strip()
     if status == 'posted' and not row.posted_by:
-        row.posted_by = username
         _post_receiving_to_stock(db, row)
+        row.posted_by = username or 'system'
     if status == 'posted' and getattr(payload, 'auto_create_payable', True):
         _maybe_create_payable_from_receiving(db, row)
     db.add(row)

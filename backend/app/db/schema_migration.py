@@ -15,6 +15,11 @@ def _sqlite_add_column_if_missing(engine: Engine, table_name: str, column_name: 
         conn.execute(text(f'ALTER TABLE {table_name} ADD COLUMN {column_name} {column_ddl}'))
 
 
+def _sqlite_execute(engine: Engine, statement: str):
+    with engine.begin() as conn:
+        conn.execute(text(statement))
+
+
 def run_startup_migrations(engine: Engine):
     if engine.url.get_backend_name() != 'sqlite':
         return
@@ -58,3 +63,28 @@ def run_startup_migrations(engine: Engine):
     # Beds24 folio line mirror metadata.
     _sqlite_add_column_if_missing(engine, 'booking_folio_lines', 'external_source', 'VARCHAR(40)')
     _sqlite_add_column_if_missing(engine, 'booking_folio_lines', 'external_line_key', 'VARCHAR(160)')
+
+    # Dedicated POS receiver idempotency + receiving lifecycle.
+    for table_name in ('money_transactions', 'account_transfers', 'receivables', 'sale_orders'):
+        _sqlite_add_column_if_missing(engine, table_name, 'external_source', 'VARCHAR(40)')
+        _sqlite_add_column_if_missing(engine, table_name, 'external_id', 'VARCHAR(160)')
+        _sqlite_execute(engine, f'CREATE UNIQUE INDEX IF NOT EXISTS uq_{table_name}_external_event ON {table_name} (external_source, external_id)')
+
+    _sqlite_add_column_if_missing(engine, 'stock_movements', 'receiving_record_id', 'INTEGER')
+    _sqlite_execute(engine, '''
+        CREATE TABLE IF NOT EXISTS receivable_adjustments (
+            id INTEGER PRIMARY KEY,
+            receivable_id INTEGER NOT NULL,
+            adjustment_date VARCHAR(50),
+            amount FLOAT DEFAULT 0,
+            source_type VARCHAR(100),
+            source_id INTEGER,
+            external_source VARCHAR(40),
+            external_id VARCHAR(160),
+            notes TEXT,
+            created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+            updated_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+            FOREIGN KEY(receivable_id) REFERENCES receivables (id)
+        )
+    ''')
+    _sqlite_execute(engine, 'CREATE UNIQUE INDEX IF NOT EXISTS uq_receivable_adjustments_external_event ON receivable_adjustments (external_source, external_id)')

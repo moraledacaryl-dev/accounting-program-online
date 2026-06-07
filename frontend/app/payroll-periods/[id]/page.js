@@ -9,6 +9,7 @@ import {
   postPayrollPeriod,
   updatePayrollPeriod,
 } from '../../../lib/api';
+import { useConfirmAction } from '../../../components/ConfirmActionProvider';
 
 const EMPTY_LINE = {
   employee_id: '',
@@ -78,6 +79,7 @@ function parseImportCsv(text) {
 }
 
 export default function PayrollPeriodDetailPage({ params }) {
+  const confirmAction = useConfirmAction();
   const periodId = Number(params.id);
   const [activeTab, setActiveTab] = useState('summary');
   const [period, setPeriod] = useState(null);
@@ -257,7 +259,7 @@ export default function PayrollPeriodDetailPage({ params }) {
   }
 
   async function removePeriod() {
-    if (!window.confirm(`Delete payroll period ${period?.name || periodId}?`)) return;
+    if (!await confirmAction({ title: `Delete payroll period ${period?.name || periodId}?`, description: 'Only draft payroll periods entered in error should be removed. Posted periods should remain for audit review.' })) return;
     setError('');
     try {
       await deletePayrollPeriod(periodId);

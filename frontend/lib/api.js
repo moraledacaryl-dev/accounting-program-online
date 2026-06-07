@@ -1,4 +1,8 @@
 const API_BASE = process.env.NEXT_PUBLIC_API_BASE || '/api';
+const CSRF_COOKIE_NAME = 'erp_csrf';
+const CSRF_HEADER_NAME = 'X-CSRF-Token';
+const CSRF_EXEMPT_PATHS = new Set(['/auth/login', '/auth/integration/token', '/auth/csrf']);
+const UNSAFE_METHODS = new Set(['POST', 'PUT', 'PATCH', 'DELETE']);
 
 function getToken() {
   if (typeof window === 'undefined') return '';
@@ -13,12 +17,39 @@ function clearToken() {
   if (typeof window !== 'undefined') localStorage.removeItem('erp_token');
 }
 
+function getCookie(name) {
+  if (typeof document === 'undefined') return '';
+  const prefix = `${encodeURIComponent(name)}=`;
+  const row = document.cookie.split('; ').find((entry) => entry.startsWith(prefix));
+  if (!row) return '';
+  return decodeURIComponent(row.slice(prefix.length));
+}
+
+async function ensureCsrfHeader(path, method, headers) {
+  const normalizedMethod = String(method || 'GET').toUpperCase();
+  if (!UNSAFE_METHODS.has(normalizedMethod) || CSRF_EXEMPT_PATHS.has(path)) return;
+  let csrfToken = getCookie(CSRF_COOKIE_NAME);
+  if (!csrfToken) {
+    try {
+      const res = await fetch(`${API_BASE}/auth/csrf`, { cache: 'no-store', credentials: 'include' });
+      if (res.ok) {
+        const data = await res.json().catch(() => null);
+        csrfToken = data?.csrf_token || getCookie(CSRF_COOKIE_NAME);
+      }
+    } catch {
+      csrfToken = getCookie(CSRF_COOKIE_NAME);
+    }
+  }
+  if (csrfToken) headers[CSRF_HEADER_NAME] = csrfToken;
+}
+
 async function request(path, init = {}) {
   const headers = { ...(init.headers || {}) };
   const token = getToken();
   if (token) headers['Authorization'] = `Bearer ${token}`;
   if (!(init.body instanceof FormData) && init.body && !headers['Content-Type']) headers['Content-Type'] = 'application/json';
-  const res = await fetch(`${API_BASE}${path}`, { cache: 'no-store', ...init, headers });
+  await ensureCsrfHeader(path, init.method, headers);
+  const res = await fetch(`${API_BASE}${path}`, { cache: 'no-store', credentials: 'include', ...init, headers });
   let data = null;
   try { data = await res.json(); } catch { data = null; }
   if (!res.ok) throw new Error(readApiMessage(data?.detail || data?.message || data?.error || data) || 'Request failed');
@@ -41,9 +72,11 @@ export { API_BASE, getToken, setToken, clearToken, request, readApiMessage };
 
 export const bootstrap = () => request('/auth/bootstrap', { method: 'POST' });
 export const login = (payload) => request('/auth/login', { method: 'POST', body: JSON.stringify(payload) });
+export const logout = () => request('/auth/logout', { method: 'POST' });
 export const me = () => request('/auth/me');
 
 export const getDashboard = () => request('/dashboard/summary');
+export const globalSearch = (q, limit = 8) => request(`/search/?q=${encodeURIComponent(q || '')}&limit=${encodeURIComponent(limit)}`);
 export const getSystemSettings = () => request('/system-settings');
 export const updateSystemSettings = (payload) => request('/system-settings', { method: 'PUT', body: JSON.stringify(payload) });
 export const fetchNextCodePreview = (entity, draft = '') => request(`/system-settings/next-code?entity=${encodeURIComponent(entity)}${draft ? `&draft=${encodeURIComponent(draft)}` : ''}`);
@@ -55,6 +88,7 @@ export const syncBeds24Booking = (payload) => request('/integrations/beds24/sync
 export const rebuildBeds24BookingMirror = (payload) => request('/integrations/beds24/sync/booking/rebuild', { method: 'POST', body: JSON.stringify(payload) });
 export const syncBeds24Recent = (payload) => request('/integrations/beds24/sync/recent', { method: 'POST', body: JSON.stringify(payload) });
 export const syncBeds24Backfill = (payload) => request('/integrations/beds24/sync/backfill', { method: 'POST', body: JSON.stringify(payload) });
+export const reclassifyBeds24FolioLines = (payload) => request('/integrations/beds24/folio-lines/reclassify', { method: 'POST', body: JSON.stringify(payload) });
 export const fetchBeds24SyncLogs = (params = {}) => request(`/integrations/beds24/logs${Object.keys(params).length ? `?${new URLSearchParams(Object.entries(params).filter(([, v]) => v !== '' && v !== null && typeof v !== 'undefined')).toString()}` : ''}`);
 export const fetchBeds24SyncState = (params = {}) => request(`/integrations/beds24/sync-state${Object.keys(params).length ? `?${new URLSearchParams(Object.entries(params).filter(([, v]) => v !== '' && v !== null && typeof v !== 'undefined')).toString()}` : ''}`);
 export const fetchBeds24MappingHelpers = () => request('/integrations/beds24/mapping-helpers');
@@ -72,7 +106,7 @@ export const getModuleRecords = (slug, search='') => request(`/records/${slug}/r
 export const createRecord = (slug, payload) => request(`/records/${slug}/records`, { method:'POST', body: JSON.stringify(payload)});
 export const updateRecord = (id, payload) => request(`/records/single/${id}`, { method:'PUT', body: JSON.stringify(payload)});
 export const deleteRecord = (id) => request(`/records/single/${id}`, { method:'DELETE' });
-export const approveRecord = (id, approved=true) => request(`/records/single/${id}/approve`, { method:'POST', body: JSON.stringify({approved}) });
+export const approveRecord = (id, approved=true, { note = '' } = {}) => request(`/records/single/${id}/approve`, { method:'POST', body: JSON.stringify({ approved, note: note || null }) });
 
 export const fetchEmployees = () => request('/people/employees');
 export const createEmployee = (payload) => request('/people/employees', { method:'POST', body: JSON.stringify(payload)});
@@ -108,6 +142,7 @@ export const disposeAsset = (assetId, payload) => request(`/asset-registry/asset
 export const fetchBookings = () => request('/reservations/bookings');
 export const fetchBooking = (id) => request(`/reservations/bookings/${id}`);
 export const fetchBookingCalendar = (params = {}) => request(`/reservations/bookings/calendar${Object.keys(params).length ? `?${new URLSearchParams(Object.entries(params).filter(([, v]) => v !== '' && v !== null && typeof v !== 'undefined')).toString()}` : ''}`);
+export const reclassifyBookingFolioLines = (id, payload) => request(`/reservations/bookings/${id}/folio-lines/reclassify`, { method: 'POST', body: JSON.stringify(payload) });
 export const createBooking = (payload) => request('/reservations/bookings', { method:'POST', body: JSON.stringify(payload)});
 export const updateBooking = (id, payload) => request(`/reservations/bookings/${id}`, { method:'PUT', body: JSON.stringify(payload)});
 export const fetchBreakfastLogs = () => request('/reservations/breakfast-logs');
@@ -182,16 +217,32 @@ export const createUser = (payload) => request('/auth/users', { method:'POST', b
 export const updateUser = (id,payload) => request(`/auth/users/${id}`, { method:'PUT', body: JSON.stringify(payload)});
 
 export const fetchManagementReport = ({ startDate = '', endDate = '' } = {}) => request(`/reports/management${(startDate || endDate) ? `?${startDate ? `start_date=${encodeURIComponent(startDate)}` : ''}${startDate && endDate ? '&' : ''}${endDate ? `end_date=${encodeURIComponent(endDate)}` : ''}` : ''}`);
+export const fetchFinancialStatements = ({ startDate = '', endDate = '', asOfDate = '' } = {}) => {
+  const params = new URLSearchParams();
+  if (startDate) params.set('start_date', startDate);
+  if (endDate) params.set('end_date', endDate);
+  if (asOfDate) params.set('as_of_date', asOfDate);
+  const query = params.toString();
+  return request(`/reports/financial-statements${query ? `?${query}` : ''}`);
+};
 export const fetchAgingReport = (asOfDate = '') => request(`/reports/ar-ap-aging${asOfDate ? `?as_of_date=${encodeURIComponent(asOfDate)}` : ''}`);
 export const fetchSettlements = ({ recordId = null, limit = 200 } = {}) => request(`/reports/settlements?limit=${encodeURIComponent(limit)}${recordId ? `&record_id=${encodeURIComponent(recordId)}` : ''}`);
 export const createSettlement = (payload) => request('/reports/settlements', { method: 'POST', body: JSON.stringify(payload) });
+
+export const fetchEvents = (params = {}) => request(`/events/${Object.keys(params).length ? `?${new URLSearchParams(Object.entries(params).filter(([, v]) => v !== '' && v !== null && typeof v !== 'undefined')).toString()}` : ''}`);
+export const createEvent = (payload) => request('/events/', { method: 'POST', body: JSON.stringify(payload) });
+export const updateEvent = (id, payload) => request(`/events/${id}`, { method: 'PUT', body: JSON.stringify(payload) });
+export const confirmEvent = (id, payload = {}) => request(`/events/${id}/confirm`, { method: 'POST', body: JSON.stringify(payload) });
+export const completeEvent = (id, payload = {}) => request(`/events/${id}/complete`, { method: 'POST', body: JSON.stringify(payload) });
+export const cancelEvent = (id, payload = {}) => request(`/events/${id}/cancel`, { method: 'POST', body: JSON.stringify(payload) });
+export const recordEventPayment = (id, payload) => request(`/events/${id}/payments`, { method: 'POST', body: JSON.stringify(payload) });
 
 export async function fetchManagementCsv({ startDate = '', endDate = '' } = {}) {
   const token = getToken();
   const headers = {};
   if (token) headers['Authorization'] = `Bearer ${token}`;
   const query = `${startDate || endDate ? '?' : ''}${startDate ? `start_date=${encodeURIComponent(startDate)}` : ''}${startDate && endDate ? '&' : ''}${endDate ? `end_date=${encodeURIComponent(endDate)}` : ''}`;
-  const res = await fetch(`${API_BASE}/reports/management.csv${query}`, { cache: 'no-store', headers });
+  const res = await fetch(`${API_BASE}/reports/management.csv${query}`, { cache: 'no-store', credentials: 'include', headers });
   if (!res.ok) {
     let data = null;
     try { data = await res.json(); } catch { data = null; }
@@ -200,8 +251,53 @@ export async function fetchManagementCsv({ startDate = '', endDate = '' } = {}) 
   return await res.text();
 }
 
+export async function downloadSetupImportTemplate(scope = 'all') {
+  const token = getToken();
+  const headers = {};
+  if (token) headers['Authorization'] = `Bearer ${token}`;
+  const res = await fetch(`${API_BASE}/setup-imports/template?scope=${encodeURIComponent(scope)}`, { cache: 'no-store', credentials: 'include', headers });
+  if (!res.ok) {
+    let data = null;
+    try { data = await res.json(); } catch { data = null; }
+    throw new Error(readApiMessage(data?.detail || data?.message || data?.error || data) || 'Failed to download setup template');
+  }
+  return await res.blob();
+}
+
+export function importSetupWorkbook({ file, dryRun = true, replaceRecipeLines = true }) {
+  const form = new FormData();
+  form.append('file', file);
+  form.append('dry_run', String(!!dryRun));
+  form.append('replace_recipe_lines', String(!!replaceRecipeLines));
+  return request('/setup-imports/import', { method: 'POST', body: form });
+}
+
 export const fetchAttachments = ({ entityType = '', entityId = null, limit = 200 } = {}) => request(`/attachments/?limit=${encodeURIComponent(limit)}${entityType ? `&entity_type=${encodeURIComponent(entityType)}` : ''}${entityId ? `&entity_id=${encodeURIComponent(entityId)}` : ''}`);
 export const deleteAttachment = (id) => request(`/attachments/${id}`, { method: 'DELETE' });
+
+function readFilenameFromDisposition(value) {
+  if (!value) return '';
+  const utf8Match = value.match(/filename\*=UTF-8''([^;]+)/i);
+  if (utf8Match?.[1]) return decodeURIComponent(utf8Match[1].trim().replace(/^"|"$/g, ''));
+  const plainMatch = value.match(/filename="?([^";]+)"?/i);
+  return plainMatch?.[1] ? plainMatch[1].trim() : '';
+}
+
+export async function downloadAttachment(id) {
+  const token = getToken();
+  const headers = {};
+  if (token) headers['Authorization'] = `Bearer ${token}`;
+  const res = await fetch(`${API_BASE}/attachments/${encodeURIComponent(id)}/download`, { cache: 'no-store', credentials: 'include', headers });
+  if (!res.ok) {
+    let data = null;
+    try { data = await res.json(); } catch { data = null; }
+    throw new Error(readApiMessage(data?.detail || data?.message || data?.error || data) || 'Failed to download attachment');
+  }
+  return {
+    blob: await res.blob(),
+    filename: readFilenameFromDisposition(res.headers.get('content-disposition')),
+  };
+}
 
 export async function uploadAttachment({ file, entityType, entityId, note = '' }) {
   const form = new FormData();

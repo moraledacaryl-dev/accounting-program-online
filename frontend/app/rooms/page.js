@@ -10,6 +10,7 @@ import {
   updateRoomEntity,
 } from '../../lib/api';
 import { shouldPreventEnterSubmit } from '../../lib/formBehavior';
+import { useConfirmAction } from '../../components/ConfirmActionProvider';
 
 const EMPTY_FORM = {
   room_no: '',
@@ -23,6 +24,7 @@ const EMPTY_FORM = {
 };
 
 export default function RoomsPage() {
+  const confirmAction = useConfirmAction();
   const [roomTypes, setRoomTypes] = useState([]);
   const [rows, setRows] = useState([]);
   const [editingId, setEditingId] = useState(null);
@@ -92,7 +94,7 @@ export default function RoomsPage() {
   }
 
   async function removeRow(row) {
-    if (!window.confirm(`Delete room ${row.room_no}?`)) return;
+    if (!await confirmAction({ title: `Delete room ${row.room_no}?`, description: 'Only remove rooms that are no longer needed in reservations and operations.' })) return;
     setError('');
     try {
       await deleteRoomEntity(row.id);

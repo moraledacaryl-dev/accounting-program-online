@@ -8,6 +8,7 @@ import {
   fetchBeds24SyncState,
   fetchBeds24SyncLogs,
   previewBeds24Reset,
+  reclassifyBeds24FolioLines,
   rebuildBeds24BookingMirror,
   syncBeds24Backfill,
   syncBeds24Booking,
@@ -15,6 +16,7 @@ import {
   testBeds24IntegrationConnection,
   updateBeds24IntegrationSettings,
 } from '../../../lib/api';
+import { useConfirmAction } from '../../../components/ConfirmActionProvider';
 import { useCurrentUser } from '../../../lib/useCurrentUser';
 
 const DEFAULT_SETTINGS = {
@@ -90,6 +92,7 @@ function syncStatusClass(status) {
 
 export default function Beds24IntegrationPage() {
   const { can } = useCurrentUser();
+  const confirmAction = useConfirmAction();
   const [settings, setSettings] = useState({ ...DEFAULT_SETTINGS });
   const [roomMapByRoomIdText, setRoomMapByRoomIdText] = useState(pretty(DEFAULT_SETTINGS.room_map_by_room_id));
   const [roomMapByUnitIdText, setRoomMapByUnitIdText] = useState(pretty(DEFAULT_SETTINGS.room_map_by_unit_id));
@@ -129,6 +132,14 @@ export default function Beds24IntegrationPage() {
     dry_run: true,
     chunk_days: 31,
     request_delay_seconds: 4,
+  });
+  const [reclassifyRunning, setReclassifyRunning] = useState(false);
+  const [reclassifyResult, setReclassifyResult] = useState(null);
+  const [reclassifyForm, setReclassifyForm] = useState({
+    dry_run: true,
+    include_manual_source: false,
+    include_payment_lines: true,
+    limit: 5000,
   });
 
   const canManage = can('integrations.manage');
@@ -337,6 +348,45 @@ export default function Beds24IntegrationPage() {
       setError(err.message || 'Failed to run historical import.');
     } finally {
       setBackfillRunning(false);
+    }
+  }
+
+  async function runReclassifyFolioLines(overrides = {}) {
+    if (!canManage) return;
+    const nextForm = { ...reclassifyForm, ...overrides };
+    if (!nextForm.dry_run) {
+      if (!reclassifyResult?.dry_run || !reclassifyResult?.changed) {
+        setError('Preview all old booking folio classifications before applying corrections.');
+        return;
+      }
+      const confirmed = await confirmAction({
+        title: `Apply ${reclassifyResult.changed || 0} old booking classification corrections?`,
+        description: `Amounts stay unchanged. The preview balance adjustment is ${Number(reclassifyResult.balance_adjustment || 0).toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2, signDisplay: 'always' })}.`,
+        confirmLabel: 'Apply Corrections',
+        tone: 'danger',
+      });
+      if (!confirmed) return;
+    }
+    setReclassifyForm(nextForm);
+    setReclassifyRunning(true);
+    setReclassifyResult(null);
+    setError('');
+    setNotice('');
+    try {
+      const result = await reclassifyBeds24FolioLines({
+        dry_run: !!nextForm.dry_run,
+        include_manual_source: !!nextForm.include_manual_source,
+        include_payment_lines: !!nextForm.include_payment_lines,
+        limit: Number(nextForm.limit || 5000),
+      });
+      setReclassifyResult(result || null);
+      const verb = result?.dry_run ? 'would update' : 'updated';
+      setNotice(`Folio classification ${result?.dry_run ? 'preview' : 'complete'}: ${result?.changed || 0} ${verb}, ${result?.unchanged || 0} unchanged, ${result?.skipped_source || 0} skipped by source.`);
+      if (canViewLogs) await refreshDebugData();
+    } catch (err) {
+      setError(err.message || 'Failed to reclassify folio lines.');
+    } finally {
+      setReclassifyRunning(false);
     }
   }
 
@@ -786,6 +836,102 @@ export default function Beds24IntegrationPage() {
           </div>
         )}
       </section>
+
+      {canManage && (
+        <section className="section">
+          <h2>All Old Booking Folio Classification</h2>
+          <p className="muted">
+            Preview and repair old Beds24 booking folio rows using description, source, reference, and note clues. Use this when older imports made room charge, breakfast, extra guest, minibar, room service, deposit, payment, or refund rows look like the wrong type. Amounts stay unchanged; correcting a payment into a charge can change the folio balance.
+          </p>
+          <div className="form-grid">
+            <label>
+              Mode
+              <select value={String(!!reclassifyForm.dry_run)} onChange={(e) => setReclassifyForm((prev) => ({ ...prev, dry_run: e.target.value === 'true' }))}>
+                <option value="true">Preview only</option>
+                <option value="false">Apply after preview</option>
+              </select>
+            </label>
+            <label>
+              Include Staff Manual Lines
+              <select value={String(!!reclassifyForm.include_manual_source)} onChange={(e) => setReclassifyForm((prev) => ({ ...prev, include_manual_source: e.target.value === 'true' }))}>
+                <option value="false">No, Beds24 lines only</option>
+                <option value="true">Yes, include all manual charges</option>
+              </select>
+            </label>
+            <label>
+              Review Old Payments / Deposits
+              <select value={String(!!reclassifyForm.include_payment_lines)} onChange={(e) => setReclassifyForm((prev) => ({ ...prev, include_payment_lines: e.target.value === 'true' }))}>
+                <option value="true">Yes, repair mislabeled rows</option>
+                <option value="false">No, manual charges only</option>
+              </select>
+            </label>
+            <label>
+              Scan Limit
+              <input type="number" min="1" max="50000" value={reclassifyForm.limit} onChange={(e) => setReclassifyForm((prev) => ({ ...prev, limit: Number(e.target.value || 5000) }))} />
+            </label>
+          </div>
+          <div className="row wrap">
+            <button type="button" className="secondary" onClick={() => runReclassifyFolioLines({ dry_run: true })} disabled={reclassifyRunning}>
+              {reclassifyRunning ? 'Checking Lines...' : 'Preview All Old Bookings'}
+            </button>
+            <button type="button" className="danger" onClick={() => runReclassifyFolioLines({ dry_run: false })} disabled={reclassifyRunning || !reclassifyResult?.dry_run || !reclassifyResult?.changed}>
+              Apply Previewed Corrections
+            </button>
+            <span className="muted small">
+              Default mode only touches Beds24-generated rows. Use staff manual lines only when a manager intentionally wants manually entered historical rows included.
+            </span>
+          </div>
+          {!!reclassifyResult && (
+            <div className="stack" style={{ marginTop: 12 }}>
+              <div className="table-wrap">
+                <table className="table dense-table">
+                  <tbody>
+                    <tr><th>Mode</th><td>{reclassifyResult.dry_run ? 'Preview only' : 'Updated'}</td></tr>
+                    <tr><th>Scanned</th><td>{reclassifyResult.scanned || 0}</td></tr>
+                    <tr><th>Eligible</th><td>{reclassifyResult.eligible || 0}</td></tr>
+                    <tr><th>{reclassifyResult.dry_run ? 'Would Update' : 'Updated'}</th><td>{reclassifyResult.changed || 0}</td></tr>
+                    <tr><th>Unchanged</th><td>{reclassifyResult.unchanged || 0}</td></tr>
+                    <tr><th>Skipped by Source</th><td>{reclassifyResult.skipped_source || 0}</td></tr>
+                    <tr><th>Skipped Negative</th><td>{reclassifyResult.skipped_negative || 0}</td></tr>
+                    <tr><th>Balance-Affecting Changes</th><td>{reclassifyResult.balance_affecting_changes || 0}</td></tr>
+                    <tr><th>Balance Adjustment</th><td>{Number(reclassifyResult.balance_adjustment || 0).toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2, signDisplay: 'always' })}</td></tr>
+                  </tbody>
+                </table>
+              </div>
+              {Object.keys(reclassifyResult.by_new_type || {}).length > 0 && (
+                <div className="row wrap">
+                  {Object.entries(reclassifyResult.by_new_type || {}).map(([type, count]) => (
+                    <span key={type} className="status draft">{type}: {count}</span>
+                  ))}
+                </div>
+              )}
+              {Array.isArray(reclassifyResult.preview) && reclassifyResult.preview.length > 0 && (
+                <details className="quiet-details" open>
+                  <summary>Sample changes</summary>
+                  <div className="table-wrap">
+                    <table className="table dense-table">
+                      <thead><tr><th>Line</th><th>Booking</th><th>From</th><th>To</th><th>Description</th><th>Amount</th><th>Balance Adjustment</th></tr></thead>
+                      <tbody>
+                        {reclassifyResult.preview.map((row) => (
+                          <tr key={`folio-reclassify-${row.line_id}`}>
+                            <td>#{row.line_id}</td>
+                            <td>{row.beds24_booking_id || row.booking_id || '-'}</td>
+                            <td>{row.old_type}</td>
+                            <td>{row.new_type}</td>
+                            <td>{row.description || '-'}</td>
+                            <td>{Number(row.amount || 0).toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</td>
+                            <td>{Number(row.balance_adjustment || 0).toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2, signDisplay: 'always' })}</td>
+                          </tr>
+                        ))}
+                      </tbody>
+                    </table>
+                  </div>
+                </details>
+              )}
+            </div>
+          )}
+        </section>
+      )}
 
       {canManage && (
         <section className="section">

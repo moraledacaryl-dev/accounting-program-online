@@ -5,6 +5,7 @@ import CashflowTabs from '../../../components/cashflow/CashflowTabs';
 import PaymentMethodSelect from '../../../components/cashflow/PaymentMethodSelect';
 import TemplateLaunchModal from '../../../components/cashflow/TemplateLaunchModal';
 import ToggleField from '../../../components/cashflow/ToggleField';
+import { useConfirmAction } from '../../../components/ConfirmActionProvider';
 import {
   createCashflowTemplate,
   deleteCashflowTemplate,
@@ -31,6 +32,7 @@ const EMPTY_FORM = {
 };
 
 export default function CashflowTemplatesPage() {
+  const confirmAction = useConfirmAction();
   const [accounts, setAccounts] = useState([]);
   const [rows, setRows] = useState([]);
   const [form, setForm] = useState({ ...EMPTY_FORM });
@@ -118,7 +120,7 @@ export default function CashflowTemplatesPage() {
   }
 
   async function removeTemplate(id) {
-    if (!confirm('Delete template?')) return;
+    if (!await confirmAction({ title: `Delete template #${id}?`, description: 'Existing cashflow transactions are preserved. This removes the shortcut for future entries.' })) return;
     setError('');
     setNotice('');
     try {

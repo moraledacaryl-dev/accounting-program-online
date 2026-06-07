@@ -10,6 +10,7 @@ import {
   updateRatePlanEntity,
 } from '../../lib/api';
 import { shouldPreventEnterSubmit } from '../../lib/formBehavior';
+import { useConfirmAction } from '../../components/ConfirmActionProvider';
 
 const EMPTY_FORM = {
   code: '',
@@ -23,6 +24,7 @@ const EMPTY_FORM = {
 };
 
 export default function RatePlansPage() {
+  const confirmAction = useConfirmAction();
   const [roomTypes, setRoomTypes] = useState([]);
   const [rows, setRows] = useState([]);
   const [editingId, setEditingId] = useState(null);
@@ -92,7 +94,7 @@ export default function RatePlansPage() {
   }
 
   async function removeRow(row) {
-    if (!window.confirm(`Delete rate plan ${row.code}?`)) return;
+    if (!await confirmAction({ title: `Delete rate plan ${row.code}?`, description: 'This removes the rate plan from future booking setup.' })) return;
     setError('');
     try {
       await deleteRatePlanEntity(row.id);

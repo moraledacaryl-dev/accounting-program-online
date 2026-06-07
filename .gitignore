@@ -43,3 +43,25 @@ pnpm-debug.log*
 data/
 backups/
 *.tar.gz
+
+# Production secrets
+.env
+*.env
+.env.local
+.env.production
+backend/.env
+backend/.env.local
+backend/.env.production
+frontend/.env
+frontend/.env.local
+frontend/.env.production
+
+# Local/build files
+node_modules/
+.next/
+frontend/node_modules/
+frontend/.next/
+backend/.venv/
+backend/venv/
+__pycache__/
+*.pyc
