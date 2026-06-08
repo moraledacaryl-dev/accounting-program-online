@@ -1,7 +1,8 @@
 {
   "app_key": "accounting",
-  "app_name": "Accounting",
-  "app_description": "Hidden Oasis accounting, review queues, journals, cashflow, procurement and reporting.",
+  "app_name": "Accounting Program",
+  "app_description": "Official books, financial records, PR/PO, payables, receivables, reconciliations, and accounting review queue.",
   "production_url": "https://accounting.hiddenoasis.app",
+  "legacy_production_url": "https://hiddenoasis.app",
   "health_endpoint": "/healthz"
 }

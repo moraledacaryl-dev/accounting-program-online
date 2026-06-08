@@ -49,3 +49,18 @@ Create an Operations request, approve it, create Accounting PR/PO status events,
 ## 12. Employee Sync Propagation
 
 Send `employee.sync` from Staff/Payroll to Accounting and Operations. Verify only safe identity fields are stored and credentials/payroll details are untouched.
+
+## 13. Failed Integration Retry
+
+Generate a valid Staff/Payroll payload, simulate Accounting endpoint unavailable, confirm outbox marks Failed/Pending Retry, retry later, and verify receiver idempotency prevents duplicates.
+
+## 14. Launcher Routing
+
+Open `https://hiddenoasis.app`, verify four static launcher cards, confirm each opens its subdomain, and confirm each app keeps its own login with no shared session.
+
+## Current Execution Status
+
+- Automated local unit/smoke coverage passed for Staff/Payroll.
+- Backend syntax checks passed for touched Accounting, POS, and Operations Python files.
+- Full pytest and frontend build/lint checks were not executed because `pytest` and `node` are missing in the shell environment.
+- Real browser/device E2E scenarios remain manual next-stage validation.

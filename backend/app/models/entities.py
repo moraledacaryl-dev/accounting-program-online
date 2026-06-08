@@ -258,6 +258,9 @@ class IntegrationReceipt(Base, TimestampMixin):
     processed_at: Mapped[str | None] = mapped_column(String(50), nullable=True, index=True)
     created_review_record_type: Mapped[str | None] = mapped_column(String(120), nullable=True)
     created_review_record_id: Mapped[str | None] = mapped_column(String(120), nullable=True)
+    created_by: Mapped[str | None] = mapped_column(String(120), nullable=True)
+    posted_by: Mapped[str | None] = mapped_column(String(120), nullable=True)
+    posted_at: Mapped[str | None] = mapped_column(String(50), nullable=True, index=True)
     __table_args__ = (UniqueConstraint('external_source', 'external_id', name='uq_integration_receipt_external_event'),)
 
 class AttendanceEntry(Base, TimestampMixin):

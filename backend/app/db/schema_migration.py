@@ -110,6 +110,10 @@ def run_startup_migrations(engine: Engine):
         )
     ''')
     _sqlite_execute(engine, 'CREATE UNIQUE INDEX IF NOT EXISTS uq_integration_receipt_external_event ON integration_receipts (external_source, external_id)')
+    _sqlite_add_column_if_missing(engine, 'integration_receipts', 'created_by', 'VARCHAR(120)')
+    _sqlite_add_column_if_missing(engine, 'integration_receipts', 'posted_by', 'VARCHAR(120)')
+    _sqlite_add_column_if_missing(engine, 'integration_receipts', 'posted_at', 'VARCHAR(50)')
+    _sqlite_execute(engine, 'CREATE INDEX IF NOT EXISTS idx_integration_receipts_lookup ON integration_receipts (external_source, event_type, status, created_at)')
     _sqlite_execute(engine, '''
         CREATE TABLE IF NOT EXISTS external_employee_references (
             id INTEGER PRIMARY KEY,

@@ -1,10 +1,11 @@
 import pytest
 import json
+import asyncio
 from fastapi import HTTPException
 from sqlalchemy import create_engine
 from sqlalchemy.orm import sessionmaker
 
-from app.api.integrations_payroll import store_receipt
+from app.api.integrations_payroll import approve_receipt, post_receipt, reject_receipt, store_receipt
 from app.db.database import Base
 from app.models.entities import ExternalEmployeeReference, IntegrationReceipt
 
@@ -60,10 +61,14 @@ def test_payroll_import_creates_review_receipt_and_balanced_preview():
 def test_duplicate_payroll_import_is_idempotent():
     db = make_session()
     first = store_receipt(db, payroll_payload('dupe-1'), {'payroll.run.paid'})
+    receipt = db.get(IntegrationReceipt, first['receipt_id'])
+    receipt.status = 'Ready to Post'
+    db.commit()
     second = store_receipt(db, payroll_payload('dupe-1'), {'payroll.run.paid'})
     assert second['status'] == 'already_applied'
     assert second['receipt_id'] == first['receipt_id']
     assert db.query(IntegrationReceipt).count() == 1
+    assert db.get(IntegrationReceipt, first['receipt_id']).status == 'Ready to Post'
 
 
 def test_invalid_payload_is_rejected():
@@ -109,3 +114,18 @@ def test_cash_advance_and_13th_month_preview_are_review_only():
     assert release_result['outcome']['journal_preview'][0]['debit_account'] == 'Employee Cash Advance Receivable'
     assert thirteenth_result['outcome']['journal_preview'][0]['debit_account'] == '13th Month Pay Expense'
     assert db.query(IntegrationReceipt).count() == 2
+
+
+def test_receipt_can_be_approved_posted_or_rejected_by_review_action():
+    db = make_session()
+    approved = store_receipt(db, payroll_payload('approval-flow-1'), {'payroll.run.paid'})
+    approved_receipt = asyncio.run(approve_receipt(approved['receipt_id'], approved_by='owner', db=db))
+    assert approved_receipt['status'] == 'Ready to Post'
+    posted_receipt = asyncio.run(post_receipt(approved['receipt_id'], posted_by='owner', confirm=True, db=db))
+    assert posted_receipt['status'] == 'Posted'
+    assert posted_receipt['posted_by'] == 'owner'
+
+    rejected = store_receipt(db, payroll_payload('reject-flow-1'), {'payroll.run.paid'})
+    rejected_receipt = asyncio.run(reject_receipt(rejected['receipt_id'], reason='Wrong cutoff', rejected_by='owner', db=db))
+    assert rejected_receipt['status'] == 'Rejected'
+    assert rejected_receipt['error_message'] == 'Wrong cutoff'

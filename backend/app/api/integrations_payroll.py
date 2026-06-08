@@ -33,6 +33,8 @@ ACCEPTED_EVENT_TYPES = {
     'cash_advance.released',
     'cash_advance.repaid',
 }
+REVIEW_STATUSES = {'For Review', 'Ready to Post', 'Posted', 'Rejected', 'Errors', 'Already Applied'}
+TERMINAL_STATUSES = {'Posted', 'Rejected', 'Errors'}
 
 
 def _now() -> str:
@@ -99,6 +101,40 @@ def debit_credit_totals(lines: list[dict[str, Any]]) -> dict[str, float]:
     return {'debits': amount, 'credits': amount, 'balanced': True}
 
 
+def load_json(value: str | None) -> Any:
+    try:
+        return json.loads(value or '{}')
+    except json.JSONDecodeError:
+        return {}
+
+
+def receipt_to_dict(row: IntegrationReceipt, include_payload: bool = True) -> dict[str, Any]:
+    outcome = load_json(row.outcome)
+    payload = load_json(row.payload_json) if include_payload else None
+    amount = _money(outcome.get('totals', {}).get('debits') or 0)
+    data = {
+        'id': row.id,
+        'external_source': row.external_source,
+        'external_id': row.external_id,
+        'event_type': row.event_type,
+        'status': row.status,
+        'source_record_type': row.source_record_type,
+        'source_record_id': row.source_record_id,
+        'amount': amount,
+        'received_at': row.received_at,
+        'processed_at': row.processed_at,
+        'posted_at': row.posted_at,
+        'posted_by': row.posted_by,
+        'created_review_record_type': row.created_review_record_type,
+        'created_review_record_id': row.created_review_record_id,
+        'error_message': row.error_message,
+        'outcome': outcome,
+    }
+    if include_payload:
+        data['payload'] = payload
+    return data
+
+
 def strip_employee(employee: dict[str, Any]) -> dict[str, Any]:
     return {key: employee.get(key) for key in SAFE_EMPLOYEE_FIELDS if key in employee}
 
@@ -149,8 +185,6 @@ def store_receipt(db: Session, payload: dict[str, Any], expected_event_types: se
         IntegrationReceipt.external_id == payload['external_id'],
     ).first()
     if existing:
-        existing.status = 'Already Applied'
-        db.commit()
         return {'status': 'already_applied', 'receipt_id': existing.id}
 
     stored_payload = scrub_employee_sync_payload(payload)
@@ -190,6 +224,20 @@ def store_receipt(db: Session, payload: dict[str, Any], expected_event_types: se
     return {'status': 'accepted', 'receipt_id': receipt.id, 'outcome': outcome}
 
 
+def get_receipt_or_404(db: Session, receipt_id: int) -> IntegrationReceipt:
+    row = db.get(IntegrationReceipt, receipt_id)
+    if not row or row.external_source != EXTERNAL_SOURCE:
+        raise HTTPException(status_code=404, detail='Receipt not found')
+    return row
+
+
+def update_outcome(row: IntegrationReceipt, updates: dict[str, Any]) -> dict[str, Any]:
+    outcome = load_json(row.outcome)
+    outcome.update(updates)
+    row.outcome = json.dumps(outcome, default=str)
+    return outcome
+
+
 @router.post('/employees')
 async def receive_employees(payload: dict[str, Any], db: Session = Depends(get_db)):
     return store_receipt(db, payload, {'employee.sync'})
@@ -221,33 +269,73 @@ async def review_queue(status: str | None = Query(default=None), db: Session = D
     if status:
         query = query.filter(IntegrationReceipt.status == status)
     rows = query.order_by(IntegrationReceipt.created_at.desc()).limit(200).all()
-    return [
-        {
-            'id': row.id,
-            'external_source': row.external_source,
-            'external_id': row.external_id,
-            'event_type': row.event_type,
-            'status': row.status,
-            'source_record_type': row.source_record_type,
-            'source_record_id': row.source_record_id,
-            'received_at': row.received_at,
-            'processed_at': row.processed_at,
-            'outcome': json.loads(row.outcome or '{}'),
-            'payload': json.loads(row.payload_json or '{}'),
-        }
-        for row in rows
-    ]
+    return [receipt_to_dict(row, include_payload=False) for row in rows]
+
+
+@router.get('/receipts')
+async def receipts(status: str | None = Query(default=None), db: Session = Depends(get_db)):
+    return await review_queue(status=status, db=db)
+
+
+@router.get('/receipts/{receipt_id}')
+async def receipt_detail(receipt_id: int, db: Session = Depends(get_db)):
+    return receipt_to_dict(get_receipt_or_404(db, receipt_id), include_payload=True)
 
 
 @router.post('/review-queue/{receipt_id}/status')
 async def update_review_status(receipt_id: int, status: str = Query(...), db: Session = Depends(get_db)):
-    allowed = {'For Review', 'Ready to Post', 'Posted', 'Rejected', 'Errors', 'Already Applied'}
-    if status not in allowed:
+    if status not in REVIEW_STATUSES:
         raise HTTPException(status_code=400, detail='Unsupported review status')
-    row = db.get(IntegrationReceipt, receipt_id)
-    if not row:
-        raise HTTPException(status_code=404, detail='Receipt not found')
+    row = get_receipt_or_404(db, receipt_id)
     row.status = status
-    row.processed_at = _now() if status in {'Posted', 'Rejected', 'Errors', 'Already Applied'} else row.processed_at
+    row.processed_at = _now() if status in TERMINAL_STATUSES | {'Already Applied'} else row.processed_at
     db.commit()
     return {'id': row.id, 'status': row.status}
+
+
+@router.post('/receipts/{receipt_id}/approve')
+async def approve_receipt(receipt_id: int, approved_by: str = Query(default='accounting_user'), db: Session = Depends(get_db)):
+    row = get_receipt_or_404(db, receipt_id)
+    if row.status in TERMINAL_STATUSES:
+        raise HTTPException(status_code=400, detail='Terminal receipts cannot be approved')
+    row.status = 'Ready to Post'
+    row.processed_at = _now()
+    update_outcome(row, {'approved_by': approved_by, 'approved_at': row.processed_at})
+    db.commit()
+    return receipt_to_dict(row, include_payload=False)
+
+
+@router.post('/receipts/{receipt_id}/reject')
+async def reject_receipt(receipt_id: int, reason: str = Query(..., min_length=3), rejected_by: str = Query(default='accounting_user'), db: Session = Depends(get_db)):
+    row = get_receipt_or_404(db, receipt_id)
+    if row.status == 'Posted':
+        raise HTTPException(status_code=400, detail='Posted receipts cannot be rejected')
+    row.status = 'Rejected'
+    row.error_message = reason
+    row.processed_at = _now()
+    update_outcome(row, {'rejected_by': rejected_by, 'rejected_at': row.processed_at, 'rejection_reason': reason})
+    db.commit()
+    return receipt_to_dict(row, include_payload=False)
+
+
+@router.post('/receipts/{receipt_id}/post')
+async def post_receipt(receipt_id: int, posted_by: str = Query(default='accounting_user'), confirm: bool = Query(default=False), db: Session = Depends(get_db)):
+    row = get_receipt_or_404(db, receipt_id)
+    if not confirm:
+        raise HTTPException(status_code=400, detail='Posting requires confirm=true')
+    if row.status not in {'Ready to Post', 'For Review'}:
+        raise HTTPException(status_code=400, detail='Only review-ready receipts can be posted')
+    outcome = load_json(row.outcome)
+    if not outcome.get('totals', {}).get('balanced', False):
+        raise HTTPException(status_code=400, detail='Journal preview is not balanced')
+    row.status = 'Posted'
+    row.posted_by = posted_by
+    row.posted_at = _now()
+    row.processed_at = row.posted_at
+    update_outcome(row, {
+        'posted_by': posted_by,
+        'posted_at': row.posted_at,
+        'posting_note': 'Marked posted by Accounting review action. No silent journal posting occurred during import.',
+    })
+    db.commit()
+    return receipt_to_dict(row, include_payload=False)
