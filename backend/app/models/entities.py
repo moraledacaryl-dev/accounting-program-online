@@ -226,6 +226,43 @@ class Employee(Base, TimestampMixin):
     is_active: Mapped[bool] = mapped_column(Boolean, default=True)
     attendances: Mapped[list["AttendanceEntry"]] = relationship(back_populates='employee', cascade='all, delete-orphan')
 
+
+class ExternalEmployeeReference(Base, TimestampMixin):
+    __tablename__ = 'external_employee_references'
+    id: Mapped[int] = mapped_column(Integer, primary_key=True)
+    external_source: Mapped[str] = mapped_column(String(80), index=True)
+    source_staff_id: Mapped[str | None] = mapped_column(String(120), nullable=True, index=True)
+    employee_code: Mapped[str] = mapped_column(String(120), index=True)
+    display_name: Mapped[str] = mapped_column(String(255), default='')
+    department: Mapped[str | None] = mapped_column(String(120), nullable=True)
+    position: Mapped[str | None] = mapped_column(String(120), nullable=True)
+    role: Mapped[str | None] = mapped_column(String(120), nullable=True)
+    active: Mapped[bool] = mapped_column(Boolean, default=True)
+    primary_department: Mapped[str | None] = mapped_column(String(120), nullable=True)
+    __table_args__ = (UniqueConstraint('external_source', 'employee_code', name='uq_external_employee_reference'),)
+
+
+class IntegrationReceipt(Base, TimestampMixin):
+    __tablename__ = 'integration_receipts'
+    id: Mapped[int] = mapped_column(Integer, primary_key=True)
+    external_source: Mapped[str] = mapped_column(String(80), index=True)
+    external_id: Mapped[str] = mapped_column(String(200), index=True)
+    event_type: Mapped[str] = mapped_column(String(120), index=True)
+    source_record_type: Mapped[str | None] = mapped_column(String(120), nullable=True, index=True)
+    source_record_id: Mapped[str | None] = mapped_column(String(120), nullable=True, index=True)
+    payload_json: Mapped[str] = mapped_column(Text, default='{}')
+    status: Mapped[str] = mapped_column(String(40), default='For Review', index=True)
+    outcome: Mapped[str | None] = mapped_column(Text, nullable=True)
+    error_message: Mapped[str | None] = mapped_column(Text, nullable=True)
+    received_at: Mapped[str | None] = mapped_column(String(50), nullable=True, index=True)
+    processed_at: Mapped[str | None] = mapped_column(String(50), nullable=True, index=True)
+    created_review_record_type: Mapped[str | None] = mapped_column(String(120), nullable=True)
+    created_review_record_id: Mapped[str | None] = mapped_column(String(120), nullable=True)
+    created_by: Mapped[str | None] = mapped_column(String(120), nullable=True)
+    posted_by: Mapped[str | None] = mapped_column(String(120), nullable=True)
+    posted_at: Mapped[str | None] = mapped_column(String(50), nullable=True, index=True)
+    __table_args__ = (UniqueConstraint('external_source', 'external_id', name='uq_integration_receipt_external_event'),)
+
 class AttendanceEntry(Base, TimestampMixin):
     __tablename__ = 'attendance_entries'
     id: Mapped[int] = mapped_column(Integer, primary_key=True)

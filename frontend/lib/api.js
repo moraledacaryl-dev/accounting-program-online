@@ -94,6 +94,11 @@ export const fetchBeds24SyncState = (params = {}) => request(`/integrations/beds
 export const fetchBeds24MappingHelpers = () => request('/integrations/beds24/mapping-helpers');
 export const previewBeds24Reset = (payload) => request('/integrations/beds24/reset/preview', { method: 'POST', body: JSON.stringify(payload) });
 export const executeBeds24Reset = (payload) => request('/integrations/beds24/reset/execute', { method: 'POST', body: JSON.stringify(payload) });
+export const fetchPayrollIntegrationReceipts = (status = '') => request(`/integrations/payroll/receipts${status ? `?status=${encodeURIComponent(status)}` : ''}`);
+export const fetchPayrollIntegrationReceipt = (id) => request(`/integrations/payroll/receipts/${id}`);
+export const approvePayrollIntegrationReceipt = (id) => request(`/integrations/payroll/receipts/${id}/approve`, { method: 'POST' });
+export const rejectPayrollIntegrationReceipt = (id, reason) => request(`/integrations/payroll/receipts/${id}/reject?reason=${encodeURIComponent(reason)}`, { method: 'POST' });
+export const postPayrollIntegrationReceipt = (id) => request(`/integrations/payroll/receipts/${id}/post?confirm=true`, { method: 'POST' });
 
 export const fetchTaxonomy = () => request('/taxonomy/');
 export const fetchModuleTaxonomy = (slug) => request(`/taxonomy/${slug}`);
