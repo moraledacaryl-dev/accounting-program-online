@@ -1,14 +1,16 @@
 from datetime import datetime
 
 from fastapi import APIRouter, Depends
-from sqlalchemy import func
+from sqlalchemy import and_, func, or_
 from sqlalchemy.orm import Session, selectinload
 
 from app.api.deps import require_permissions
 from app.db.database import get_db
 from app.models.entities import (
+    Beds24SyncLog,
     Booking,
     BookingFolio,
+    BookingFolioLine,
     CashReconciliation,
     Employee,
     Guest,
@@ -62,6 +64,71 @@ def _table_card(key: str, label: str, columns: list[str], rows: list[dict], desc
         'description': description,
         'columns': columns,
         'rows': rows,
+    }
+
+
+def _primary_folio(booking: Booking) -> BookingFolio | None:
+    folios = list(booking.folios or [])
+    if not folios:
+        return None
+    return sorted(folios, key=lambda row: row.id or 0, reverse=True)[0]
+
+
+def _booking_work_item(booking: Booking) -> dict:
+    folio = _primary_folio(booking)
+    folio_summary = folio_balance_summary(folio) if folio else {}
+    return {
+        'id': booking.id,
+        'label': f'BOOK-{booking.id}',
+        'guest_name': booking.guest_name,
+        'room_name': booking.room_name or (booking.room.name if booking.room else ''),
+        'status': booking.status,
+        'channel': booking.channel,
+        'check_in': booking.check_in,
+        'check_out': booking.check_out,
+        'primary_folio_id': folio.id if folio else None,
+        'folio_balance': _to_currency(folio_summary.get('balance')),
+        'folio_deposits': _to_currency(folio_summary.get('deposits')),
+        'folio_payments': _to_currency(folio_summary.get('payments')),
+    }
+
+
+def _folio_work_item(folio: BookingFolio) -> dict:
+    summary = folio_balance_summary(folio)
+    booking = folio.booking
+    guest = folio.guest
+    return {
+        'id': folio.id,
+        'folio_no': folio.folio_no,
+        'booking_id': folio.booking_id,
+        'booking_ref': f'BOOK-{folio.booking_id}',
+        'guest_name': guest.full_name if guest else (booking.guest_name if booking else ''),
+        'room_name': booking.room_name if booking else '',
+        'status': folio.status,
+        'charges': _to_currency(summary.get('charges')),
+        'payments': _to_currency(summary.get('payments')),
+        'deposits': _to_currency(summary.get('deposits')),
+        'balance': _to_currency(summary.get('balance')),
+    }
+
+
+def _line_work_item(line: BookingFolioLine) -> dict:
+    folio = line.folio
+    booking = folio.booking if folio else None
+    guest = folio.guest if folio else None
+    return {
+        'id': line.id,
+        'folio_id': line.folio_id,
+        'folio_no': folio.folio_no if folio else '',
+        'booking_id': folio.booking_id if folio else None,
+        'guest_name': guest.full_name if guest else (booking.guest_name if booking else ''),
+        'room_name': booking.room_name if booking else '',
+        'line_type': line.line_type,
+        'description': line.description,
+        'amount': _to_currency(line.amount),
+        'transaction_date': line.transaction_date,
+        'reference_no': line.reference_no,
+        'external_source': line.external_source,
     }
 
 
@@ -146,7 +213,11 @@ def summary(db: Session = Depends(get_db), user=Depends(require_permissions('das
 
     open_folios = (
         db.query(BookingFolio)
-        .options(selectinload(BookingFolio.lines))
+        .options(
+            selectinload(BookingFolio.lines),
+            selectinload(BookingFolio.booking).selectinload(Booking.room),
+            selectinload(BookingFolio.guest),
+        )
         .filter(BookingFolio.status.in_(['open', 'reviewed']))
         .all()
     )
@@ -209,6 +280,82 @@ def summary(db: Session = Depends(get_db), user=Depends(require_permissions('das
     )
 
     revenue_today = _to_currency(room_revenue_today + sales_today_total)
+
+    booking_load = (
+        selectinload(Booking.folios).selectinload(BookingFolio.lines),
+        selectinload(Booking.room),
+    )
+    active_stay_statuses = ['confirmed', 'checked_in']
+    arrival_rows = (
+        db.query(Booking)
+        .options(*booking_load)
+        .filter(Booking.check_in == today, Booking.status.in_(active_stay_statuses))
+        .order_by(Booking.room_name.asc(), Booking.id.asc())
+        .limit(10)
+        .all()
+    )
+    in_house_rows = (
+        db.query(Booking)
+        .options(*booking_load)
+        .filter(
+            or_(
+                Booking.status == 'checked_in',
+                and_(
+                    Booking.check_in <= today,
+                    Booking.check_out > today,
+                    Booking.status.in_(['confirmed', 'checked_in']),
+                ),
+            )
+        )
+        .order_by(Booking.room_name.asc(), Booking.check_out.asc(), Booking.id.asc())
+        .limit(12)
+        .all()
+    )
+    departure_rows = (
+        db.query(Booking)
+        .options(*booking_load)
+        .filter(Booking.check_out == today, Booking.status.in_(active_stay_statuses))
+        .order_by(Booking.room_name.asc(), Booking.id.asc())
+        .limit(10)
+        .all()
+    )
+    open_folio_alerts = [
+        _folio_work_item(folio)
+        for folio in sorted(open_folios, key=lambda row: abs(float(folio_balance_summary(row).get('balance') or 0)), reverse=True)
+        if abs(float(folio_balance_summary(folio).get('balance') or 0)) > 0.0001
+    ][:10]
+    payment_review_rows = (
+        db.query(BookingFolioLine)
+        .options(
+            selectinload(BookingFolioLine.folio).selectinload(BookingFolio.booking),
+            selectinload(BookingFolioLine.folio).selectinload(BookingFolio.guest),
+        )
+        .filter(BookingFolioLine.line_type.in_(['deposit', 'payment', 'refund', 'reversal']))
+        .order_by(BookingFolioLine.id.desc())
+        .limit(10)
+        .all()
+    )
+    room_charge_review_rows = (
+        db.query(BookingFolioLine)
+        .options(
+            selectinload(BookingFolioLine.folio).selectinload(BookingFolio.booking),
+            selectinload(BookingFolioLine.folio).selectinload(BookingFolio.guest),
+        )
+        .filter(BookingFolioLine.line_type.in_([
+            'room_charge',
+            'package_charge',
+            'extra_person',
+            'extra_bed',
+            'breakfast_addon',
+            'minibar',
+            'cafe_room_charge',
+            'manual_charge',
+        ]))
+        .order_by(BookingFolioLine.id.desc())
+        .limit(10)
+        .all()
+    )
+    latest_beds24_sync = db.query(Beds24SyncLog).order_by(Beds24SyncLog.id.desc()).first()
 
     locked_bir_periods = int(
         db.query(PeriodLock)
@@ -338,4 +485,22 @@ def summary(db: Session = Depends(get_db), user=Depends(require_permissions('das
         'dashboard_widget_cards': widget_cards,
         'dashboard_widget_catalog': dashboard_widget_catalog(),
         'dashboard_allow_user_overrides': bool((settings.get('dashboard') or {}).get('allow_user_overrides', False)),
+        'command_center': {
+            'today': today,
+            'arrivals': [_booking_work_item(row) for row in arrival_rows],
+            'in_house': [_booking_work_item(row) for row in in_house_rows],
+            'departures': [_booking_work_item(row) for row in departure_rows],
+            'open_folio_alerts': open_folio_alerts,
+            'payment_review': [_line_work_item(row) for row in payment_review_rows],
+            'room_charge_review': [_line_work_item(row) for row in room_charge_review_rows],
+            'beds24_sync': None if not latest_beds24_sync else {
+                'id': latest_beds24_sync.id,
+                'event_type': latest_beds24_sync.event_type,
+                'source_type': latest_beds24_sync.source_type,
+                'status': latest_beds24_sync.status,
+                'message': latest_beds24_sync.message,
+                'processed_at': latest_beds24_sync.processed_at,
+                'booking_id': latest_beds24_sync.local_booking_id,
+            },
+        },
     }

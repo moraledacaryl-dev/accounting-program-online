@@ -7,7 +7,7 @@ import { getDashboard } from '../../lib/api';
 
 const WORKSPACES = [
   ['/workspace/rooms', 'Rooms & Guests', 'Bookings, room setup, guest profiles, folios'],
-  ['/workspace/events', 'Events', 'Event records, balances, deposits, and payment follow-up'],
+  ['/events', 'Events', 'Quotes, confirmations, deposits, balances, and completion'],
   ['/workspace/restaurant', 'Restaurant & F&B', 'Sales ops, menu/recipes, staff meals, outlets'],
   ['/workspace/inventory', 'Inventory & Purchasing', 'Stock, purchasing, receiving, and reconciliation'],
   ['/workspace/payroll', 'People & Payroll', 'Employees, attendance, payroll periods, approvals'],
@@ -33,8 +33,82 @@ function formatValue(value) {
   return String(value);
 }
 
+function currency(value) {
+  return Number(value || 0).toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+}
+
+function typeLabel(value) {
+  return String(value || '').replaceAll('_', ' ');
+}
+
 function toRowsFromWorkflowMap(map) {
   return Object.entries(map || {}).map(([workflow, pending]) => ({ workflow, pending }));
+}
+
+function BookingQueue({ title, rows, empty }) {
+  return (
+    <article className="card command-card">
+      <div className="row" style={{ justifyContent: 'space-between' }}>
+        <strong>{title}</strong>
+        <span className="badge">{rows.length}</span>
+      </div>
+      <div className="stack" style={{ marginTop: 10 }}>
+        {rows.map((row) => (
+          <Link key={`${title}-${row.id}`} href={`/bookings/${row.id}`} className="command-row">
+            <span>
+              <strong>{row.room_name || 'No room'} · {row.guest_name}</strong>
+              <small>{row.check_in || '-'} to {row.check_out || '-'} · {row.channel || 'Walk-in'}</small>
+            </span>
+            <span className="command-amount">{currency(row.folio_balance || 0)}</span>
+          </Link>
+        ))}
+        {!rows.length && <p className="small muted">{empty}</p>}
+      </div>
+    </article>
+  );
+}
+
+function FolioQueue({ rows }) {
+  return (
+    <article className="card command-card">
+      <div className="row" style={{ justifyContent: 'space-between' }}>
+        <strong>Open Folio Balances</strong>
+        <Link className="button-link secondary-link" href="/room-folios">All</Link>
+      </div>
+      <div className="stack" style={{ marginTop: 10 }}>
+        {rows.map((row) => (
+          <Link key={`folio-${row.id}`} href={`/room-folios/${row.id}`} className="command-row">
+            <span>
+              <strong>{row.room_name || row.folio_no} · {row.guest_name || '-'}</strong>
+              <small>{row.booking_ref} · deposits {currency(row.deposits || 0)} · payments {currency(row.payments || 0)}</small>
+            </span>
+            <span className="command-amount">{currency(row.balance || 0)}</span>
+          </Link>
+        ))}
+        {!rows.length && <p className="small muted">No open folio balances needing attention.</p>}
+      </div>
+    </article>
+  );
+}
+
+function FolioLineReview({ title, rows }) {
+  return (
+    <article className="card command-card">
+      <strong>{title}</strong>
+      <div className="stack" style={{ marginTop: 10 }}>
+        {rows.map((row) => (
+          <Link key={`${title}-${row.id}`} href={`/room-folios/${row.folio_id}`} className="command-row">
+            <span>
+              <strong>{typeLabel(row.line_type)} · {row.room_name || row.folio_no}</strong>
+              <small>{row.description || row.reference_no || '-'} · {row.external_source || 'manual'}</small>
+            </span>
+            <span className="command-amount">{currency(row.amount || 0)}</span>
+          </Link>
+        ))}
+        {!rows.length && <p className="small muted">No recent lines to review.</p>}
+      </div>
+    </article>
+  );
 }
 
 export default function DashboardPage() {
@@ -88,6 +162,7 @@ export default function DashboardPage() {
 
   const metricCards = widgetCards.filter((card) => card.type === 'metric');
   const tableCards = widgetCards.filter((card) => card.type === 'table');
+  const commandCenter = summary?.command_center || {};
 
   return (
     <div className="stack">
@@ -99,6 +174,30 @@ export default function DashboardPage() {
       </section>
 
       <StaffActionPanel title="Common Work" />
+
+      {!!summary && (
+        <section className="section">
+          <div className="row wrap" style={{ justifyContent: 'space-between', alignItems: 'flex-end' }}>
+            <div>
+              <h2>Today&apos;s Command Center</h2>
+              <p className="muted">Front desk money, stay movement, Beds24 sync, and cafe room-charge review in one place.</p>
+            </div>
+            {!!commandCenter.beds24_sync && (
+              <span className="badge">
+                Beds24 {commandCenter.beds24_sync.status}: {commandCenter.beds24_sync.event_type}
+              </span>
+            )}
+          </div>
+          <div className="card-grid command-grid" style={{ marginTop: 12 }}>
+            <BookingQueue title="Arrivals" rows={commandCenter.arrivals || []} empty="No arrivals loaded for today." />
+            <BookingQueue title="In-house" rows={commandCenter.in_house || []} empty="No in-house stays loaded." />
+            <BookingQueue title="Departures" rows={commandCenter.departures || []} empty="No departures loaded for today." />
+            <FolioQueue rows={commandCenter.open_folio_alerts || []} />
+            <FolioLineReview title="Deposits & Payments" rows={commandCenter.payment_review || []} />
+            <FolioLineReview title="Charges & Room Service" rows={commandCenter.room_charge_review || []} />
+          </div>
+        </section>
+      )}
 
       {!!summary && (
         <section className="section">

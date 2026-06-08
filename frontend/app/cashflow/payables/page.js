@@ -2,6 +2,7 @@
 
 import { useEffect, useState } from 'react';
 import CashflowTabs from '../../../components/cashflow/CashflowTabs';
+import InputActionModal from '../../../components/InputActionModal';
 import PayablesTable from '../../../components/cashflow/PayablesTable';
 import SettlementModal from '../../../components/cashflow/SettlementModal';
 import {
@@ -38,6 +39,7 @@ export default function PayablesPage() {
   const [rows, setRows] = useState([]);
   const [form, setForm] = useState({ ...EMPTY_FORM });
   const [paymentTarget, setPaymentTarget] = useState(null);
+  const [reverseTarget, setReverseTarget] = useState(null);
   const [paymentForm, setPaymentForm] = useState({ amount: '', financial_account_id: '', payment_method: 'cash', reference_no: '', notes: '', auto_post_accounting: false });
   const [editingId, setEditingId] = useState(null);
   const [error, setError] = useState('');
@@ -164,6 +166,23 @@ export default function PayablesPage() {
     }
   }
 
+  async function reversePayment(transactionIdRaw) {
+    const transactionId = Number(transactionIdRaw);
+    if (!Number.isFinite(transactionId) || transactionId <= 0) {
+      throw new Error('Enter a valid payment transaction ID.');
+    }
+    setError('');
+    setNotice('');
+    try {
+      await reversePayablePayment(reverseTarget.id, transactionId, { reason: 'Reversed from payables page' });
+      setNotice(`Payment transaction #${transactionId} reversed.`);
+      await load();
+    } catch (err) {
+      setError(err.message || 'Failed to reverse payment.');
+      throw err;
+    }
+  }
+
   function isSubmittable() {
     return !!(String(form.supplier_name || '').trim() && Number(form.gross_amount || 0) > 0);
   }
@@ -266,19 +285,7 @@ export default function PayablesPage() {
                   <button
                     type="button"
                     className="secondary"
-                    onClick={async () => {
-                      const txIdRaw = window.prompt('Payment transaction ID to reverse', '');
-                      if (txIdRaw === null) return;
-                      const txId = Number(txIdRaw);
-                      if (!Number.isFinite(txId) || txId <= 0) {
-                        setError('Invalid transaction id.');
-                        return;
-                      }
-                      await runAction(
-                        () => reversePayablePayment(row.id, txId, { reason: 'Reversed from payables page' }),
-                        `Payment transaction #${txId} reversed.`,
-                      );
-                    }}
+                    onClick={() => setReverseTarget(row)}
                   >
                     Reverse payment
                   </button>
@@ -303,6 +310,17 @@ export default function PayablesPage() {
         onClose={() => setPaymentTarget(null)}
         onSubmit={submitPayment}
         submitLabel="Pay Supplier"
+      />
+      <InputActionModal
+        open={!!reverseTarget}
+        title={`Reverse payment for bill #${reverseTarget?.id}?`}
+        description="Enter the payment transaction ID. This reverses that payment and recalculates the bill balance."
+        fieldLabel="Payment transaction ID"
+        inputType="number"
+        required
+        confirmLabel="Reverse Payment"
+        onClose={() => setReverseTarget(null)}
+        onConfirm={reversePayment}
       />
     </div>
   );

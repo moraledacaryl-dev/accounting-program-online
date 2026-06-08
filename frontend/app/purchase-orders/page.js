@@ -1,5 +1,6 @@
 'use client';
 
+import Link from 'next/link';
 import { useEffect, useMemo, useState } from 'react';
 import {
   createPurchaseOrder,
@@ -13,6 +14,7 @@ import {
   updatePurchaseOrderStatus,
 } from '../../lib/api';
 import { shouldPreventEnterSubmit } from '../../lib/formBehavior';
+import { useConfirmAction } from '../../components/ConfirmActionProvider';
 
 const EMPTY_LINE = {
   purchase_request_line_id: '',
@@ -41,6 +43,7 @@ function php(value) {
 }
 
 export default function PurchaseOrdersPage() {
+  const confirmAction = useConfirmAction();
   const [rows, setRows] = useState([]);
   const [suppliers, setSuppliers] = useState([]);
   const [purchaseRequests, setPurchaseRequests] = useState([]);
@@ -217,7 +220,7 @@ export default function PurchaseOrdersPage() {
   }
 
   async function removeRow(row) {
-    if (!window.confirm(`Delete PO ${row.po_no || row.id}?`)) return;
+    if (!await confirmAction({ title: `Delete PO ${row.po_no || row.id}?`, description: 'Only draft purchase orders should be removed. Issued orders should be cancelled.' })) return;
     setError('');
     try {
       await deletePurchaseOrder(row.id);
@@ -326,7 +329,7 @@ export default function PurchaseOrdersPage() {
                 </label>
                 <label>Description<input value={line.description} onChange={(e) => updateLine(index, { description: e.target.value })} /></label>
                 <label>Qty Ordered<input type="number" min="0" step="0.01" value={line.quantity_ordered} onChange={(e) => updateLine(index, { quantity_ordered: e.target.value })} /></label>
-                <label>Unit<input value={line.unit} onChange={(e) => updateLine(index, { unit: e.target.value })} /></label>
+                <label>Unit<input value={line.unit} readOnly={!!line.inventory_item_id} onChange={(e) => updateLine(index, { unit: e.target.value })} /></label>
                 <label>Unit Cost<input type="number" min="0" step="0.01" value={line.unit_cost} onChange={(e) => updateLine(index, { unit_cost: e.target.value })} /></label>
                 <label>Notes<input value={line.notes} onChange={(e) => updateLine(index, { notes: e.target.value })} /></label>
                 <div className="row" style={{ alignItems: 'end' }}>
@@ -359,9 +362,12 @@ export default function PurchaseOrdersPage() {
                 <td>{Number(row.progress_received_qty || 0).toLocaleString()} / {Number(row.progress_ordered_qty || 0).toLocaleString()}</td>
                 <td>{php(row.total_amount || 0)}</td>
                 <td className="row wrap">
-                  <button type="button" className="secondary" onClick={() => editRow(row)}>Edit</button>
-                  <button type="button" className="secondary" onClick={() => setStatus(row, 'issued')}>Issue</button>
-                  <button type="button" className="secondary" onClick={() => setStatus(row, 'cancelled')}>Cancel</button>
+	                  <button type="button" className="secondary" onClick={() => editRow(row)}>Edit</button>
+	                  <button type="button" className="secondary" onClick={() => setStatus(row, 'issued')}>Issue</button>
+	                  {row.status !== 'cancelled' && row.status !== 'fully_received' && (
+	                    <Link className="button-link secondary-link" href={`/receiving?po_id=${row.id}`}>Receive</Link>
+	                  )}
+	                  <button type="button" className="secondary" onClick={() => setStatus(row, 'cancelled')}>Cancel</button>
                   <button type="button" className="secondary" onClick={() => removeRow(row)}>Delete</button>
                 </td>
               </tr>

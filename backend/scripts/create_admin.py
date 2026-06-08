@@ -6,7 +6,8 @@ import getpass
 import os
 
 import app.models  # noqa: F401
-from app.db.database import Base, SessionLocal, engine
+from app.core.migrations import ensure_database_ready
+from app.db.database import SessionLocal, engine
 from app.models.entities import User
 from app.services.auth_service import hash_password
 from app.services.permission_service import assign_user_roles, ensure_permissions_seed, list_roles
@@ -24,7 +25,7 @@ def main() -> int:
     if len(password) < 12:
         raise SystemExit('Admin password must be at least 12 characters.')
 
-    Base.metadata.create_all(bind=engine)
+    ensure_database_ready(engine)
     with SessionLocal() as db:
         ensure_permissions_seed(db)
         user = db.query(User).filter(User.username == args.username).first()

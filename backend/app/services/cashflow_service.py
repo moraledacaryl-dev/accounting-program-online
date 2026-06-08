@@ -16,6 +16,7 @@ from app.models.entities import (
     MoneyTransaction,
     Payable,
     Receivable,
+    ReceivableAdjustment,
 )
 from app.schemas.cashflow import (
     AccountTransferUpdate,
@@ -213,6 +214,8 @@ def _serialize_money_transaction(row: MoneyTransaction) -> dict:
         'posted_at': row.posted_at,
         'created_by': row.created_by,
         'approved_by': row.approved_by,
+        'external_source': row.external_source,
+        'external_id': row.external_id,
         'created_at': row.created_at.isoformat() if row.created_at else None,
         'updated_at': row.updated_at.isoformat() if row.updated_at else None,
     }
@@ -238,6 +241,8 @@ def _serialize_transfer(row: AccountTransfer) -> dict:
         'posted_at': row.posted_at,
         'created_by': row.created_by,
         'approved_by': row.approved_by,
+        'external_source': row.external_source,
+        'external_id': row.external_id,
         'created_at': row.created_at.isoformat() if row.created_at else None,
         'updated_at': row.updated_at.isoformat() if row.updated_at else None,
     }
@@ -281,6 +286,10 @@ def _serialize_reconciliation(row: CashReconciliation) -> dict:
 
 
 def _serialize_receivable(row: Receivable) -> dict:
+    adjustments = list(row.adjustments or [])
+    sorted_adjustments = sorted(adjustments, key=lambda item: (item.adjustment_date or '', item.id or 0))
+    latest_adjustment = sorted_adjustments[-1] if sorted_adjustments else None
+    adjustments_total = round(sum(float(item.amount or 0) for item in adjustments), 4)
     return {
         'id': row.id,
         'source_type': row.source_type,
@@ -297,6 +306,26 @@ def _serialize_receivable(row: Receivable) -> dict:
         'closed_at': row.closed_at,
         'notes': row.notes,
         'bir_include': bool(row.bir_include),
+        'external_source': row.external_source,
+        'external_id': row.external_id,
+        'adjustment_amount': adjustments_total,
+        'adjustments_total': adjustments_total,
+        'adjustments_count': len(adjustments),
+        'latest_adjustment_date': latest_adjustment.adjustment_date if latest_adjustment else None,
+        'latest_adjustment_source_type': latest_adjustment.source_type if latest_adjustment else None,
+        'adjustments': [
+            {
+                'id': item.id,
+                'adjustment_date': item.adjustment_date,
+                'amount': float(item.amount or 0),
+                'source_type': item.source_type,
+                'source_id': item.source_id,
+                'external_source': item.external_source,
+                'external_id': item.external_id,
+                'notes': item.notes,
+            }
+            for item in adjustments
+        ],
         'created_at': row.created_at.isoformat() if row.created_at else None,
         'updated_at': row.updated_at.isoformat() if row.updated_at else None,
     }
@@ -660,7 +689,10 @@ def _update_receivable_balance(db: Session, receivable_id: int):
     if not receivable:
         raise ValueError('Linked receivable not found.')
     receivable.amount_collected = round(float(receivable.amount_collected or 0), 4)
-    receivable.balance_due = round(float(receivable.gross_amount or 0) - float(receivable.amount_collected or 0), 4)
+    adjustment_total = db.query(func.coalesce(func.sum(ReceivableAdjustment.amount), 0)).filter(
+        ReceivableAdjustment.receivable_id == receivable.id
+    ).scalar() or 0
+    receivable.balance_due = round(float(receivable.gross_amount or 0) + float(adjustment_total) - float(receivable.amount_collected or 0), 4)
     if receivable.balance_due <= 0.0001:
         receivable.balance_due = 0.0
         receivable.status = 'settled'
@@ -824,6 +856,15 @@ def _create_linked_record(
 
 def create_money_transaction(db: Session, payload: MoneyTransactionCreate, username: str | None = None):
     ensure_default_financial_accounts(db)
+    external_source = (payload.external_source or '').strip() or None
+    external_id = (payload.external_id or '').strip() or None
+    if external_source and external_id:
+        existing = db.query(MoneyTransaction).options(selectinload(MoneyTransaction.financial_account)).filter(
+            MoneyTransaction.external_source == external_source,
+            MoneyTransaction.external_id == external_id,
+        ).first()
+        if existing:
+            return _serialize_money_transaction(existing)
 
     direction = _normalize(payload.direction)
     if direction not in {'in', 'out'}:
@@ -875,6 +916,8 @@ def create_money_transaction(db: Session, payload: MoneyTransactionCreate, usern
         posted_at=tx_date if tx_status == 'posted' else None,
         created_by=username,
         approved_by=username if tx_status in {'approved', 'posted'} else None,
+        external_source=external_source,
+        external_id=external_id,
     )
 
     db.add(tx)
@@ -1229,6 +1272,18 @@ def delete_money_transaction(db: Session, tx_id: int):
 
 def create_transfer(db: Session, payload: AccountTransferCreate, username: str | None = None):
     ensure_default_financial_accounts(db)
+    external_source = (payload.external_source or '').strip() or None
+    external_id = (payload.external_id or '').strip() or None
+    if external_source and external_id:
+        existing = db.query(AccountTransfer).options(
+            selectinload(AccountTransfer.from_account),
+            selectinload(AccountTransfer.to_account),
+        ).filter(
+            AccountTransfer.external_source == external_source,
+            AccountTransfer.external_id == external_id,
+        ).first()
+        if existing:
+            return _serialize_transfer(existing)
 
     amount = _as_float(payload.amount)
     if amount <= 0:
@@ -1263,6 +1318,8 @@ def create_transfer(db: Session, payload: AccountTransferCreate, username: str |
         posted_at=transfer_date if transfer_status == 'posted' else None,
         created_by=username,
         approved_by=username if transfer_status in {'approved', 'posted'} else None,
+        external_source=external_source,
+        external_id=external_id,
     )
     db.add(row)
     db.flush()
@@ -1821,13 +1878,68 @@ def reverse_cash_reconciliation(db: Session, reconciliation_id: int, payload: Ca
 def create_receivable(db: Session, payload: ReceivableCreate):
     gross_amount = _as_float(payload.gross_amount)
     amount_collected = max(_as_float(payload.amount_collected), 0)
+    source_type = (payload.source_type or '').strip() or None
+    external_source = (payload.external_source or '').strip() or None
+    external_id = (payload.external_id or '').strip() or None
+    if external_source and external_id:
+        existing = db.query(Receivable).filter(
+            Receivable.external_source == external_source,
+            Receivable.external_id == external_id,
+        ).first()
+        if existing:
+            return _serialize_receivable(existing)
+        existing_adjustment = db.query(ReceivableAdjustment).filter(
+            ReceivableAdjustment.external_source == external_source,
+            ReceivableAdjustment.external_id == external_id,
+        ).first()
+        if existing_adjustment:
+            return _serialize_receivable(existing_adjustment.receivable)
+
+    if gross_amount < 0:
+        reverse_type = (payload.reverses_source_type or '').strip()
+        if not reverse_type or not payload.reverses_source_id:
+            raise ValueError('Negative receivables require reverses_source_type and reverses_source_id.')
+        if source_type != 'pos_room_charge_reversal' or reverse_type != 'pos_room_charge':
+            raise ValueError('Negative receivables are only allowed for POS room-charge reversals.')
+        original = db.query(Receivable).filter(
+            Receivable.source_type == reverse_type,
+            Receivable.source_id == int(payload.reverses_source_id),
+        ).first()
+        if not original:
+            raise ValueError('Original receivable for reversal was not found.')
+        duplicate = db.query(ReceivableAdjustment).filter(
+            ReceivableAdjustment.source_type == source_type,
+            ReceivableAdjustment.source_id == payload.source_id,
+        ).first()
+        if duplicate:
+            return _serialize_receivable(duplicate.receivable)
+        current_balance = float(original.balance_due or 0)
+        if abs(gross_amount) - current_balance > 0.0001:
+            raise ValueError('Receivable reversal exceeds the remaining balance.')
+        adjustment = ReceivableAdjustment(
+            receivable_id=original.id,
+            adjustment_date=_safe_date(payload.transaction_date),
+            amount=gross_amount,
+            source_type=source_type,
+            source_id=payload.source_id,
+            external_source=external_source,
+            external_id=external_id,
+            notes=payload.notes,
+        )
+        db.add(adjustment)
+        db.flush()
+        _update_receivable_balance(db, original.id)
+        db.commit()
+        db.refresh(original)
+        return _serialize_receivable(original)
+
     if gross_amount <= 0:
         raise ValueError('gross_amount must be greater than zero.')
     if amount_collected > gross_amount:
         raise ValueError('amount_collected cannot exceed gross_amount.')
 
     row = Receivable(
-        source_type=(payload.source_type or '').strip() or None,
+        source_type=source_type,
         source_id=payload.source_id,
         counterparty_name=(payload.counterparty_name or '').strip(),
         receivable_type=(payload.receivable_type or 'guest_balance').strip() or 'guest_balance',
@@ -1840,6 +1952,8 @@ def create_receivable(db: Session, payload: ReceivableCreate):
         closed_at=None,
         notes=payload.notes,
         bir_include=bool(payload.bir_include),
+        external_source=external_source,
+        external_id=external_id,
     )
     db.add(row)
     db.flush()

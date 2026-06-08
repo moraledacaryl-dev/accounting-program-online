@@ -4,6 +4,7 @@ import { useEffect, useMemo, useState } from 'react';
 import {
   createSettlement,
   fetchAgingReport,
+  fetchFinancialStatements,
   fetchManagementCsv,
   fetchManagementReport,
   fetchSettlements,
@@ -28,13 +29,42 @@ function number(value) {
   return Number(value || 0).toLocaleString();
 }
 
+function readinessTone(status) {
+  if (status === 'ready') return 'success';
+  if (status === 'blocked') return 'danger';
+  return 'warn';
+}
+
+function StatementTable({ title, rows = [], amountLabel = 'Balance' }) {
+  return (
+    <section className="section">
+      <h2>{title}</h2>
+      <table className="table dense-table">
+        <thead><tr><th>Account</th><th>Type</th><th>{amountLabel}</th></tr></thead>
+        <tbody>
+          {rows.map((row) => (
+            <tr key={`${title}-${row.account_code}-${row.account_name}`}>
+              <td>{row.account_code || '-'} · {row.account_name || '-'}</td>
+              <td>{row.family || row.account_type || '-'}</td>
+              <td>{currency(row.balance)}</td>
+            </tr>
+          ))}
+          {!rows.length && <tr><td colSpan="3" className="muted">No statement lines for this period.</td></tr>}
+        </tbody>
+      </table>
+    </section>
+  );
+}
+
 export default function ReportsPage() {
+  const [activeView, setActiveView] = useState('overview');
   const [filters, setFilters] = useState({
     start_date: monthStartISO(),
     end_date: todayISO(),
     as_of_date: todayISO(),
   });
   const [report, setReport] = useState(null);
+  const [statements, setStatements] = useState(null);
   const [aging, setAging] = useState(null);
   const [settlements, setSettlements] = useState([]);
   const [notice, setNotice] = useState('');
@@ -50,15 +80,21 @@ export default function ReportsPage() {
   });
 
   async function load() {
-    const [reportData, agingData, settlementRows] = await Promise.all([
+    const [reportData, statementData, agingData, settlementRows] = await Promise.all([
       fetchManagementReport({
         startDate: filters.start_date || '',
         endDate: filters.end_date || '',
+      }),
+      fetchFinancialStatements({
+        startDate: filters.start_date || '',
+        endDate: filters.end_date || '',
+        asOfDate: filters.as_of_date || '',
       }),
       fetchAgingReport(filters.as_of_date || ''),
       fetchSettlements({ limit: 200 }),
     ]);
     setReport(reportData || null);
+    setStatements(statementData || null);
     setAging(agingData || null);
     setSettlements(Array.isArray(settlementRows) ? settlementRows : []);
   }
@@ -161,6 +197,40 @@ export default function ReportsPage() {
           <button onClick={reloadFromFilters}>Refresh</button>
           <button className="secondary" onClick={exportCsv}>Export Management CSV</button>
         </div>
+        <div className="tabs">
+          {[
+            ['overview', 'Overview'],
+            ['statements', 'Financial Statements'],
+            ['operations', 'Rooms, F&B & Inventory'],
+            ['finance', 'AR, AP & Settlements'],
+            ['payroll', 'Payroll & BIR'],
+          ].map(([value, label]) => <button key={value} type="button" className={activeView === value ? 'tab active' : 'tab'} onClick={() => setActiveView(value)}>{label}</button>)}
+        </div>
+      </section>
+
+      <div hidden={activeView !== 'overview'}>
+      <section className="section">
+        <h2>Close Readiness</h2>
+        <div className="row wrap">
+          <span className={`badge ${readinessTone(report?.close_readiness?.status)}`}>Status {report?.close_readiness?.status || 'checking'}</span>
+          <span className="badge">Score {number(report?.close_readiness?.score)} / 100</span>
+          <span className={`badge ${report?.close_readiness?.can_close ? 'success' : 'danger'}`}>{report?.close_readiness?.can_close ? 'Close allowed' : 'Close blocked'}</span>
+        </div>
+        <p className="muted">{report?.close_readiness?.summary || 'Refresh the report to calculate close readiness.'}</p>
+        <table className="table dense-table" style={{ marginTop: 10 }}>
+          <thead><tr><th>Check</th><th>Count</th><th>Status</th><th>Action</th></tr></thead>
+          <tbody>
+            {(report?.close_readiness?.checks || []).map((row) => (
+              <tr key={row.key}>
+                <td>{row.label}</td>
+                <td>{number(row.value)}</td>
+                <td><span className={`badge ${row.passed ? 'success' : row.severity === 'critical' ? 'danger' : row.severity === 'warning' ? 'warn' : 'info'}`}>{row.passed ? 'OK' : row.severity}</span></td>
+                <td>{row.action}</td>
+              </tr>
+            ))}
+            {!report?.close_readiness?.checks?.length && <tr><td colSpan="4" className="muted">No close-readiness checks loaded.</td></tr>}
+          </tbody>
+        </table>
       </section>
 
       <section className="section">
@@ -211,7 +281,126 @@ export default function ReportsPage() {
           </tbody>
         </table>
       </section>
+      </div>
 
+      <div hidden={activeView !== 'statements'}>
+        <section className="section">
+          <h2>Formal Financial Statements</h2>
+          <p className="muted">Generated from posted journal entries, with cashflow transactions and operational subledgers shown as supporting schedules.</p>
+          <div className="row wrap">
+            <span className="badge">Period {statements?.period?.start_date || 'all'} to {statements?.period?.end_date || 'latest'}</span>
+            <span className="badge">As of {statements?.period?.as_of_date || '-'}</span>
+            <span className="badge">TB Balanced {String(!!statements?.trial_balance?.totals?.is_balanced)}</span>
+            <span className="badge">BS Check {currency(statements?.balance_sheet?.totals?.balance_check)}</span>
+          </div>
+        </section>
+
+        <div className="grid">
+          <section className="section">
+            <h2>Profit & Loss</h2>
+            <div className="row wrap">
+              <span className="badge">Revenue {currency(statements?.profit_and_loss?.totals?.revenue)}</span>
+              <span className="badge">Expenses {currency(statements?.profit_and_loss?.totals?.expenses)}</span>
+              <span className="badge">Net Income {currency(statements?.profit_and_loss?.totals?.net_income)}</span>
+            </div>
+            <table className="table dense-table" style={{ marginTop: 10 }}>
+              <thead><tr><th>Account</th><th>Type</th><th>Amount</th></tr></thead>
+              <tbody>
+                {[...(statements?.profit_and_loss?.revenue || []), ...(statements?.profit_and_loss?.expenses || [])].map((row) => (
+                  <tr key={`pl-${row.account_code}-${row.account_name}`}>
+                    <td>{row.account_code} · {row.account_name}</td>
+                    <td>{row.family}</td>
+                    <td>{currency(row.balance)}</td>
+                  </tr>
+                ))}
+                {!statements?.profit_and_loss && <tr><td colSpan="3" className="muted">No Profit & Loss data loaded.</td></tr>}
+              </tbody>
+            </table>
+          </section>
+
+          <section className="section">
+            <h2>Cash Flow</h2>
+            <div className="row wrap">
+              <span className="badge">Cash In {currency(statements?.cash_flow?.totals?.cash_in)}</span>
+              <span className="badge">Cash Out {currency(statements?.cash_flow?.totals?.cash_out)}</span>
+              <span className="badge">Net Cash Flow {currency(statements?.cash_flow?.totals?.net_cash_flow)}</span>
+              <span className="badge">Transfers {currency(statements?.cash_flow?.transfers?.gross_transfer_amount)}</span>
+            </div>
+            <table className="table dense-table" style={{ marginTop: 10 }}>
+              <thead><tr><th>Activity</th><th>Category</th><th>In</th><th>Out</th><th>Net</th></tr></thead>
+              <tbody>
+                {(statements?.cash_flow?.operating_activities || []).map((row) => (
+                  <tr key={`cf-${row.activity}-${row.category}`}>
+                    <td>{row.activity}</td>
+                    <td>{row.category}</td>
+                    <td>{currency(row.cash_in)}</td>
+                    <td>{currency(row.cash_out)}</td>
+                    <td>{currency(row.net)}</td>
+                  </tr>
+                ))}
+                {!statements?.cash_flow?.operating_activities?.length && <tr><td colSpan="5" className="muted">No posted cash transactions in this period.</td></tr>}
+              </tbody>
+            </table>
+          </section>
+        </div>
+
+        <div className="grid">
+          <StatementTable title="Balance Sheet Assets" rows={statements?.balance_sheet?.assets || []} />
+          <StatementTable title="Balance Sheet Liabilities" rows={statements?.balance_sheet?.liabilities || []} />
+        </div>
+        <div className="grid">
+          <StatementTable title="Balance Sheet Equity" rows={statements?.balance_sheet?.equity || []} />
+          <section className="section">
+            <h2>Balance Sheet Totals</h2>
+            <table className="table dense-table">
+              <tbody>
+                <tr><td>Assets</td><td>{currency(statements?.balance_sheet?.totals?.assets)}</td></tr>
+                <tr><td>Liabilities</td><td>{currency(statements?.balance_sheet?.totals?.liabilities)}</td></tr>
+                <tr><td>Equity</td><td>{currency(statements?.balance_sheet?.totals?.equity)}</td></tr>
+                <tr><td>Liabilities + Equity</td><td>{currency(statements?.balance_sheet?.totals?.liabilities_and_equity)}</td></tr>
+                <tr><td>Balance Check</td><td>{currency(statements?.balance_sheet?.totals?.balance_check)}</td></tr>
+              </tbody>
+            </table>
+          </section>
+        </div>
+
+        <section className="section">
+          <h2>Trial Balance</h2>
+          <div className="row wrap">
+            <span className="badge">Debit {currency(statements?.trial_balance?.totals?.debit)}</span>
+            <span className="badge">Credit {currency(statements?.trial_balance?.totals?.credit)}</span>
+            <span className="badge">Variance {currency(statements?.trial_balance?.totals?.variance)}</span>
+          </div>
+          <table className="table dense-table" style={{ marginTop: 10 }}>
+            <thead><tr><th>Account</th><th>Debit</th><th>Credit</th><th>Balance</th></tr></thead>
+            <tbody>
+              {(statements?.trial_balance?.lines || []).map((row) => (
+                <tr key={`tb-${row.account_code}-${row.account_name}`}>
+                  <td>{row.account_code || '-'} · {row.account_name || '-'}</td>
+                  <td>{currency(row.debit)}</td>
+                  <td>{currency(row.credit)}</td>
+                  <td>{currency(row.balance)}</td>
+                </tr>
+              ))}
+              {!statements?.trial_balance?.lines?.length && <tr><td colSpan="4" className="muted">No journal lines as of this date.</td></tr>}
+            </tbody>
+          </table>
+        </section>
+
+        <section className="section">
+          <h2>Operational Supplement</h2>
+          <div className="row wrap">
+            <span className="badge">Cash Position {currency(statements?.operational_supplement?.cash_position?.total)}</span>
+            <span className="badge">AR Balance {currency(statements?.operational_supplement?.receivables?.balance_due)}</span>
+            <span className="badge">AP Balance {currency(statements?.operational_supplement?.payables?.balance_due)}</span>
+            <span className="badge">Inventory {currency(statements?.operational_supplement?.inventory?.valuation)}</span>
+            <span className="badge">Assets NBV {currency(statements?.operational_supplement?.assets?.net_book_value)}</span>
+          </div>
+          <p className="muted">{(statements?.notes || []).join(' ')}</p>
+        </section>
+      </div>
+
+      <div hidden={activeView !== 'operations'}>
       <div className="grid">
         <section className="section">
           <h2>Rooms Snapshot</h2>
@@ -339,7 +528,9 @@ export default function ReportsPage() {
           </table>
         </section>
       </div>
+      </div>
 
+      <div hidden={activeView !== 'payroll'}>
       <div className="grid">
         <section className="section">
           <h2>Payroll & Labor</h2>
@@ -383,7 +574,9 @@ export default function ReportsPage() {
           </table>
         </section>
       </div>
+      </div>
 
+      <div hidden={activeView !== 'finance'}>
       <div className="grid">
         <section className="section">
           <h2>AR Aging</h2>
@@ -497,6 +690,7 @@ export default function ReportsPage() {
             </tbody>
           </table>
         </section>
+      </div>
       </div>
     </div>
   );

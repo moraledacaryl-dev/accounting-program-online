@@ -34,6 +34,8 @@ POSITIVE_FOLIO_TYPES = {
     'extra_person',
     'extra_bed',
     'breakfast_addon',
+    'minibar',
+    'cafe_room_charge',
     'manual_charge',
 }
 NEGATIVE_FOLIO_TYPES = {'deposit', 'payment', 'refund', 'reversal'}

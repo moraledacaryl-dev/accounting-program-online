@@ -1,8 +1,10 @@
 'use client';
 import { useEffect, useMemo, useState } from 'react';
 import { createMasterValue, deleteMasterValue, fetchMasterValues, updateMasterValue } from '../lib/api';
+import { useConfirmAction } from './ConfirmActionProvider';
 
 export default function SetupGroupsManager({ groups = [] }) {
+  const confirmAction = useConfirmAction();
   const [rows, setRows] = useState([]);
   const [drafts, setDrafts] = useState({});
   const [editingId, setEditingId] = useState(null);
@@ -80,7 +82,7 @@ export default function SetupGroupsManager({ groups = [] }) {
                       ) : (
                         <>
                           <button className="secondary" type="button" onClick={() => { setEditingId(row.id); setEditDraft({ value: row.value || '', code: row.code || '', group_name: row.group_name || '' }); }}>Edit</button>
-                          <button className="secondary" type="button" onClick={async () => { await deleteMasterValue(row.id); await load(); }}>Delete</button>
+                          <button className="secondary" type="button" onClick={async () => { if (await confirmAction({ title: `Delete ${row.value}?`, description: 'Remove only setup values that are no longer used by operational records.' })) { await deleteMasterValue(row.id); await load(); } }}>Delete</button>
                         </>
                       )}
                     </td>

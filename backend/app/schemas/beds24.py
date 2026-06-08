@@ -55,6 +55,13 @@ class Beds24BackfillPayload(BaseModel):
     request_delay_seconds: float = Field(default=4, ge=0, le=30)
 
 
+class Beds24FolioLineReclassifyPayload(BaseModel):
+    dry_run: bool = True
+    include_manual_source: bool = False
+    include_payment_lines: bool = True
+    limit: int = Field(default=5000, ge=1, le=50000)
+
+
 class Beds24WebhookPayload(BaseModel):
     event_type: str | None = None
     booking_id: str | None = None

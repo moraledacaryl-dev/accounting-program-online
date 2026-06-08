@@ -3,8 +3,8 @@
 import Link from 'next/link';
 import { usePathname } from 'next/navigation';
 import { useEffect, useMemo, useState } from 'react';
-import { me } from '../lib/api';
 import { canAccess } from '../lib/permissions';
+import { useCurrentUser } from '../lib/useCurrentUser';
 
 const groups = [
   {
@@ -12,14 +12,14 @@ const groups = [
     items: [
       { href: '/dashboard', label: 'Dashboard', permissionsAny: ['dashboard.view'] },
       { href: '/start-of-day', label: 'Start of Day', permissionsAny: ['dashboard.view', 'cashflow.view'] },
-      { href: '/staff-guide', label: 'Staff Guide', permissionsAny: [] },
+      { href: '/staff-guide', label: 'Staff Guide', permissionsAny: ['dashboard.view', 'cashflow.view', 'bookings.view', 'guests.view', 'folios.view', 'inventory.view', 'receiving.view', 'payroll_periods.view', 'restaurant.view'] },
     ],
   },
   {
     label: 'Workspaces',
     items: [
       { href: '/workspace/rooms', label: 'Rooms & Guests', permissionsAny: ['bookings.view', 'guests.view', 'folios.view'] },
-      { href: '/workspace/events', label: 'Events', permissionsAny: ['bookings.view', 'cashflow.view'] },
+      { href: '/events', label: 'Events', permissionsAny: ['events.view', 'bookings.view', 'cashflow.view'] },
       { href: '/workspace/restaurant', label: 'Restaurant & F&B', permissionsAny: ['restaurant.view', 'menu.view', 'staff_meals.view'] },
       { href: '/workspace/inventory', label: 'Inventory & Purchasing', permissionsAny: ['inventory.view', 'suppliers.view', 'purchase_requests.view', 'purchase_orders.view', 'receiving.view'] },
       { href: '/workspace/payroll', label: 'People & Payroll', permissionsAny: ['employees.view', 'attendance.view', 'payroll_periods.view', 'approvals.view'] },
@@ -65,7 +65,7 @@ function hasAnyPermission(user, keys = []) {
 export default function Sidebar() {
   const pathname = usePathname();
   const [collapsed, setCollapsed] = useState(false);
-  const [currentUser, setCurrentUser] = useState(null);
+  const { user: currentUser } = useCurrentUser();
 
   useEffect(() => {
     if (typeof window === 'undefined') return;
@@ -80,10 +80,6 @@ export default function Sidebar() {
       window.localStorage.setItem(SIDEBAR_KEY, collapsed ? '1' : '0');
     }
   }, [collapsed]);
-
-  useEffect(() => {
-    me().then(setCurrentUser).catch(() => setCurrentUser(null));
-  }, []);
 
   const visibleGroups = useMemo(() => {
     return groups

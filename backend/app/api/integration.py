@@ -14,6 +14,7 @@ def integration_status(db: Session = Depends(get_db)):
     default_admin_exists = db.query(User).filter(User.username == 'admin').count() > 0
     integration_user_exists = db.query(User).filter(User.username == settings.integration_username).count() > 0
     financial_accounts = list_financial_accounts(db)
+    security_warnings = settings.security_warnings
 
     return {
         'ok': True,
@@ -23,6 +24,11 @@ def integration_status(db: Session = Depends(get_db)):
         'database_url': settings.database_url if settings.database_url.startswith('sqlite') else 'configured',
         'bootstrap_enabled': settings.bootstrap_enabled,
         'integration_enabled': settings.integration_enabled,
+        'security': {
+            'production_ready': not security_warnings,
+            'warning_count': len(security_warnings),
+            'warnings': [] if settings.is_production else security_warnings,
+        },
         'default_admin_exists': default_admin_exists,
         'integration_user_exists': integration_user_exists,
         'menu_item_count': menu_item_count,

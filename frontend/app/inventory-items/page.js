@@ -1,8 +1,10 @@
 'use client';
 import { useEffect, useMemo, useState } from 'react';
+import { useConfirmAction } from '../../components/ConfirmActionProvider';
 import { createInventoryItem, deleteInventoryItem, fetchInventoryItems, fetchMasterValues, updateInventoryItem } from '../../lib/api';
 
 export default function InventoryItemsPage() {
+  const confirmAction = useConfirmAction();
   const [rows, setRows] = useState([]);
   const [masterRows, setMasterRows] = useState([]);
   const [editingId, setEditingId] = useState(null);
@@ -158,7 +160,7 @@ export default function InventoryItemsPage() {
                     }}>
                       Edit
                     </button>
-                    <button className="secondary" onClick={async () => { if (confirm('Delete item?')) { await deleteInventoryItem(r.id); await load(); } }}>
+                    <button className="secondary" onClick={async () => { if (await confirmAction({ title: `Delete inventory item ${r.name}?`, description: 'Items with stock history or recipe usage should remain available for audit review.' })) { await deleteInventoryItem(r.id); await load(); } }}>
                       Delete
                     </button>
                   </td>

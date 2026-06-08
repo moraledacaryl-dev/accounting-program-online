@@ -97,7 +97,7 @@ export default function StaffMealsPage() {
       {
         inventory_item_id: inventoryItemId,
         quantity,
-        unit: ingredientDraft.unit || (inventoryById[inventoryItemId]?.unit || ''),
+        unit: inventoryById[inventoryItemId]?.unit || ingredientDraft.unit || '',
         notes: ingredientDraft.notes || null,
       },
     ]);
@@ -227,13 +227,16 @@ export default function StaffMealsPage() {
               </div>
               <div className="form-grid">
                 <label>Inventory Item
-                  <select value={ingredientDraft.inventory_item_id} onChange={e => setIngredientDraft(f => ({ ...f, inventory_item_id: e.target.value }))}>
+                  <select value={ingredientDraft.inventory_item_id} onChange={e => {
+                    const item = inventoryById[Number(e.target.value)];
+                    setIngredientDraft(f => ({ ...f, inventory_item_id: e.target.value, unit: item?.unit || '' }));
+                  }}>
                     <option value="">Select</option>
                     {inventoryItems.map(item => <option key={item.id} value={item.id}>{item.name}</option>)}
                   </select>
                 </label>
                 <label>Quantity<input type="number" min="0.0001" step="0.01" value={ingredientDraft.quantity} onChange={e => setIngredientDraft(f => ({ ...f, quantity: e.target.value }))} /></label>
-                <label>Unit<input value={ingredientDraft.unit} onChange={e => setIngredientDraft(f => ({ ...f, unit: e.target.value }))} /></label>
+                <label>Unit<input value={ingredientDraft.unit} readOnly placeholder="Choose ingredient first" /></label>
                 <label>Notes<input value={ingredientDraft.notes} onChange={e => setIngredientDraft(f => ({ ...f, notes: e.target.value }))} /></label>
                 <div className="align-end"><button type="button" onClick={addIngredientLine}>Add Ingredient</button></div>
               </div>

@@ -1,6 +1,7 @@
 'use client';
 
-import { useEffect, useMemo, useState } from 'react';
+import { Suspense, useEffect, useMemo, useState } from 'react';
+import { useSearchParams } from 'next/navigation';
 import {
   createReceivingRecord,
   deleteReceivingRecord,
@@ -13,6 +14,8 @@ import {
   updateReceivingStatus,
 } from '../../lib/api';
 import { shouldPreventEnterSubmit } from '../../lib/formBehavior';
+import ConfirmActionModal from '../../components/ConfirmActionModal';
+import { useConfirmAction } from '../../components/ConfirmActionProvider';
 
 const EMPTY_LINE = {
   purchase_order_line_id: '',
@@ -41,7 +44,9 @@ function php(value) {
   return Number(value || 0).toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 });
 }
 
-export default function ReceivingPage() {
+function ReceivingContent() {
+  const confirmAction = useConfirmAction();
+  const searchParams = useSearchParams();
   const [rows, setRows] = useState([]);
   const [suppliers, setSuppliers] = useState([]);
   const [purchaseOrders, setPurchaseOrders] = useState([]);
@@ -50,9 +55,11 @@ export default function ReceivingPage() {
   const [statusFilter, setStatusFilter] = useState('');
   const [editingId, setEditingId] = useState(null);
   const [form, setForm] = useState({ ...EMPTY_FORM });
+  const [prefilledPoId, setPrefilledPoId] = useState('');
 
   const [error, setError] = useState('');
   const [notice, setNotice] = useState('');
+  const [pendingStatusAction, setPendingStatusAction] = useState(null);
 
   async function load() {
     const [receivingData, supplierData, poData, itemData] = await Promise.all([
@@ -89,6 +96,16 @@ export default function ReceivingPage() {
     for (const row of purchaseOrders) map.set(row.id, row);
     return map;
   }, [purchaseOrders]);
+
+  useEffect(() => {
+    const poId = searchParams.get('po_id') || '';
+    if (!poId || prefilledPoId === poId || !purchaseOrders.length) return;
+    const po = poById.get(Number(poId));
+    if (!po) return;
+    populateLinesFromPo(poId);
+    setPrefilledPoId(poId);
+    setNotice(`Receiving prefilled from PO ${po.po_no || po.id}.`);
+  }, [searchParams, purchaseOrders, poById, prefilledPoId]);
 
   function updateLine(index, patch) {
     setForm((prev) => ({
@@ -221,7 +238,7 @@ export default function ReceivingPage() {
   }
 
   async function removeRow(row) {
-    if (!window.confirm(`Delete receiving ${row.receiving_no || row.id}?`)) return;
+    if (!await confirmAction({ title: `Delete receiving ${row.receiving_no || row.id}?`, description: 'Only draft receiving records should be removed. Posted deliveries must be reversed.' })) return;
     setError('');
     try {
       await deleteReceivingRecord(row.id);
@@ -236,14 +253,14 @@ export default function ReceivingPage() {
     }
   }
 
-  async function setStatus(row, status) {
+  async function setStatus(row, status, reason = '') {
     setError('');
     try {
       if (status === 'posted' && !(row.lines || []).length) {
         setError('Receiving cannot be posted without lines.');
         return;
       }
-      await updateReceivingStatus(row.id, { status, notes: `Status changed to ${status}`, auto_create_payable: true });
+      await updateReceivingStatus(row.id, { status, notes: reason || `Status changed to ${status}`, auto_create_payable: true });
       setNotice(`Receiving ${row.receiving_no || row.id} marked as ${status}.`);
       await load();
     } catch (err) {
@@ -297,7 +314,6 @@ export default function ReceivingPage() {
               <select value={form.status} onChange={(e) => setForm((prev) => ({ ...prev, status: e.target.value }))}>
                 <option value="draft">draft</option>
                 <option value="posted">posted</option>
-                <option value="reversed">reversed</option>
               </select>
             </label>
             <label>Reference No<input value={form.reference_no} onChange={(e) => setForm((prev) => ({ ...prev, reference_no: e.target.value }))} /></label>
@@ -337,7 +353,7 @@ export default function ReceivingPage() {
                 </label>
                 <label>Description<input value={line.description} onChange={(e) => updateLine(index, { description: e.target.value })} /></label>
                 <label>Qty Received<input type="number" min="0" step="0.01" value={line.quantity_received} onChange={(e) => updateLine(index, { quantity_received: e.target.value })} /></label>
-                <label>Unit<input value={line.unit} onChange={(e) => updateLine(index, { unit: e.target.value })} /></label>
+                <label>Unit<input value={line.unit} readOnly={!!line.inventory_item_id} onChange={(e) => updateLine(index, { unit: e.target.value })} /></label>
                 <label>Unit Cost<input type="number" min="0" step="0.01" value={line.unit_cost} onChange={(e) => updateLine(index, { unit_cost: e.target.value })} /></label>
                 <label>Notes<input value={line.notes} onChange={(e) => updateLine(index, { notes: e.target.value })} /></label>
                 <div className="row" style={{ alignItems: 'end' }}>
@@ -370,10 +386,10 @@ export default function ReceivingPage() {
                 <td>{row.status}</td>
                 <td>{php(row.total_amount || 0)}</td>
                 <td className="row wrap">
-                  <button type="button" className="secondary" onClick={() => editRow(row)}>Edit</button>
-                  <button type="button" className="secondary" onClick={() => setStatus(row, 'posted')}>Post</button>
-                  <button type="button" className="secondary" onClick={() => setStatus(row, 'reversed')}>Reverse</button>
-                  <button type="button" className="secondary" onClick={() => removeRow(row)}>Delete</button>
+                  {row.status === 'draft' && <button type="button" className="secondary" onClick={() => editRow(row)}>Edit</button>}
+                  {row.status === 'draft' && <button type="button" className="secondary" onClick={() => setPendingStatusAction({ row, status: 'posted' })}>Post</button>}
+                  {row.status === 'posted' && <button type="button" className="danger" onClick={() => setPendingStatusAction({ row, status: 'reversed' })}>Reverse</button>}
+                  {row.status === 'draft' && <button type="button" className="secondary" onClick={() => removeRow(row)}>Delete</button>}
                 </td>
               </tr>
             ))}
@@ -381,6 +397,24 @@ export default function ReceivingPage() {
           </tbody>
         </table>
       </section>
+      <ConfirmActionModal
+        open={!!pendingStatusAction}
+        title={pendingStatusAction?.status === 'reversed' ? 'Reverse receiving record?' : 'Post receiving record?'}
+        description={pendingStatusAction?.status === 'reversed' ? 'This restores stock quantities, updates the purchase order, and cancels the linked unpaid supplier bill.' : 'This posts the delivery to stock and may create a supplier bill.'}
+        confirmLabel={pendingStatusAction?.status === 'reversed' ? 'Reverse receiving' : 'Post receiving'}
+        tone={pendingStatusAction?.status === 'reversed' ? 'danger' : 'normal'}
+        reasonRequired={pendingStatusAction?.status === 'reversed'}
+        onClose={() => setPendingStatusAction(null)}
+        onConfirm={(reason) => setStatus(pendingStatusAction.row, pendingStatusAction.status, reason)}
+      />
     </div>
+  );
+}
+
+export default function ReceivingPage() {
+  return (
+    <Suspense fallback={<div className="stack"><section className="section"><h1>Receiving</h1></section></div>}>
+      <ReceivingContent />
+    </Suspense>
   );
 }

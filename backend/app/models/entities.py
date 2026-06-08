@@ -122,6 +122,77 @@ class RecordSettlement(Base, TimestampMixin):
     record: Mapped["Record"] = relationship()
 
 
+class EventBooking(Base, TimestampMixin):
+    __tablename__ = 'event_bookings'
+    id: Mapped[int] = mapped_column(Integer, primary_key=True)
+    event_no: Mapped[str] = mapped_column(String(120), unique=True, index=True)
+    event_name: Mapped[str] = mapped_column(String(255), default='', index=True)
+    client_name: Mapped[str] = mapped_column(String(255), default='', index=True)
+    contact_name: Mapped[str | None] = mapped_column(String(255), nullable=True)
+    contact_phone: Mapped[str | None] = mapped_column(String(80), nullable=True)
+    contact_email: Mapped[str | None] = mapped_column(String(180), nullable=True)
+    event_type: Mapped[str | None] = mapped_column(String(120), nullable=True, index=True)
+    event_date: Mapped[str | None] = mapped_column(String(50), nullable=True, index=True)
+    start_time: Mapped[str | None] = mapped_column(String(20), nullable=True)
+    end_time: Mapped[str | None] = mapped_column(String(20), nullable=True)
+    venue: Mapped[str | None] = mapped_column(String(180), nullable=True, index=True)
+    guest_count: Mapped[int] = mapped_column(Integer, default=0)
+    package_name: Mapped[str | None] = mapped_column(String(180), nullable=True)
+    status: Mapped[str] = mapped_column(String(50), default='draft', index=True)
+    quote_sent_at: Mapped[str | None] = mapped_column(String(50), nullable=True, index=True)
+    confirmed_at: Mapped[str | None] = mapped_column(String(50), nullable=True, index=True)
+    completed_at: Mapped[str | None] = mapped_column(String(50), nullable=True, index=True)
+    cancelled_at: Mapped[str | None] = mapped_column(String(50), nullable=True, index=True)
+    deposit_required: Mapped[float] = mapped_column(Float, default=0)
+    deposit_due_date: Mapped[str | None] = mapped_column(String(50), nullable=True, index=True)
+    subtotal_amount: Mapped[float] = mapped_column(Float, default=0)
+    discount_amount: Mapped[float] = mapped_column(Float, default=0)
+    tax_amount: Mapped[float] = mapped_column(Float, default=0)
+    total_amount: Mapped[float] = mapped_column(Float, default=0)
+    deposit_paid: Mapped[float] = mapped_column(Float, default=0)
+    balance_due: Mapped[float] = mapped_column(Float, default=0)
+    receivable_id: Mapped[int | None] = mapped_column(ForeignKey('receivables.id'), nullable=True, index=True)
+    record_id: Mapped[int | None] = mapped_column(ForeignKey('records.id'), nullable=True, index=True)
+    notes: Mapped[str | None] = mapped_column(Text, nullable=True)
+    created_by: Mapped[str | None] = mapped_column(String(100), nullable=True)
+    approved_by: Mapped[str | None] = mapped_column(String(100), nullable=True)
+    receivable: Mapped["Receivable"] = relationship()
+    record: Mapped["Record"] = relationship()
+    lines: Mapped[list["EventBookingLine"]] = relationship(back_populates='event', cascade='all, delete-orphan')
+    payments: Mapped[list["EventPayment"]] = relationship(back_populates='event', cascade='all, delete-orphan')
+
+
+class EventBookingLine(Base):
+    __tablename__ = 'event_booking_lines'
+    id: Mapped[int] = mapped_column(Integer, primary_key=True)
+    event_booking_id: Mapped[int] = mapped_column(ForeignKey('event_bookings.id'), index=True)
+    line_type: Mapped[str] = mapped_column(String(50), default='package', index=True)
+    description: Mapped[str] = mapped_column(String(255), default='')
+    quantity: Mapped[float] = mapped_column(Float, default=1)
+    unit_price: Mapped[float] = mapped_column(Float, default=0)
+    total_amount: Mapped[float] = mapped_column(Float, default=0)
+    notes: Mapped[str | None] = mapped_column(Text, nullable=True)
+    sort_order: Mapped[int] = mapped_column(Integer, default=0)
+    event: Mapped["EventBooking"] = relationship(back_populates='lines')
+
+
+class EventPayment(Base, TimestampMixin):
+    __tablename__ = 'event_payments'
+    id: Mapped[int] = mapped_column(Integer, primary_key=True)
+    event_booking_id: Mapped[int] = mapped_column(ForeignKey('event_bookings.id'), index=True)
+    payment_date: Mapped[str | None] = mapped_column(String(50), nullable=True, index=True)
+    amount: Mapped[float] = mapped_column(Float, default=0)
+    payment_method: Mapped[str | None] = mapped_column(String(120), nullable=True)
+    financial_account_id: Mapped[int | None] = mapped_column(ForeignKey('financial_accounts.id'), nullable=True, index=True)
+    reference_no: Mapped[str | None] = mapped_column(String(255), nullable=True, index=True)
+    notes: Mapped[str | None] = mapped_column(Text, nullable=True)
+    money_transaction_id: Mapped[int | None] = mapped_column(ForeignKey('money_transactions.id'), nullable=True, index=True)
+    created_by: Mapped[str | None] = mapped_column(String(100), nullable=True)
+    event: Mapped["EventBooking"] = relationship(back_populates='payments')
+    financial_account: Mapped["FinancialAccount"] = relationship()
+    money_transaction: Mapped["MoneyTransaction"] = relationship()
+
+
 class Attachment(Base, TimestampMixin):
     __tablename__ = 'attachments'
     id: Mapped[int] = mapped_column(Integer, primary_key=True)
@@ -283,9 +354,12 @@ class MoneyTransaction(Base, TimestampMixin):
     posted_at: Mapped[str | None] = mapped_column(String(50), nullable=True, index=True)
     created_by: Mapped[str | None] = mapped_column(String(100), nullable=True)
     approved_by: Mapped[str | None] = mapped_column(String(100), nullable=True)
+    external_source: Mapped[str | None] = mapped_column(String(40), nullable=True, index=True)
+    external_id: Mapped[str | None] = mapped_column(String(160), nullable=True, index=True)
     financial_account: Mapped["FinancialAccount"] = relationship()
     journal_entry: Mapped["JournalEntry"] = relationship()
     reversed_from: Mapped["MoneyTransaction"] = relationship(remote_side=[id])
+    __table_args__ = (UniqueConstraint('external_source', 'external_id', name='uq_money_transactions_external_event'),)
 
 
 class AccountTransfer(Base, TimestampMixin):
@@ -304,10 +378,13 @@ class AccountTransfer(Base, TimestampMixin):
     posted_at: Mapped[str | None] = mapped_column(String(50), nullable=True, index=True)
     created_by: Mapped[str | None] = mapped_column(String(100), nullable=True)
     approved_by: Mapped[str | None] = mapped_column(String(100), nullable=True)
+    external_source: Mapped[str | None] = mapped_column(String(40), nullable=True, index=True)
+    external_id: Mapped[str | None] = mapped_column(String(160), nullable=True, index=True)
     from_account: Mapped["FinancialAccount"] = relationship(foreign_keys=[from_account_id])
     to_account: Mapped["FinancialAccount"] = relationship(foreign_keys=[to_account_id])
     journal_entry: Mapped["JournalEntry"] = relationship()
     reversed_from: Mapped["AccountTransfer"] = relationship(remote_side=[id])
+    __table_args__ = (UniqueConstraint('external_source', 'external_id', name='uq_account_transfers_external_event'),)
 
 
 class CashReconciliation(Base, TimestampMixin):
@@ -362,6 +439,25 @@ class Receivable(Base, TimestampMixin):
     closed_at: Mapped[str | None] = mapped_column(String(50), nullable=True, index=True)
     notes: Mapped[str | None] = mapped_column(Text, nullable=True)
     bir_include: Mapped[bool] = mapped_column(Boolean, default=False)
+    external_source: Mapped[str | None] = mapped_column(String(40), nullable=True, index=True)
+    external_id: Mapped[str | None] = mapped_column(String(160), nullable=True, index=True)
+    adjustments: Mapped[list["ReceivableAdjustment"]] = relationship(back_populates='receivable', cascade='all, delete-orphan')
+    __table_args__ = (UniqueConstraint('external_source', 'external_id', name='uq_receivables_external_event'),)
+
+
+class ReceivableAdjustment(Base, TimestampMixin):
+    __tablename__ = 'receivable_adjustments'
+    id: Mapped[int] = mapped_column(Integer, primary_key=True)
+    receivable_id: Mapped[int] = mapped_column(ForeignKey('receivables.id'), index=True)
+    adjustment_date: Mapped[str | None] = mapped_column(String(50), nullable=True, index=True)
+    amount: Mapped[float] = mapped_column(Float, default=0)
+    source_type: Mapped[str | None] = mapped_column(String(100), nullable=True, index=True)
+    source_id: Mapped[int | None] = mapped_column(Integer, nullable=True, index=True)
+    external_source: Mapped[str | None] = mapped_column(String(40), nullable=True, index=True)
+    external_id: Mapped[str | None] = mapped_column(String(160), nullable=True, index=True)
+    notes: Mapped[str | None] = mapped_column(Text, nullable=True)
+    receivable: Mapped["Receivable"] = relationship(back_populates='adjustments')
+    __table_args__ = (UniqueConstraint('external_source', 'external_id', name='uq_receivable_adjustments_external_event'),)
 
 
 class Payable(Base, TimestampMixin):
@@ -455,6 +551,7 @@ class StockMovement(Base, TimestampMixin):
     reference_no: Mapped[str | None] = mapped_column(String(255), nullable=True)
     notes: Mapped[str | None] = mapped_column(Text, nullable=True)
     movement_date: Mapped[str | None] = mapped_column(String(50), nullable=True)
+    receiving_record_id: Mapped[int | None] = mapped_column(ForeignKey('receiving_records.id'), nullable=True, index=True)
     item_obj: Mapped["InventoryItem"] = relationship(back_populates='movements')
     allocations: Mapped[list["BatchAllocation"]] = relationship(back_populates='movement', cascade='all, delete-orphan')
 
@@ -575,8 +672,11 @@ class SaleOrder(Base, TimestampMixin):
     income_record_id: Mapped[int | None] = mapped_column(ForeignKey('records.id'), nullable=True)
     cogs_record_id: Mapped[int | None] = mapped_column(ForeignKey('records.id'), nullable=True)
     notes: Mapped[str | None] = mapped_column(Text, nullable=True)
+    external_source: Mapped[str | None] = mapped_column(String(40), nullable=True, index=True)
+    external_id: Mapped[str | None] = mapped_column(String(160), nullable=True, index=True)
     lines: Mapped[list["SaleOrderLine"]] = relationship(back_populates='order', cascade='all, delete-orphan')
     void_events: Mapped[list["SaleVoidEvent"]] = relationship(back_populates='sale_order', cascade='all, delete-orphan')
+    __table_args__ = (UniqueConstraint('external_source', 'external_id', name='uq_sale_orders_external_event'),)
 
 
 class SaleOrderLine(Base):

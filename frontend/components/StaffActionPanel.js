@@ -7,6 +7,16 @@ const DEFAULT_ACTIONS = [
     note: 'Open the staff checklist for today, cash, receivables, bills, and deliveries.',
   },
   {
+    href: '/bookings/calendar',
+    label: 'Booking Calendar',
+    note: 'Browse past, current, and upcoming stays by date.',
+  },
+  {
+    href: '/room-folios',
+    label: 'Room Folios',
+    note: 'Review guest charges, deposits, payments, and balances.',
+  },
+  {
     href: '/cashflow/receivables?action=collect',
     label: 'Receive Payment',
     note: 'Collect guest, OTA, event, or company balances.',
@@ -30,6 +40,11 @@ const DEFAULT_ACTIONS = [
     href: '/cashflow/daily-cash',
     label: 'Count Cash',
     note: 'Count drawer, petty cash, safe, or periodic bank balances.',
+  },
+  {
+    href: '/cashflow/transfers',
+    label: 'Money Drop',
+    note: 'Move cash from drawer to safe or bank without creating an expense.',
   },
 ];
 

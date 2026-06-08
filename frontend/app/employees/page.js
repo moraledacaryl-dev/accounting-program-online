@@ -1,5 +1,6 @@
 'use client';
 import { useEffect, useState } from 'react';
+import { useConfirmAction } from '../../components/ConfirmActionProvider';
 import {
   createAttendance,
   createEmployee,
@@ -11,6 +12,7 @@ import {
 } from '../../lib/api';
 
 export default function EmployeesPage() {
+  const confirmAction = useConfirmAction();
   const [employees, setEmployees] = useState([]);
   const [attendance, setAttendance] = useState([]);
   const [form, setForm] = useState({
@@ -141,7 +143,7 @@ export default function EmployeesPage() {
                 <td>{e.rate}</td>
                 <td className="row wrap">
                   <button className="secondary" onClick={() => { setEditingId(e.id); setForm({ full_name: e.full_name, department: e.department || '', job_title: e.job_title || '', compensation_type: e.compensation_type || 'Monthly', rate: e.rate || '', daily_rate: e.daily_rate || '', hourly_rate: e.hourly_rate || '' }); }}>Edit</button>
-                  <button className="secondary" onClick={async () => { if (confirm('Delete employee?')) { await deleteEmployee(e.id); await load(); } }}>Delete</button>
+                  <button className="secondary" onClick={async () => { if (await confirmAction({ title: `Delete employee ${e.full_name}?`, description: 'Employee history may be needed for payroll review. Remove only profiles entered in error.' })) { await deleteEmployee(e.id); await load(); } }}>Delete</button>
                 </td>
               </tr>
             ))}
@@ -161,7 +163,7 @@ export default function EmployeesPage() {
                 <td>{a.time_in}</td>
                 <td>{a.time_out}</td>
                 <td>{a.overtime_hours}</td>
-                <td><button className="secondary" onClick={async () => { await deleteAttendance(a.id); await load(); }}>Delete</button></td>
+                <td><button className="secondary" onClick={async () => { if (await confirmAction({ title: 'Delete this attendance entry?', description: 'This can change payroll calculations for the affected employee.' })) { await deleteAttendance(a.id); await load(); } }}>Delete</button></td>
               </tr>
             ))}
           </tbody>

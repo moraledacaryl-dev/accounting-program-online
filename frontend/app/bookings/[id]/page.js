@@ -2,16 +2,28 @@
 
 import Link from 'next/link';
 import { useEffect, useState } from 'react';
-import { fetchBooking } from '../../../lib/api';
+import { useConfirmAction } from '../../../components/ConfirmActionProvider';
+import { fetchBooking, reclassifyBookingFolioLines } from '../../../lib/api';
+import { useCurrentUser } from '../../../lib/useCurrentUser';
 
 function money(value) {
   return Number(value || 0).toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 });
 }
 
+function signedMoney(value) {
+  return Number(value || 0).toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2, signDisplay: 'always' });
+}
+
 export default function BookingDetailPage({ params }) {
+  const { can } = useCurrentUser();
+  const confirmAction = useConfirmAction();
   const [booking, setBooking] = useState(null);
   const [error, setError] = useState('');
+  const [notice, setNotice] = useState('');
   const [loading, setLoading] = useState(true);
+  const [classificationRunning, setClassificationRunning] = useState(false);
+  const [classificationResult, setClassificationResult] = useState(null);
+  const canRepairFolio = can('folios.manage') || can('bookings.edit');
 
   useEffect(() => {
     setLoading(true);
@@ -21,6 +33,40 @@ export default function BookingDetailPage({ params }) {
       .catch((err) => setError(err.message || 'Failed to load booking.'))
       .finally(() => setLoading(false));
   }, [params.id]);
+
+  async function runClassification(dryRun) {
+    if (!canRepairFolio) return;
+    if (!dryRun) {
+      if (!classificationResult?.dry_run) {
+        setError('Preview the suggested corrections before applying them.');
+        return;
+      }
+      const confirmed = await confirmAction({
+        title: `Apply ${classificationResult.changed || 0} folio classification corrections?`,
+        description: `Amounts stay unchanged. The resulting folio balance adjustment is ${signedMoney(classificationResult.balance_adjustment || 0)}.`,
+        confirmLabel: 'Apply Corrections',
+      });
+      if (!confirmed) return;
+    }
+    setClassificationRunning(true);
+    setError('');
+    setNotice('');
+    try {
+      const result = await reclassifyBookingFolioLines(params.id, {
+        dry_run: !!dryRun,
+        include_payment_lines: true,
+        limit: 1000,
+      });
+      setClassificationResult(result || null);
+      setNotice(result?.dry_run
+        ? `Classification preview ready: ${result?.changed || 0} suggested corrections.`
+        : `Folio classifications updated: ${result?.changed || 0} corrected.`);
+    } catch (err) {
+      setError(err.message || 'Failed to review folio classifications.');
+    } finally {
+      setClassificationRunning(false);
+    }
+  }
 
   if (loading) {
     return (
@@ -86,6 +132,56 @@ export default function BookingDetailPage({ params }) {
           </table>
         </section>
       </div>
+
+      {canRepairFolio && (
+        <section className="section">
+          <h2>Review Existing Folio Classifications</h2>
+          <p className="muted">
+            Use this on older bookings when imported rows look like payments but their descriptions indicate room charges, breakfast, minibar, extra guests, extra beds, or room service. Preview first: amounts remain unchanged, but correcting a payment into a charge updates the folio balance.
+          </p>
+          <div className="row wrap">
+            <button type="button" className="secondary" onClick={() => runClassification(true)} disabled={classificationRunning}>
+              {classificationRunning ? 'Checking...' : 'Preview Suggested Corrections'}
+            </button>
+            <button type="button" className="danger" onClick={() => runClassification(false)} disabled={classificationRunning || !classificationResult?.dry_run || !classificationResult?.changed}>
+              Apply Suggested Corrections
+            </button>
+            <Link className="button-link secondary-link" href={booking.primary_folio_id ? `/room-folios/${booking.primary_folio_id}` : `/room-folios?booking_id=${booking.id}`}>Open Folio</Link>
+          </div>
+          {!!notice && <p className="success-text">{notice}</p>}
+          {!!classificationResult && (
+            <div className="stack" style={{ marginTop: 12 }}>
+              <div className="row wrap">
+                <span className="badge">Scanned: {classificationResult.scanned || 0}</span>
+                <span className="badge">{classificationResult.dry_run ? 'Would correct' : 'Corrected'}: {classificationResult.changed || 0}</span>
+                <span className="badge">Balance-affecting: {classificationResult.balance_affecting_changes || 0}</span>
+                <span className="badge">Balance adjustment: {signedMoney(classificationResult.balance_adjustment || 0)}</span>
+              </div>
+              {Array.isArray(classificationResult.preview) && classificationResult.preview.length > 0 ? (
+                <div className="table-wrap">
+                  <table className="table dense-table">
+                    <thead><tr><th>Line</th><th>From</th><th>To</th><th>Description</th><th>Amount</th><th>Balance Adjustment</th></tr></thead>
+                    <tbody>
+                      {classificationResult.preview.map((row) => (
+                        <tr key={`classification-${row.line_id}`}>
+                          <td>#{row.line_id}</td>
+                          <td>{row.old_type}</td>
+                          <td>{row.new_type}</td>
+                          <td>{row.description || '-'}</td>
+                          <td>{money(row.amount || 0)}</td>
+                          <td>{signedMoney(row.balance_adjustment || 0)}</td>
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
+                </div>
+              ) : (
+                <p className="small muted">No suggested corrections for this booking.</p>
+              )}
+            </div>
+          )}
+        </section>
+      )}
 
       {booking.notes && (
         <section className="section">

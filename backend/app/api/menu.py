@@ -71,6 +71,20 @@ def _validate_sku_recipe_items(items: list, db: Session):
                 raise ValueError(f'Inventory item {inventory_item_id} not found.')
 
 
+def _component_item_unit(row: PrepComponentItemPayload, db: Session) -> str:
+    inv = db.get(InventoryItem, int(row.inventory_item_id))
+    return inv.unit if inv else (row.unit or '')
+
+
+def _sku_recipe_item_unit(row, db: Session) -> str:
+    line_type = _to_line_type(getattr(row, 'line_type', None))
+    if line_type == 'component':
+        component = db.get(PrepComponent, int(getattr(row, 'component_id', 0) or 0))
+        return component.yield_unit if component else (getattr(row, 'unit', '') or '')
+    inv = db.get(InventoryItem, int(getattr(row, 'inventory_item_id', 0) or 0))
+    return inv.unit if inv else (getattr(row, 'unit', '') or '')
+
+
 def _validate_promo_dates(start_date: str | None, end_date: str | None):
     if start_date and end_date and end_date < start_date:
         raise ValueError('Promotion end_date cannot be earlier than start_date.')
@@ -185,6 +199,8 @@ def _serialize_sale(order: SaleOrder, include_lines: bool = True) -> dict:
         'income_record_id': order.income_record_id,
         'cogs_record_id': order.cogs_record_id,
         'notes': order.notes,
+        'external_source': order.external_source,
+        'external_id': order.external_id,
         'created_at': order.created_at,
         'updated_at': order.updated_at,
         'line_count': len(order.lines or []),
@@ -305,7 +321,13 @@ def add_recipe_line(
     if float(payload.quantity or 0) <= 0:
         raise HTTPException(status_code=400, detail='Quantity must be greater than zero.')
 
-    obj = RecipeLine(menu_item_id=item_id, **payload.model_dump())
+    obj = RecipeLine(
+        menu_item_id=item_id,
+        inventory_item_id=payload.inventory_item_id,
+        quantity=payload.quantity,
+        unit=inv.unit or payload.unit or '',
+        notes=payload.notes,
+    )
     db.add(obj)
     db.commit()
     db.refresh(obj)
@@ -377,7 +399,7 @@ def create_component(
                     component_id=obj.id,
                     inventory_item_id=row.inventory_item_id,
                     quantity=row.quantity,
-                    unit=row.unit,
+                    unit=_component_item_unit(row, db),
                     wastage_percent=row.wastage_percent,
                     sort_order=row.sort_order,
                     notes=row.notes,
@@ -432,7 +454,7 @@ def update_component(
                         component_id=obj.id,
                         inventory_item_id=row.inventory_item_id,
                         quantity=row.quantity,
-                        unit=row.unit,
+                        unit=_component_item_unit(row, db),
                         wastage_percent=row.wastage_percent,
                         sort_order=row.sort_order,
                         notes=row.notes,
@@ -553,7 +575,7 @@ def create_sku(
                     inventory_item_id=row.inventory_item_id if line_type != 'component' else None,
                     component_id=row.component_id if line_type == 'component' else None,
                     quantity=row.quantity,
-                    unit=row.unit,
+                    unit=_sku_recipe_item_unit(row, db),
                     wastage_percent=row.wastage_percent,
                     sort_order=row.sort_order,
                     notes=row.notes,
@@ -613,7 +635,7 @@ def update_sku(
                         inventory_item_id=row.inventory_item_id if line_type != 'component' else None,
                         component_id=row.component_id if line_type == 'component' else None,
                         quantity=row.quantity,
-                        unit=row.unit,
+                        unit=_sku_recipe_item_unit(row, db),
                         wastage_percent=row.wastage_percent,
                         sort_order=row.sort_order,
                         notes=row.notes,

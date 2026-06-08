@@ -7,6 +7,9 @@ from sqlalchemy import func
 from sqlalchemy.orm import Session
 
 from app.models.entities import (
+    Booking,
+    BookingFolio,
+    BookingFolioLine,
     InventoryItem,
     MenuItem,
     MenuPromotion,
@@ -23,6 +26,7 @@ from app.models.entities import (
 )
 from app.services.accounting_service import autopost_record
 from app.services.fifo_service import create_inbound_movement, create_outbound_movement
+from app.services.guest_service import ensure_booking_folio
 from app.services.taxonomy_service import get_module_by_slug, get_module_name
 
 
@@ -303,6 +307,118 @@ def generate_sale_order_no(db: Session) -> str:
     return f'{base}-{suffix}'
 
 
+def _resolve_room_charge_folio(db: Session, payload, username: str | None = None) -> BookingFolio:
+    folio_id = getattr(payload, 'folio_id', None)
+    if folio_id:
+        folio = db.get(BookingFolio, int(folio_id))
+        if not folio:
+            raise ValueError('Selected room folio was not found.')
+        if _norm(folio.status) in {'closed', 'cancelled'}:
+            raise ValueError('Selected room folio is already closed or cancelled.')
+        return folio
+
+    booking_id = getattr(payload, 'booking_id', None)
+    if not booking_id:
+        raise ValueError('Room charge sales need a selected in-house booking or open folio.')
+    booking = db.get(Booking, int(booking_id))
+    if not booking:
+        raise ValueError('Selected booking was not found.')
+    return ensure_booking_folio(db, booking, username=username or 'restaurant_ops')
+
+
+def _upsert_sale_room_charge_line(
+    db: Session,
+    *,
+    folio: BookingFolio,
+    order: SaleOrder,
+    amount: float,
+    order_date: str | None,
+    notes: str | None,
+    username: str | None,
+) -> BookingFolioLine | None:
+    if amount <= 0:
+        return None
+    external_key = f'restaurant:sale_order:{order.order_no}:room_charge'
+    line = (
+        db.query(BookingFolioLine)
+        .filter(
+            BookingFolioLine.external_source == 'restaurant',
+            BookingFolioLine.external_line_key == external_key,
+        )
+        .first()
+    )
+    if not line:
+        line = BookingFolioLine(
+            folio_id=folio.id,
+            external_source='restaurant',
+            external_line_key=external_key,
+            created_by=username or 'restaurant_ops',
+        )
+    line.line_type = 'cafe_room_charge'
+    line.description = f'Cafe / restaurant room charge {order.order_no}'
+    line.quantity = 1
+    line.unit_price = round(float(amount or 0), 4)
+    line.amount = round(float(amount or 0), 4)
+    line.transaction_date = order_date
+    line.reference_no = order.order_no
+    line.notes = notes or 'Posted from restaurant sale as a room charge'
+    db.add(line)
+    return line
+
+
+def _add_sale_room_charge_void_line(
+    db: Session,
+    *,
+    order: SaleOrder,
+    void_date: str | None,
+    reason: str,
+    username: str | None,
+) -> BookingFolioLine | None:
+    original_key = f'restaurant:sale_order:{order.order_no}:room_charge'
+    original = (
+        db.query(BookingFolioLine)
+        .filter(
+            BookingFolioLine.external_source == 'restaurant',
+            BookingFolioLine.external_line_key == original_key,
+        )
+        .first()
+    )
+    if not original:
+        return None
+
+    void_key = f'restaurant:sale_order:{order.order_no}:void'
+    existing_void = (
+        db.query(BookingFolioLine)
+        .filter(
+            BookingFolioLine.external_source == 'restaurant',
+            BookingFolioLine.external_line_key == void_key,
+        )
+        .first()
+    )
+    if existing_void:
+        return existing_void
+
+    amount = abs(float(original.amount or order.net_amount or 0))
+    if amount <= 0:
+        return None
+    line = BookingFolioLine(
+        folio_id=original.folio_id,
+        line_type='cafe_room_charge',
+        description=f'Void cafe / restaurant room charge {order.order_no}',
+        quantity=1,
+        unit_price=round(-amount, 4),
+        amount=round(-amount, 4),
+        transaction_date=void_date,
+        reference_no=f'{order.order_no}-VOID',
+        external_source='restaurant',
+        external_line_key=void_key,
+        notes=f'Voided restaurant sale. Reason: {reason}',
+        created_by=username or 'restaurant_ops',
+    )
+    db.add(line)
+    return line
+
+
 def create_sale_order(db: Session, payload, username: str | None = None) -> SaleOrder:
     lines = list(payload.lines or [])
     if not lines:
@@ -310,10 +426,28 @@ def create_sale_order(db: Session, payload, username: str | None = None) -> Sale
 
     order_date = payload.order_date or datetime.utcnow().strftime('%Y-%m-%d')
     order_no = (payload.order_no or '').strip() or generate_sale_order_no(db)
+    external_source = (getattr(payload, 'external_source', None) or '').strip() or None
+    external_id = (getattr(payload, 'external_id', None) or '').strip() or None
+    if external_source != 'dedicated_pos_cloud' and not bool(getattr(payload, 'manual_fallback_confirmed', False)):
+        raise ValueError('Manual Accounting sales are an outage fallback. Confirm POS is unavailable before posting.')
+
+    if external_source and external_id:
+        imported = db.query(SaleOrder).filter(
+            SaleOrder.external_source == external_source,
+            SaleOrder.external_id == external_id,
+        ).first()
+        if imported:
+            return imported
 
     existing = db.query(SaleOrder).filter(SaleOrder.order_no == order_no).first()
     if existing:
+        if external_source and existing.external_source == external_source:
+            return existing
         raise ValueError(f'Order number {order_no} already exists.')
+
+    room_charge_folio = None
+    if _norm(payload.payment_method) == 'room_charge':
+        room_charge_folio = _resolve_room_charge_folio(db, payload, username=username)
 
     order = SaleOrder(
         order_no=order_no,
@@ -323,6 +457,8 @@ def create_sale_order(db: Session, payload, username: str | None = None) -> Sale
         channel=payload.channel,
         counterparty=payload.counterparty,
         notes=payload.notes,
+        external_source=external_source,
+        external_id=external_id,
     )
     db.add(order)
     db.flush()
@@ -349,7 +485,9 @@ def create_sale_order(db: Session, payload, username: str | None = None) -> Sale
             raise ValueError('Line quantity must be greater than zero.')
 
         base_unit_price = float(line.unit_price if line.unit_price is not None else (sku.price if sku else menu_item.price or 0))
-        if sku:
+        if external_source == 'dedicated_pos_cloud':
+            promo_rows = []
+        elif sku:
             promo_rows = db.query(MenuPromotion).filter(
                 MenuPromotion.is_active == True,
                 ((MenuPromotion.sku_id == sku.id) | (MenuPromotion.menu_item_id == menu_item.id))
@@ -400,6 +538,17 @@ def create_sale_order(db: Session, payload, username: str | None = None) -> Sale
         total_discount += line_discount
 
     net_amount = max(gross_amount - total_discount, 0.0)
+
+    if room_charge_folio:
+        _upsert_sale_room_charge_line(
+            db,
+            folio=room_charge_folio,
+            order=order,
+            amount=net_amount,
+            order_date=order_date,
+            notes=payload.notes,
+            username=username,
+        )
 
     auto_post = bool(getattr(payload, 'auto_post_accounting', False))
     income_record = None
@@ -501,6 +650,9 @@ def void_sale_order(db: Session, order: SaleOrder, payload, username: str | None
                     inv_item,
                     float(qty),
                     unit_cost,
+                    None,
+                    0,
+                    0,
                     reason='Sale Void',
                     module_slug='inventory',
                     reference_no=reversal_ref,
@@ -558,6 +710,15 @@ def void_sale_order(db: Session, order: SaleOrder, payload, username: str | None
     order.notes = f'{(order.notes or "").strip()}\nVOID {void_date}: {reason}'.strip()
     db.add(order)
     db.flush()
+
+    if _norm(order.payment_method) == 'room_charge':
+        _add_sale_room_charge_void_line(
+            db,
+            order=order,
+            void_date=void_date,
+            reason=reason,
+            username=username,
+        )
 
     db.add(SaleVoidEvent(
         sale_order_id=order.id,

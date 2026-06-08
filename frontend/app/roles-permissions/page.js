@@ -11,6 +11,7 @@ import {
   updateRole,
   updateRolePermissions,
 } from '../../lib/api';
+import { useConfirmAction } from '../../components/ConfirmActionProvider';
 
 const EMPTY_ROLE_FORM = {
   code: '',
@@ -33,6 +34,7 @@ function groupPermissions(rows) {
 }
 
 export default function RolesPermissionsPage() {
+  const confirmAction = useConfirmAction();
   const [roles, setRoles] = useState([]);
   const [permissions, setPermissions] = useState([]);
   const [users, setUsers] = useState([]);
@@ -201,7 +203,7 @@ export default function RolesPermissionsPage() {
 
   async function removeRole() {
     if (!selectedRole) return;
-    if (!window.confirm(`Delete role ${selectedRole.name}?`)) return;
+    if (!await confirmAction({ title: `Delete role ${selectedRole.name}?`, description: 'Users assigned only to this role may lose access until another role is assigned.' })) return;
     setError('');
     setNotice('');
     try {

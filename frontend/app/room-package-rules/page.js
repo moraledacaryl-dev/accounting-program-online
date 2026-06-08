@@ -10,6 +10,7 @@ import {
   updateRoomPackageRule,
 } from '../../lib/api';
 import { shouldPreventEnterSubmit } from '../../lib/formBehavior';
+import { useConfirmAction } from '../../components/ConfirmActionProvider';
 
 const EMPTY_FORM = {
   name: '',
@@ -23,6 +24,7 @@ const EMPTY_FORM = {
 };
 
 export default function RoomPackageRulesPage() {
+  const confirmAction = useConfirmAction();
   const [roomTypes, setRoomTypes] = useState([]);
   const [ratePlans, setRatePlans] = useState([]);
   const [rows, setRows] = useState([]);
@@ -89,7 +91,7 @@ export default function RoomPackageRulesPage() {
   }
 
   async function removeRow(row) {
-    if (!window.confirm(`Delete package rule ${row.name}?`)) return;
+    if (!await confirmAction({ title: `Delete package rule ${row.name}?`, description: 'This removes the default inclusions from future booking guidance.' })) return;
     setError('');
     try {
       await deleteRoomPackageRule(row.id);

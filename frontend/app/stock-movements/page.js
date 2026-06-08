@@ -1,9 +1,9 @@
 'use client';
 import { useEffect, useMemo, useState } from 'react';
 import {
-  API_BASE,
   createStockMovement,
   deleteAttachment,
+  downloadAttachment,
   fetchAllocations,
   fetchAttachments,
   fetchBatches,
@@ -11,6 +11,7 @@ import {
   fetchStockMovements,
   uploadAttachment,
 } from '../../lib/api';
+import { useConfirmAction } from '../../components/ConfirmActionProvider';
 
 const REASON_OPTIONS = [
   'Purchase',
@@ -37,6 +38,7 @@ const EXPENSE_MODULES = ['procurement', 'inventory', 'finance', 'restaurant', 'c
 const PAYMENT_METHODS = ['cash', 'card', 'gcash', 'bank_transfer', 'credit'];
 
 export default function StockMovementsPage() {
+  const confirmAction = useConfirmAction();
   const [items, setItems] = useState([]);
   const [movements, setMovements] = useState([]);
   const [batches, setBatches] = useState([]);
@@ -149,11 +151,6 @@ export default function StockMovementsPage() {
     }
   }
 
-  function attachmentUrl(path) {
-    const base = API_BASE.replace(/\/api\/?$/, '');
-    return `${base}${path}`;
-  }
-
   const attachmentCountByMovement = attachments.reduce((map, row) => {
     const key = Number(row.entity_id || 0);
     map[key] = (map[key] || 0) + 1;
@@ -161,6 +158,7 @@ export default function StockMovementsPage() {
   }, {});
 
   async function removeAttachment(id) {
+    if (!await confirmAction({ title: `Delete attachment #${id}?`, description: 'The supporting document will no longer be available from this stock movement.' })) return;
     setError('');
     setNotice('');
     try {
@@ -169,6 +167,25 @@ export default function StockMovementsPage() {
       await load();
     } catch (err) {
       setError(err.message || 'Failed to delete attachment.');
+    }
+  }
+
+  async function openAttachment(row) {
+    setError('');
+    const openedWindow = window.open('', '_blank');
+    if (!openedWindow) {
+      setError('Browser blocked the attachment window. Allow pop-ups for this site and try again.');
+      return;
+    }
+    openedWindow.opener = null;
+    try {
+      const { blob } = await downloadAttachment(row.id);
+      const url = URL.createObjectURL(blob);
+      openedWindow.location.href = url;
+      setTimeout(() => URL.revokeObjectURL(url), 60000);
+    } catch (err) {
+      openedWindow.close();
+      setError(err.message || 'Failed to open attachment.');
     }
   }
 
@@ -303,7 +320,7 @@ export default function StockMovementsPage() {
             {attachments.map((a) => (
               <tr key={a.id}>
                 <td>Movement #{a.entity_id}</td>
-                <td><a href={attachmentUrl(a.file_path)} target="_blank" rel="noreferrer">{a.file_name}</a></td>
+                <td><button type="button" className="button-link secondary-link" onClick={() => openAttachment(a)}>{a.file_name}</button></td>
                 <td>{(Number(a.size_bytes || 0) / 1024).toFixed(1)} KB</td>
                 <td>{a.note || '-'}</td>
                 <td><button className="secondary" onClick={async () => { await removeAttachment(a.id); }}>Delete</button></td>

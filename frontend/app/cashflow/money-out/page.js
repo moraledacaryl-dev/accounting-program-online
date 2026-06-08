@@ -6,6 +6,7 @@ import CashflowTabs from '../../../components/cashflow/CashflowTabs';
 import MoneyOutForm from '../../../components/cashflow/MoneyOutForm';
 import TemplatePicker from '../../../components/cashflow/TemplatePicker';
 import PaymentMethodBadge from '../../../components/cashflow/PaymentMethodBadge';
+import ConfirmActionModal from '../../../components/ConfirmActionModal';
 import {
   approveMoneyTransaction,
   cancelMoneyTransaction,
@@ -69,6 +70,7 @@ function MoneyOutContent() {
   const [editingId, setEditingId] = useState(null);
   const [error, setError] = useState('');
   const [notice, setNotice] = useState('');
+  const [pendingAction, setPendingAction] = useState(null);
 
   const templateMap = useMemo(() => Object.fromEntries(templates.map((t) => [String(t.id), t])), [templates]);
 
@@ -162,15 +164,18 @@ function MoneyOutContent() {
     });
   }
 
-  async function runAction(action, successMessage) {
+  async function confirmPendingAction(reason) {
+    const action = pendingAction;
+    if (!action) return;
     setError('');
     setNotice('');
     try {
-      await action();
-      setNotice(successMessage);
+      await action.work(reason);
+      setNotice(action.successMessage);
       await load();
     } catch (err) {
       setError(err.message || 'Action failed.');
+      throw err;
     }
   }
 
@@ -253,10 +258,10 @@ function MoneyOutContent() {
                       <button type="button" className="secondary" onClick={() => startEdit(row)}>Edit</button>
                       <details className="row-actions-more">
                         <summary>More</summary>
-                        <button type="button" className="secondary" onClick={() => runAction(() => approveMoneyTransaction(row.id, {}), `Record #${row.id} approved.`)}>Approve</button>
-                        <button type="button" className="secondary" onClick={() => runAction(() => cancelMoneyTransaction(row.id, { reason: 'Cancelled from Money Out screen' }), `Record #${row.id} cancelled.`)}>Cancel</button>
-                        <button type="button" className="secondary" onClick={() => runAction(() => reverseMoneyTransaction(row.id, { reason: 'Reversed from Money Out screen' }), `Record #${row.id} reversed.`)}>Reverse</button>
-                        <button type="button" className="secondary" onClick={() => runAction(() => deleteMoneyTransaction(row.id), `Record #${row.id} deleted.`)}>Delete</button>
+                        <button type="button" className="secondary" onClick={() => setPendingAction({ title: `Approve money-out record #${row.id}?`, description: 'Confirm this expense, account, and supporting reference are correct.', confirmLabel: 'Approve record', tone: 'normal', work: () => approveMoneyTransaction(row.id, {}), successMessage: `Record #${row.id} approved.` })}>Approve</button>
+                        <button type="button" className="danger" onClick={() => setPendingAction({ title: `Cancel money-out record #${row.id}?`, description: 'This remains visible in the audit trail. Record why it should be cancelled.', confirmLabel: 'Cancel record', reasonRequired: true, work: (reason) => cancelMoneyTransaction(row.id, { reason }), successMessage: `Record #${row.id} cancelled.` })}>Cancel</button>
+                        <button type="button" className="danger" onClick={() => setPendingAction({ title: `Reverse money-out record #${row.id}?`, description: 'This changes the account balance and remains visible in the audit trail.', confirmLabel: 'Reverse record', reasonRequired: true, work: (reason) => reverseMoneyTransaction(row.id, { reason }), successMessage: `Record #${row.id} reversed.` })}>Reverse</button>
+                        <button type="button" className="danger" onClick={() => setPendingAction({ title: `Delete draft money-out record #${row.id}?`, description: 'Only unposted drafts can be deleted. Posted records must be reversed.', confirmLabel: 'Delete draft', work: () => deleteMoneyTransaction(row.id), successMessage: `Record #${row.id} deleted.` })}>Delete</button>
                       </details>
                     </>
                   )}
@@ -267,6 +272,16 @@ function MoneyOutContent() {
           </tbody>
         </table>
       </section>
+      <ConfirmActionModal
+        open={!!pendingAction}
+        title={pendingAction?.title}
+        description={pendingAction?.description}
+        confirmLabel={pendingAction?.confirmLabel}
+        tone={pendingAction?.tone || 'danger'}
+        reasonRequired={!!pendingAction?.reasonRequired}
+        onClose={() => setPendingAction(null)}
+        onConfirm={confirmPendingAction}
+      />
     </div>
   );
 }

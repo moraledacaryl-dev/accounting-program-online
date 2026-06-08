@@ -9,6 +9,7 @@ import {
   updateBookingChannel,
 } from '../../lib/api';
 import { shouldPreventEnterSubmit } from '../../lib/formBehavior';
+import { useConfirmAction } from '../../components/ConfirmActionProvider';
 
 const EMPTY_FORM = {
   code: '',
@@ -22,6 +23,7 @@ const EMPTY_FORM = {
 };
 
 export default function BookingChannelsPage() {
+  const confirmAction = useConfirmAction();
   const [rows, setRows] = useState([]);
   const [editingId, setEditingId] = useState(null);
   const [form, setForm] = useState({ ...EMPTY_FORM });
@@ -86,7 +88,7 @@ export default function BookingChannelsPage() {
   }
 
   async function removeRow(row) {
-    if (!window.confirm(`Delete booking channel ${row.code}?`)) return;
+    if (!await confirmAction({ title: `Delete booking channel ${row.code}?`, description: 'Channels already used by bookings or settlements should be made inactive instead.' })) return;
     setError('');
     try {
       await deleteBookingChannel(row.id);

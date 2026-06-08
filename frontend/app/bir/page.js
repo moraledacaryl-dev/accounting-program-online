@@ -1,6 +1,7 @@
 'use client';
 
 import { useEffect, useMemo, useState } from 'react';
+import InputActionModal from '../../components/InputActionModal';
 import { fetchBirBooks, fetchBirCandidates, fetchLocks, generateBirBooks, saveBirSelections, saveLock } from '../../lib/api';
 import { useCurrentUser } from '../../lib/useCurrentUser';
 
@@ -36,6 +37,7 @@ export default function BirPage() {
   const [rows, setRows] = useState([]);
   const [notice, setNotice] = useState('');
   const [error, setError] = useState('');
+  const [pendingLock, setPendingLock] = useState(null);
 
   const includedRows = useMemo(() => rows.filter((row) => !!row.include_in_bir), [rows]);
   const missingRows = useMemo(() => includedRows.filter((row) => row.blocked), [includedRows]);
@@ -128,10 +130,8 @@ export default function BirPage() {
     }
   }
 
-  async function setPeriodLock(isLocked) {
+  async function setPeriodLock(isLocked, reason) {
     if (!can('bir.manage')) return;
-    const reason = window.prompt(isLocked ? 'Reason for lock' : 'Reason for reopen', '');
-    if (reason === null) return;
     setError('');
     setNotice('');
     try {
@@ -140,6 +140,7 @@ export default function BirPage() {
       await load();
     } catch (e) {
       setError(e.message || 'Failed to update period lock.');
+      throw e;
     }
   }
 
@@ -181,8 +182,8 @@ export default function BirPage() {
           </label>
           {can('bir.manage') && <button type="button" disabled={!!currentPeriodLock?.is_locked} onClick={saveSelections}>Save Selections</button>}
           {can('bir.manage') && <button type="button" disabled={!!currentPeriodLock?.is_locked} onClick={runGenerate}>Generate Books</button>}
-          {can('bir.manage') && <button type="button" className="secondary" onClick={() => setPeriodLock(true)}>Lock Period</button>}
-          {can('bir.manage') && <button type="button" className="secondary" onClick={() => setPeriodLock(false)}>Reopen Period</button>}
+          {can('bir.manage') && <button type="button" className="secondary" onClick={() => setPendingLock({ isLocked: true })}>Lock Period</button>}
+          {can('bir.manage') && <button type="button" className="secondary" onClick={() => setPendingLock({ isLocked: false })}>Reopen Period</button>}
           <button type="button" className="secondary" onClick={exportBooksCsv}>Export Books CSV</button>
         </div>
         <div className="row wrap" style={{ marginTop: 8 }}>
@@ -324,6 +325,19 @@ export default function BirPage() {
           </table>
         </section>
       )}
+
+      <InputActionModal
+        open={!!pendingLock}
+        title={pendingLock?.isLocked ? `Lock BIR period ${periodKey}?` : `Reopen BIR period ${periodKey}?`}
+        description={pendingLock?.isLocked
+          ? 'Locking prevents selection changes and book regeneration until the period is reopened.'
+          : 'Reopening allows users to change selections and regenerate books for this period.'}
+        fieldLabel={pendingLock?.isLocked ? 'Lock reason' : 'Reopen reason'}
+        required
+        confirmLabel={pendingLock?.isLocked ? 'Lock Period' : 'Reopen Period'}
+        onClose={() => setPendingLock(null)}
+        onConfirm={(reason) => setPeriodLock(pendingLock.isLocked, reason)}
+      />
     </div>
   );
 }

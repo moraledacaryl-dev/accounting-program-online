@@ -26,6 +26,7 @@ import {
   reverseReconciliation,
 } from '../../lib/cashflowApi';
 import { useCurrentUser } from '../../lib/useCurrentUser';
+import ConfirmActionModal from '../../components/ConfirmActionModal';
 
 const RECORD_MODULES = [
   'rooms',
@@ -70,6 +71,7 @@ export default function ApprovalsPage() {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState('');
   const [notice, setNotice] = useState('');
+  const [pendingAction, setPendingAction] = useState(null);
 
   const [recordRows, setRecordRows] = useState([]);
   const [prRows, setPrRows] = useState([]);
@@ -151,6 +153,21 @@ export default function ApprovalsPage() {
     }
   }
 
+  async function confirmPendingAction(reason) {
+    const action = pendingAction;
+    if (!action) return;
+    setError('');
+    setNotice('');
+    try {
+      await action.work(reason);
+      setNotice(action.successMessage);
+      await load();
+    } catch (err) {
+      setError(err.message || 'Action failed.');
+      throw err;
+    }
+  }
+
   return (
     <div className="stack">
       <section className="section">
@@ -190,7 +207,7 @@ export default function ApprovalsPage() {
                     {can('approvals.act') && (
                       <>
                         <button type="button" className="secondary" onClick={() => runAction(() => approveRecord(row.id, true), `Record #${row.id} approved.`)}>Approve</button>
-                        <button type="button" className="secondary" onClick={() => runAction(() => approveRecord(row.id, false), `Record #${row.id} rejected.`)}>Reject</button>
+                          <button type="button" className="secondary" onClick={() => setPendingAction({ title: `Reject record #${row.id}?`, description: 'Record the reason so the encoder knows what needs correction.', confirmLabel: 'Reject record', reasonRequired: true, work: (reason) => approveRecord(row.id, false, { note: reason }), successMessage: `Record #${row.id} rejected.` })}>Reject</button>
                       </>
                     )}
                   </td>
@@ -249,7 +266,7 @@ export default function ApprovalsPage() {
                       {can('purchase_orders.approve') && (
                         <>
                           <button type="button" className="secondary" onClick={() => runAction(() => updatePurchaseOrderStatus(row.id, { status: 'issued' }), `PO ${row.po_no} issued.`)}>Issue</button>
-                          <button type="button" className="secondary" onClick={() => runAction(() => updatePurchaseOrderStatus(row.id, { status: 'cancelled' }), `PO ${row.po_no} cancelled.`)}>Cancel</button>
+                          <button type="button" className="danger" onClick={() => setPendingAction({ title: `Cancel PO ${row.po_no}?`, description: 'This removes the purchase order from the active procurement workflow.', confirmLabel: 'Cancel purchase order', reasonRequired: true, work: (reason) => updatePurchaseOrderStatus(row.id, { status: 'cancelled', notes: reason }), successMessage: `PO ${row.po_no} cancelled.` })}>Cancel</button>
                         </>
                       )}
                     </td>
@@ -285,10 +302,10 @@ export default function ApprovalsPage() {
                           <button type="button" className="secondary" onClick={() => runAction(() => approveMoneyTransaction(row.id, {}), `Money transaction #${row.id} approved.`)}>Approve</button>
                         ) : null}
                         {can('cashflow.money_in') || can('cashflow.money_out') ? (
-                          <button type="button" className="secondary" onClick={() => runAction(() => cancelMoneyTransaction(row.id, { reason: 'Cancelled from approvals queue' }), `Money transaction #${row.id} cancelled.`)}>Cancel</button>
+                          <button type="button" className="danger" onClick={() => setPendingAction({ title: `Cancel money transaction #${row.id}?`, description: 'This changes the cashflow audit trail. Record why the transaction should be cancelled.', confirmLabel: 'Cancel transaction', reasonRequired: true, work: (reason) => cancelMoneyTransaction(row.id, { reason }), successMessage: `Money transaction #${row.id} cancelled.` })}>Cancel</button>
                         ) : null}
                         {can('cashflow.money_in') || can('cashflow.money_out') ? (
-                          <button type="button" className="secondary" onClick={() => runAction(() => reverseMoneyTransaction(row.id, { reason: 'Reversed from approvals queue' }), `Money transaction #${row.id} reversed.`)}>Reverse</button>
+                          <button type="button" className="danger" onClick={() => setPendingAction({ title: `Reverse money transaction #${row.id}?`, description: 'A reversal changes account balances and remains visible in the audit trail.', confirmLabel: 'Reverse transaction', reasonRequired: true, work: (reason) => reverseMoneyTransaction(row.id, { reason }), successMessage: `Money transaction #${row.id} reversed.` })}>Reverse</button>
                         ) : null}
                       </>
                     )}
@@ -321,7 +338,7 @@ export default function ApprovalsPage() {
                       <button type="button" className="secondary" onClick={() => runAction(() => updatePayrollPeriod(row.id, { status: 'reviewed' }), `Payroll period #${row.id} reviewed.`)}>Review</button>
                     )}
                     {can('payroll_periods.manage') && (
-                      <button type="button" className="secondary" onClick={() => runAction(() => postPayrollPeriod(row.id, {}), `Payroll period #${row.id} posted.`)}>Post</button>
+                      <button type="button" className="secondary" onClick={() => setPendingAction({ title: `Post payroll period #${row.id}?`, description: 'Confirm the payroll totals have been reviewed before posting.', confirmLabel: 'Post payroll', work: () => postPayrollPeriod(row.id, {}), successMessage: `Payroll period #${row.id} posted.` })}>Post</button>
                     )}
                   </td>
                 </tr>
@@ -381,8 +398,8 @@ export default function ApprovalsPage() {
                     {reconIsActionable(row) && can('cashflow.reconcile') && (
                       <>
                         <button type="button" className="secondary" onClick={() => runAction(() => approveReconciliation(row.id, {}), `Reconciliation #${row.id} reviewed.`)}>Review</button>
-                        <button type="button" className="secondary" onClick={() => runAction(() => closeReconciliation(row.id, { reason: 'Closed from approvals queue' }), `Reconciliation #${row.id} closed.`)}>Close</button>
-                        <button type="button" className="secondary" onClick={() => runAction(() => reverseReconciliation(row.id, { reason: 'Reversed from approvals queue' }), `Reconciliation #${row.id} reversed.`)}>Reverse</button>
+                        <button type="button" className="secondary" onClick={() => setPendingAction({ title: `Close reconciliation #${row.id}?`, description: 'Confirm the counted cash and variance have been reviewed.', confirmLabel: 'Close reconciliation', work: (reason) => closeReconciliation(row.id, { reason: reason || 'Closed from approvals queue' }), successMessage: `Reconciliation #${row.id} closed.` })}>Close</button>
+                        <button type="button" className="danger" onClick={() => setPendingAction({ title: `Reverse reconciliation #${row.id}?`, description: 'Reversing a reconciliation reopens the cash audit trail. Record why this is necessary.', confirmLabel: 'Reverse reconciliation', reasonRequired: true, work: (reason) => reverseReconciliation(row.id, { reason }), successMessage: `Reconciliation #${row.id} reversed.` })}>Reverse</button>
                       </>
                     )}
                   </td>
@@ -393,6 +410,16 @@ export default function ApprovalsPage() {
           </table>
         </section>
       )}
+      <ConfirmActionModal
+        open={!!pendingAction}
+        title={pendingAction?.title}
+        description={pendingAction?.description}
+        confirmLabel={pendingAction?.confirmLabel}
+        tone={pendingAction?.tone || 'danger'}
+        reasonRequired={!!pendingAction?.reasonRequired}
+        onClose={() => setPendingAction(null)}
+        onConfirm={confirmPendingAction}
+      />
     </div>
   );
 }

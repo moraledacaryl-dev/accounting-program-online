@@ -16,6 +16,24 @@ const STATUS_LABELS = {
   written_off: 'Written off',
 };
 
+function sourceDetails(row) {
+  if (row.source_type === 'pos_room_charge') {
+    return `POS room charge${row.source_id ? ` #${row.source_id}` : ''}${row.external_id ? ` · ${row.external_id}` : ''}`;
+  }
+  if (row.source_type === 'pos_room_charge_reversal') {
+    return `POS reversal${row.source_id ? ` #${row.source_id}` : ''}${row.external_id ? ` · ${row.external_id}` : ''}`;
+  }
+  return [row.source_type, row.source_id ? `#${row.source_id}` : '', row.external_id].filter(Boolean).join(' · ');
+}
+
+function reversalDetails(row) {
+  const total = Number(row.adjustments_total || row.adjustment_amount || 0);
+  if (!total) return '';
+  const reversed = Math.abs(total);
+  const remaining = Number(row.balance_due || 0);
+  return `${remaining > 0 ? 'Partially reversed' : 'Reversed'} P${money(reversed)}${row.latest_adjustment_source_type ? ` by ${row.latest_adjustment_source_type}` : ''}`;
+}
+
 export default function ReceivablesTable({ rows = [], onCollect, renderActions = null }) {
   const hasCustomActions = typeof renderActions === 'function';
   return (
@@ -38,7 +56,11 @@ export default function ReceivablesTable({ rows = [], onCollect, renderActions =
           <tr key={row.id}>
             <td>{row.transaction_date}</td>
             <td>{TYPE_LABELS[row.receivable_type] || row.receivable_type || '-'}</td>
-            <td>{row.counterparty_name}</td>
+            <td>
+              <strong>{row.counterparty_name}</strong>
+              {sourceDetails(row) ? <div className="small muted">{sourceDetails(row)}</div> : null}
+              {reversalDetails(row) ? <div className="small muted">{reversalDetails(row)}</div> : null}
+            </td>
             <td>P{money(row.gross_amount)}</td>
             <td>P{money(row.amount_collected)}</td>
             <td>P{money(row.balance_due)}</td>

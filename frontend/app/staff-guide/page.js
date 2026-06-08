@@ -149,15 +149,69 @@ const FRONT_DESK_FLOW = [
     done: 'Guest records and balances stay connected.',
   },
   {
+    title: 'Repair old booking charge types',
+    page: 'Booking Detail or Beds24 Integration',
+    href: '/integrations/beds24',
+    steps: [
+      'Use Booking Detail when repairing one reservation.',
+      'Use Beds24 Integration > Folio Line Classification when reviewing all old Beds24 bookings.',
+      'Always run Preview first and read the sample changes.',
+      'Apply only after the balance adjustment makes sense.',
+      'Open the folio after applying and confirm charges, deposits, payments, refunds, and balances.',
+    ],
+    done: 'Old folio rows are classified by context without changing amounts or creating duplicate lines.',
+  },
+  {
     title: 'Track events',
     page: 'Events',
-    href: '/workspace/events',
+    href: '/events',
     steps: [
-      'Create an event record for client details and notes.',
-      'Create a balance to collect if there is an unpaid deposit or balance.',
-      'Receive payment from the To Receive page when the guest pays.',
+      'Create the event quote with client details, date, venue, package, and quote lines.',
+      'Confirm the event when it is accepted so Accounting creates the receivable and journal entry.',
+      'Record deposits or balance payments on the event page so the payment settles the receivable.',
     ],
-    done: 'Event details and event balances are traceable.',
+    done: 'Event details, balances, payments, and accounting links stay together.',
+  },
+];
+
+const POS_FLOW = [
+  {
+    title: 'Take a restaurant order',
+    page: 'Dedicated POS > POS',
+    href: '/staff-guide',
+    steps: [
+      'Select or open the correct register session.',
+      'Choose the service area, table, room service, or takeout.',
+      'Add menu items, variations, quantities, and item notes.',
+      'Hold the order only when the guest is not paying yet.',
+      'Use Pay when the order is ready to settle.',
+    ],
+    done: 'The order is saved once in POS and appears in the kitchen/service queue.',
+  },
+  {
+    title: 'Send a room charge from POS',
+    page: 'Dedicated POS > POS and Room Charges',
+    href: '/staff-guide',
+    steps: [
+      'Choose Room Charge in the payment popup.',
+      'Match the in-house booking by room or guest.',
+      'Finalize the order to create a pending room-charge queue item.',
+      'Front desk manually posts the charge to Beds24 and records the posting reference.',
+      'Mark settled only when final payment or folio settlement is confirmed.',
+    ],
+    done: 'Service date, folio posting status, and payment date stay separate.',
+  },
+  {
+    title: 'Work with limited connection',
+    page: 'Dedicated POS > POS',
+    href: '/staff-guide',
+    steps: [
+      'Check the POS sync banner and browser connection badge.',
+      'If connection is down, save only an emergency offline draft for order-taking continuity.',
+      'Do not mark payments or room charges as completed while offline.',
+      'Restore the draft after connection returns, then save or settle normally.',
+    ],
+    done: 'Staff keep the order details without pretending money or folio posting has synced.',
   },
 ];
 
@@ -207,6 +261,53 @@ const SAFETY_RULES = [
   'Always add a note when cash count, payment, bill, or delivery does not match expected amount.',
 ];
 
+const HOT_SITUATIONS = [
+  {
+    title: 'POS sync banner is not green',
+    page: 'POS > Sync Queue',
+    href: '/staff-guide',
+    steps: [
+      'Tell the manager before forcing any retry.',
+      'Manager checks database migration, Accounting reachability, worker heartbeat, and failed rows.',
+      'Do not re-enter paid POS sales in Accounting.',
+    ],
+    done: 'The cause is fixed before retrying, with no duplicate sale or payment.',
+  },
+  {
+    title: 'Drawer mapping is missing',
+    page: 'POS > Registers',
+    href: '/staff-guide',
+    steps: [
+      'Ask a manager to open POS Registers.',
+      'Use the Accounting account picker and validate the real drawer.',
+      'Do not type a random ID just to open or close the shift.',
+    ],
+    done: 'The register is linked to its real Accounting drawer.',
+  },
+  {
+    title: 'Wrong room charge or folio',
+    page: 'POS > Room Charges',
+    href: '/staff-guide',
+    steps: [
+      'Mark the queue item disputed or rejected with a reason.',
+      'Keep the POS order and Beds24 references.',
+      'Supervisor corrects the folio and records proof.',
+    ],
+    done: 'The wrong charge is traceable and the correct folio is updated once.',
+  },
+  {
+    title: 'POS server is unavailable',
+    page: 'Manual outage log',
+    href: '/staff-guide',
+    steps: [
+      'Stop assuming browser actions are saved.',
+      'Record time, items, amount, tender, proof, and staff initials once in the approved outage log.',
+      'Manager encodes controlled outage fallback only after recovery.',
+    ],
+    done: 'Recovery encoding happens once without duplicate POS sales.',
+  },
+];
+
 function ProcessCard({ item }) {
   return (
     <article className="guide-card">
@@ -245,6 +346,9 @@ export default function StaffGuidePage() {
         <p className="muted">
           Simple steps for the processes that already exist in this app. Use this when training new staff or when someone is unsure where to start.
         </p>
+        <div className="row wrap" style={{ marginTop: 12 }}>
+          <a className="button-link" href="/guides/HIDDEN_OASIS_STAFF_READY_GUIDE.md" download>Download Full Staff Handbook</a>
+        </div>
       </section>
 
       <ProcessSection
@@ -260,9 +364,21 @@ export default function StaffGuidePage() {
       />
 
       <ProcessSection
+        title="Dedicated POS"
+        subtitle="Use these for cashier, room-service, kitchen, and offline-aware order-taking flows."
+        items={POS_FLOW}
+      />
+
+      <ProcessSection
         title="Back Office"
         subtitle="Use these for purchasing, inventory, payroll, menu setup, and approvals."
         items={BACK_OFFICE_FLOW}
+      />
+
+      <ProcessSection
+        title="Hot Situations"
+        subtitle="Use these when operations are under pressure. The downloadable handbook includes the full exception playbook, exact fields, and step-by-step examples."
+        items={HOT_SITUATIONS}
       />
 
       <section className="section">

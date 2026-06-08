@@ -1,10 +1,44 @@
 # Hidden Oasis Live Deployment Guide
 
-This deploys both online copies on one Ubuntu 22.04 server:
+This guide describes the hardened `/opt` layout for a clean Ubuntu 22.04
+deployment:
 
 ```text
 /opt/accounting-program-online
 /opt/pos-cloud-online
+```
+
+## Current Live Compatibility Profile
+
+The existing `hiddenoasis.app` host predates the hardened `/opt` layout. Until
+that host is migrated deliberately, use its current paths, ports, and unit
+names during updates:
+
+```text
+Accounting source: /root/accounting-program-online
+POS source:        /root/pos-cloud-online
+Accounting UI:     127.0.0.1:3000
+Accounting API:    127.0.0.1:8000
+POS UI:            127.0.0.1:3100
+POS API:           127.0.0.1:8100
+Accounting units:  accounting-backend accounting-frontend
+POS units:         pos-backend pos-frontend pos-sync-worker
+```
+
+Do not mix the two profiles in one update. For the current live host, back up
+both databases and source folders, upload into `/root/...`, run migrations,
+stop `accounting-frontend` and `pos-frontend`, build both frontends, restart the
+five existing units above, reload Nginx after `nginx -t`, then run the smoke
+checks in section 14. Never replace `node_modules` or `.next` underneath a
+running Next.js server: the old process can serve a mismatched build and return
+`500` for pages, JavaScript, and CSS.
+
+The four current app units must bind their UI and API ports to `127.0.0.1`, not
+`0.0.0.0`. Nginx is the only public entry point. Verify listeners after every
+unit-file change:
+
+```bash
+ss -ltnp | grep -E ':(3000|3100|8000|8100)\b'
 ```
 
 Live routing:
@@ -130,9 +164,16 @@ SECRET_KEY=REAL_ACCOUNTING_SECRET_KEY
 ALLOW_DEFAULT_ADMIN_BOOTSTRAP=false
 ALLOW_DEMO_SEED=false
 INTEGRATION_ENABLED=true
+INTEGRATION_PASSWORD=REAL_STRONG_INTEGRATION_USER_PASSWORD
 INTEGRATION_SECRET=REAL_SHARED_POS_ACCOUNTING_SECRET
 CORS_ORIGINS=https://hiddenoasis.app,https://pos.hiddenoasis.app
 UPLOADS_DIR=/var/lib/hiddenoasis/accounting/uploads
+PUBLIC_UPLOADS_ENABLED=false
+AUTH_COOKIE_NAME=erp_session
+AUTH_COOKIE_SAMESITE=lax
+AUTH_COOKIE_SECURE=true
+CSRF_COOKIE_NAME=erp_csrf
+CSRF_HEADER_NAME=x-csrf-token
 TRUST_PROXY_HEADERS=true
 ```
 
@@ -144,7 +185,7 @@ cp /opt/accounting-program-online/frontend/.env.production.example /etc/hiddenoa
 
 ```text
 NODE_ENV=production
-PORT=3100
+PORT=3000
 NEXT_PUBLIC_API_BASE=/api
 ```
 
@@ -178,7 +219,7 @@ cp /opt/pos-cloud-online/frontend/.env.production.example /etc/hiddenoasis/pos-f
 
 ```text
 NODE_ENV=production
-PORT=3200
+PORT=3100
 NEXT_PUBLIC_API_BASE=/api
 ```
 
@@ -239,7 +280,7 @@ Accounting:
 cd /opt/accounting-program-online/backend
 set -a; . /etc/hiddenoasis/accounting-backend.env; set +a
 . .venv/bin/activate
-python -c "import app.models; from app.db.database import Base, engine; Base.metadata.create_all(bind=engine)"
+alembic upgrade head
 ```
 
 POS:
@@ -315,13 +356,13 @@ systemctl reload nginx
 Expected routing:
 
 ```text
-hiddenoasis.app/             -> 127.0.0.1:3100
-hiddenoasis.app/api/         -> 127.0.0.1:8100
-hiddenoasis.app/uploads/     -> /var/lib/hiddenoasis/accounting/uploads
-hiddenoasis.app/healthz      -> 127.0.0.1:8100
-pos.hiddenoasis.app/         -> 127.0.0.1:3200
-pos.hiddenoasis.app/api/     -> 127.0.0.1:8200
-pos.hiddenoasis.app/healthz  -> 127.0.0.1:8200
+hiddenoasis.app/             -> 127.0.0.1:3000
+hiddenoasis.app/api/         -> 127.0.0.1:8000
+hiddenoasis.app/uploads/     -> blocked; use authenticated /api/attachments/{id}/download
+hiddenoasis.app/healthz      -> 127.0.0.1:8000
+pos.hiddenoasis.app/         -> 127.0.0.1:3100
+pos.hiddenoasis.app/api/     -> 127.0.0.1:8100
+pos.hiddenoasis.app/healthz  -> 127.0.0.1:8100
 ```
 
 ## 13. Backups
@@ -396,9 +437,10 @@ journalctl -u hiddenoasis-pos-sync-worker -n 100 --no-pager
 3. Upload online folders to `/opt/...` with `rsync`.
 4. Never overwrite `/etc/hiddenoasis/*.env`.
 5. Reinstall dependencies if requirements or lockfiles changed.
-6. Rebuild frontends with production env loaded.
-7. Run POS Alembic migrations.
-8. Restart services.
+6. Stop both frontend services before replacing frontend dependencies or `.next`.
+7. Rebuild frontends with production env loaded.
+8. Run POS Alembic migrations.
+9. Restart services.
 
 Update commands after upload:
 
@@ -408,12 +450,16 @@ chown -R hiddenoasis:hiddenoasis /opt/accounting-program-online /opt/pos-cloud-o
 cd /opt/accounting-program-online/backend
 . .venv/bin/activate
 pip install -r requirements.txt
+set -a; . /etc/hiddenoasis/accounting-backend.env; set +a
+alembic upgrade head
 
 cd /opt/pos-cloud-online/backend
 . .venv/bin/activate
 pip install -r requirements.txt
 set -a; . /etc/hiddenoasis/pos-backend.env; set +a
 alembic upgrade head
+
+systemctl stop hiddenoasis-accounting-frontend hiddenoasis-pos-frontend
 
 cd /opt/accounting-program-online/frontend
 set -a; . /etc/hiddenoasis/accounting-frontend.env; set +a

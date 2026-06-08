@@ -26,7 +26,7 @@ from app.models.entities import (
     Room,
 )
 from app.services.beds24_service import Beds24ApiError, fetch_beds24_bookings, load_beds24_settings
-from app.services.guest_service import ensure_booking_folio
+from app.services.guest_service import POSITIVE_FOLIO_TYPES, ensure_booking_folio
 
 
 STATUS_MAP = {
@@ -721,6 +721,277 @@ def _invoice_description(raw: dict[str, Any], fallback: str) -> str:
     return fallback
 
 
+def _classify_charge_line_type(description: str, kind: str | None = None) -> str:
+    text = f'{description or ""} {kind or ""}'.lower()
+    compact = re.sub(r'[^a-z0-9]+', ' ', text).strip()
+
+    if any(term in compact for term in (
+        'extra guest',
+        'extra guests',
+        'extra person',
+        'extra persons',
+        'additional guest',
+        'additional guests',
+        'additional person',
+        'additional persons',
+        'extra pax',
+        'additional pax',
+        'extra adult',
+        'additional adult',
+        'extra child',
+        'additional child',
+    )):
+        return 'extra_person'
+    if any(term in compact for term in (
+        'extra bed',
+        'additional bed',
+        'rollaway bed',
+        'roll away bed',
+        'rollaway',
+        'folding bed',
+    )):
+        return 'extra_bed'
+    if any(term in compact for term in ('breakfast', 'break fast', 'bfast')):
+        return 'breakfast_addon'
+    if any(term in compact for term in ('mini bar', 'minibar')):
+        return 'minibar'
+    if any(term in compact for term in (
+        'room service',
+        'cafe',
+        'coffee shop',
+        'restaurant',
+        'kitchen',
+        'food',
+        'meal',
+        'lunch',
+        'dinner',
+        'beverage',
+        'drink',
+        'coffee',
+        'juice',
+        'soda',
+    )):
+        return 'cafe_room_charge'
+    if any(term in compact for term in ('room charge', 'room rate', 'accommodation', 'lodging', 'nightly rate')):
+        return 'room_charge'
+    if 'room' in compact and 'tax' not in compact:
+        return 'room_charge'
+    return 'manual_charge'
+
+
+def _contains_folio_term(text: str, terms: tuple[str, ...]) -> bool:
+    return any(term in text for term in terms)
+
+
+def _classify_folio_line_type(
+    description: str,
+    kind: str | None = None,
+    *,
+    context: str | None = None,
+    signed_amount: float | None = None,
+) -> str:
+    text = f'{description or ""} {kind or ""} {context or ""}'.lower()
+    compact = re.sub(r'[^a-z0-9]+', ' ', text).strip()
+    words = f' {compact} '
+    normalized_kind = _norm_lower(kind)
+
+    if normalized_kind in {'refund', 'refunded', 'reversal', 'reversed'} or _contains_folio_term(
+        words,
+        (' refund ', ' refunded ', ' reversal ', ' reversed '),
+    ):
+        return 'refund'
+    if normalized_kind in {'deposit', 'deposits'} or _contains_folio_term(
+        words,
+        (' deposit ', ' deposits ', ' prepaid ', ' pre paid ', ' advance payment '),
+    ):
+        return 'deposit'
+    if normalized_kind in {'payment', 'payments', 'paid'} or _contains_folio_term(
+        words,
+        (' payment ', ' payments ', ' paid ', ' settlement ', ' cash received ', ' gcash ', ' bank transfer ', ' credit card '),
+    ):
+        return 'payment'
+
+    charge_type = _classify_charge_line_type(description, f'{kind or ""} {context or ""}')
+    if charge_type != 'manual_charge':
+        return charge_type
+    if signed_amount is not None and signed_amount < -0.0001:
+        return 'payment'
+    return 'manual_charge'
+
+
+def _folio_balance_contribution(line_type: str, amount: float) -> float:
+    normalized_type = _norm_lower(line_type)
+    if normalized_type in {'deposit', 'payment'}:
+        return -amount
+    return amount
+
+
+def _looks_like_beds24_folio_line(line: BookingFolioLine) -> bool:
+    source = _norm_lower(line.external_source)
+    external_key = _norm_lower(line.external_line_key)
+    reference_no = _norm_lower(line.reference_no)
+    created_by = _norm_lower(line.created_by)
+    notes = _norm_lower(line.notes)
+    if source == 'beds24':
+        return True
+    if external_key.startswith('beds24:') or reference_no.startswith('beds24:'):
+        return True
+    if created_by.startswith('beds24') or 'beds24 mirrored line' in notes:
+        return True
+    folio = getattr(line, 'folio', None)
+    booking = getattr(folio, 'booking', None)
+    if booking and _norm_lower(booking.external_source) == 'beds24' and created_by.startswith('beds24'):
+        return True
+    return False
+
+
+def reclassify_historical_folio_lines(
+    db: Session,
+    *,
+    dry_run: bool = True,
+    include_manual_source: bool = False,
+    include_payment_lines: bool = False,
+    booking_id: int | None = None,
+    limit: int = 5000,
+    triggered_by: str | None = None,
+) -> dict[str, Any]:
+    capped_limit = max(1, min(int(limit or 5000), 50000))
+    candidate_types = ['manual_charge']
+    if include_payment_lines:
+        candidate_types.extend(['payment', 'deposit'])
+    query = (
+        db.query(BookingFolioLine)
+        .options(selectinload(BookingFolioLine.folio).selectinload(BookingFolio.booking))
+        .filter(func.lower(func.coalesce(BookingFolioLine.line_type, '')).in_(candidate_types))
+    )
+    if booking_id is not None:
+        local_booking_id = int(booking_id)
+        if not db.get(Booking, local_booking_id):
+            raise ValueError('Booking not found.')
+        query = query.join(BookingFolio, BookingFolioLine.folio_id == BookingFolio.id).filter(BookingFolio.booking_id == local_booking_id)
+    rows = (
+        query
+        .order_by(BookingFolioLine.id.asc())
+        .limit(capped_limit)
+        .all()
+    )
+
+    summary: dict[str, Any] = {
+        'ok': True,
+        'dry_run': bool(dry_run),
+        'include_manual_source': bool(include_manual_source),
+        'include_payment_lines': bool(include_payment_lines),
+        'booking_id': int(booking_id) if booking_id is not None else None,
+        'limit': capped_limit,
+        'scanned': len(rows),
+        'eligible': 0,
+        'changed': 0,
+        'unchanged': 0,
+        'skipped_source': 0,
+        'skipped_negative': 0,
+        'balance_affecting_changes': 0,
+        'balance_adjustment': 0.0,
+        'by_new_type': {},
+        'preview': [],
+    }
+
+    for line in rows:
+        is_beds24_line = _looks_like_beds24_folio_line(line)
+        if not is_beds24_line and not include_manual_source:
+            summary['skipped_source'] += 1
+            continue
+
+        amount = _as_float(line.amount, 0)
+        if amount < -0.0001:
+            summary['skipped_negative'] += 1
+            continue
+
+        summary['eligible'] += 1
+        context = ' '.join(
+            value
+            for value in (
+                _norm(line.notes),
+                _norm(line.reference_no),
+                _norm(line.external_line_key),
+            )
+            if value
+        )
+        new_type = _classify_folio_line_type(line.description or '', context=context)
+        old_type = _norm_lower(line.line_type) or 'manual_charge'
+        if new_type == 'manual_charge' or new_type == old_type:
+            summary['unchanged'] += 1
+            continue
+
+        balance_adjustment = round(
+            _folio_balance_contribution(new_type, amount) - _folio_balance_contribution(old_type, amount),
+            4,
+        )
+        summary['changed'] += 1
+        if abs(balance_adjustment) > 0.0001:
+            summary['balance_affecting_changes'] += 1
+            summary['balance_adjustment'] = round(summary['balance_adjustment'] + balance_adjustment, 4)
+        by_type = summary['by_new_type']
+        by_type[new_type] = int(by_type.get(new_type, 0)) + 1
+
+        folio = getattr(line, 'folio', None)
+        booking = getattr(folio, 'booking', None)
+        if len(summary['preview']) < 50:
+            summary['preview'].append(
+                {
+                    'line_id': line.id,
+                    'folio_id': line.folio_id,
+                    'booking_id': getattr(booking, 'id', None),
+                    'beds24_booking_id': getattr(booking, 'external_booking_id', None),
+                    'old_type': old_type,
+                    'new_type': new_type,
+                    'description': line.description,
+                    'amount': amount,
+                    'balance_adjustment': balance_adjustment,
+                    'source': line.external_source or ('beds24-like' if is_beds24_line else 'manual'),
+                }
+            )
+
+        if not dry_run:
+            line.line_type = new_type
+            line.notes = _append_unique_line(
+                line.notes,
+                f'Auto-classified from {old_type} to {new_type} by folio reclassification.',
+            )
+            db.add(line)
+
+    action = 'previewed' if dry_run else 'applied'
+    summary['message'] = (
+        f'Folio line reclassification {action}: {summary["changed"]} '
+        f'{"would change" if dry_run else "changed"}, {summary["unchanged"]} unchanged, '
+        f'{summary["skipped_source"]} skipped by source, '
+        f'balance adjustment {summary["balance_adjustment"]:+.2f}.'
+    )
+    _upsert_sync_log(
+        db,
+        event_type='folio_line_reclassify',
+        source_type='manual',
+        status='success',
+        message=summary['message'],
+        payload={
+            'dry_run': summary['dry_run'],
+            'include_manual_source': summary['include_manual_source'],
+            'include_payment_lines': summary['include_payment_lines'],
+            'booking_id': summary['booking_id'],
+            'limit': capped_limit,
+            'scanned': summary['scanned'],
+            'eligible': summary['eligible'],
+            'changed': summary['changed'],
+            'unchanged': summary['unchanged'],
+            'skipped_source': summary['skipped_source'],
+            'skipped_negative': summary['skipped_negative'],
+            'balance_affecting_changes': summary['balance_affecting_changes'],
+            'balance_adjustment': summary['balance_adjustment'],
+            'by_new_type': summary['by_new_type'],
+        },
+    )
+    return summary
+
+
 def _extract_invoice_item_entries(payload: dict[str, Any], beds24_booking_id: str) -> list[dict[str, Any]]:
     entries: list[dict[str, Any]] = []
 
@@ -747,22 +1018,9 @@ def _extract_invoice_item_entries(payload: dict[str, Any], beds24_booking_id: st
             kind = _norm_lower(row.get('type') or row.get('kind') or row.get('entryType') or parent_kind)
             if not kind:
                 kind = parent_kind
-            has_negative_line_total = line_total is not None and line_total < 0
-
-            lower_desc = description.lower()
-            is_payment_like_kind = kind in {'payment', 'payments', 'deposit', 'deposits', 'paid'}
-            is_refund_like_kind = kind in {'refund', 'refunded', 'reversal', 'reversed'}
-
-            if is_refund_like_kind:
-                line_type = 'refund'
-                amount = abs(line_total) if line_total is not None and abs(line_total) > 0.0001 else abs(amount)
-            elif is_payment_like_kind or has_negative_line_total or amount < 0:
-                line_type = 'deposit' if 'deposit' in lower_desc else 'payment'
-                amount = abs(line_total) if line_total is not None and abs(line_total) > 0.0001 else abs(amount)
-            else:
-                line_type = 'room_charge' if 'room' in lower_desc and 'tax' not in lower_desc else 'manual_charge'
-                if line_total is not None and abs(line_total) > 0.0001:
-                    amount = abs(line_total)
+            line_type = _classify_folio_line_type(description, kind, signed_amount=signed_amount)
+            if line_total is not None and abs(line_total) > 0.0001:
+                amount = abs(line_total)
             entries.append(
                 {
                     'external_line_key': external_key,
@@ -855,7 +1113,7 @@ def _apply_prepaid_settlement_if_missing(
     charge_total = 0.0
     for row in entries:
         line_type = _norm_lower(row.get('line_type'))
-        if line_type in {'room_charge', 'manual_charge', 'package_charge', 'extra_person', 'extra_bed', 'breakfast_addon'}:
+        if line_type in POSITIVE_FOLIO_TYPES:
             charge_total += _as_float(row.get('amount'), 0)
     if charge_total <= 0.0001:
         return entries

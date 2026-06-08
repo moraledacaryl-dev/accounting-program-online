@@ -11,6 +11,8 @@ import {
   updateRoomFolioLine,
   updateRoomFolioStatus,
 } from '../../../lib/api';
+import ConfirmActionModal from '../../../components/ConfirmActionModal';
+import { useConfirmAction } from '../../../components/ConfirmActionProvider';
 
 const LINE_TYPES = [
   'room_charge',
@@ -18,12 +20,29 @@ const LINE_TYPES = [
   'extra_person',
   'extra_bed',
   'breakfast_addon',
+  'minibar',
+  'cafe_room_charge',
   'manual_charge',
   'deposit',
   'payment',
   'refund',
   'reversal',
 ];
+
+const LINE_LABELS = {
+  room_charge: 'Room charge',
+  package_charge: 'Package charge',
+  extra_person: 'Extra guest',
+  extra_bed: 'Extra bed',
+  breakfast_addon: 'Breakfast',
+  minibar: 'Mini bar',
+  cafe_room_charge: 'Cafe / room service',
+  manual_charge: 'Manual charge',
+  deposit: 'Deposit',
+  payment: 'Payment',
+  refund: 'Refund',
+  reversal: 'Reversal',
+};
 
 const EMPTY_LINE = {
   line_type: 'manual_charge',
@@ -45,6 +64,7 @@ function todayIso() {
 }
 
 export default function RoomFolioDetailPage({ params }) {
+  const confirmAction = useConfirmAction();
   const folioId = Number(params.id);
   const [folio, setFolio] = useState(null);
   const [editingLineId, setEditingLineId] = useState(null);
@@ -52,6 +72,7 @@ export default function RoomFolioDetailPage({ params }) {
   const [notesForm, setNotesForm] = useState('');
   const [error, setError] = useState('');
   const [notice, setNotice] = useState('');
+  const [pendingStatus, setPendingStatus] = useState('');
 
   async function load() {
     const row = await fetchRoomFolio(folioId);
@@ -73,6 +94,17 @@ export default function RoomFolioDetailPage({ params }) {
       return 0;
     });
   }, [folio]);
+  const lineBreakdown = useMemo(() => {
+    const totals = new Map();
+    for (const row of folio?.lines || []) {
+      const key = row.line_type || 'manual_charge';
+      totals.set(key, Number(totals.get(key) || 0) + Number(row.amount || 0));
+    }
+    return [...totals.entries()]
+      .map(([lineType, amount]) => ({ lineType, amount }))
+      .sort((a, b) => Math.abs(b.amount) - Math.abs(a.amount));
+  }, [folio]);
+  const otherPayments = Number(folio?.payments || 0) - Number(folio?.deposits || 0);
 
   async function submitLine(e) {
     e.preventDefault();
@@ -124,7 +156,7 @@ export default function RoomFolioDetailPage({ params }) {
   }
 
   async function removeLine(row) {
-    if (!window.confirm(`Delete folio line ${row.description}?`)) return;
+    if (!await confirmAction({ title: `Delete folio line ${row.description}?`, description: 'Remove only incorrect draft lines. Settled charges should be handled with a reversal.' })) return;
     setError('');
     try {
       await deleteRoomFolioLine(row.id);
@@ -150,12 +182,12 @@ export default function RoomFolioDetailPage({ params }) {
     }
   }
 
-  async function setStatus(status) {
+  async function setStatus(status, reason = '') {
     setError('');
     try {
       await updateRoomFolioStatus(folioId, {
         status,
-        notes: `Status changed to ${status}`,
+        notes: reason || `Status changed to ${status}`,
       });
       setNotice(`Folio set to ${status}.`);
       await load();
@@ -213,8 +245,8 @@ export default function RoomFolioDetailPage({ params }) {
 
       <div className="card-grid">
         <section className="card stat-card"><div className="small muted">Charges</div><div className="kpi">{php(folio.charges || 0)}</div></section>
-        <section className="card stat-card"><div className="small muted">Payments</div><div className="kpi">{php(folio.payments || 0)}</div></section>
         <section className="card stat-card"><div className="small muted">Deposits</div><div className="kpi">{php(folio.deposits || 0)}</div></section>
+        <section className="card stat-card"><div className="small muted">Other Payments</div><div className="kpi">{php(otherPayments)}</div></section>
         <section className="card stat-card"><div className="small muted">Balance</div><div className="kpi">{php(folio.balance || 0)}</div></section>
       </div>
 
@@ -225,7 +257,7 @@ export default function RoomFolioDetailPage({ params }) {
             <div className="form-grid">
               <label>Type
                 <select value={lineForm.line_type} onChange={(e) => setLineForm((f) => ({ ...f, line_type: e.target.value }))}>
-                  {LINE_TYPES.map((value) => <option key={value} value={value}>{value}</option>)}
+                  {LINE_TYPES.map((value) => <option key={value} value={value}>{LINE_LABELS[value] || value}</option>)}
                 </select>
               </label>
               <label>Description<input required value={lineForm.description} onChange={(e) => setLineForm((f) => ({ ...f, description: e.target.value }))} /></label>
@@ -259,14 +291,31 @@ export default function RoomFolioDetailPage({ params }) {
             <div className="row wrap">
               <button type="button" className="secondary" onClick={saveFolioMeta}>Save Notes</button>
               <button type="button" className="secondary" onClick={() => setStatus('reviewed')}>Set Reviewed</button>
-              <button type="button" className="secondary" onClick={() => setStatus('closed')}>Close Folio</button>
-              <button type="button" className="secondary" onClick={() => setStatus('open')}>Reopen</button>
+              <button type="button" className="secondary" onClick={() => setPendingStatus('closed')}>Close Folio</button>
+              <button type="button" className="secondary" onClick={() => setPendingStatus('open')}>Reopen</button>
               <button type="button" className="secondary" onClick={syncOpenSnapshot}>Check Related</button>
             </div>
-            <p className="small muted">Use `room_charge` and `manual_charge` for charges, `deposit/payment` for collections, and `refund/reversal` for negative payment effects.</p>
+            <p className="small muted">Deposits are shown separately here and still reduce the balance; cafe room service should be posted as a charge, not as a payment.</p>
           </div>
         </section>
       </div>
+
+      {!!lineBreakdown.length && (
+        <section className="section">
+          <h2>Folio Breakdown</h2>
+          <table className="table dense-table">
+            <thead><tr><th>Bucket</th><th>Amount</th></tr></thead>
+            <tbody>
+              {lineBreakdown.map((row) => (
+                <tr key={row.lineType}>
+                  <td>{LINE_LABELS[row.lineType] || row.lineType}</td>
+                  <td>{php(row.amount)}</td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </section>
+      )}
 
       <section className="section">
         <h2>Folio Lines</h2>
@@ -276,7 +325,7 @@ export default function RoomFolioDetailPage({ params }) {
             {sortedLines.map((row) => (
               <tr key={row.id}>
                 <td>{row.transaction_date || '-'}</td>
-                <td>{row.line_type}</td>
+                <td>{LINE_LABELS[row.line_type] || row.line_type}</td>
                 <td>{row.description}<br /><span className="small muted">{row.notes || ''}</span></td>
                 <td>{Number(row.quantity || 0).toLocaleString(undefined, { maximumFractionDigits: 2 })}</td>
                 <td>{Number(row.unit_price || 0).toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</td>
@@ -292,6 +341,16 @@ export default function RoomFolioDetailPage({ params }) {
           </tbody>
         </table>
       </section>
+      <ConfirmActionModal
+        open={!!pendingStatus}
+        title={pendingStatus === 'closed' ? 'Close this folio?' : 'Reopen this folio?'}
+        description={pendingStatus === 'closed' ? 'Confirm the guest folio is ready to close. Further corrections will require reopening it.' : 'Reopening changes the guest billing workflow. Record why a correction is needed.'}
+        confirmLabel={pendingStatus === 'closed' ? 'Close folio' : 'Reopen folio'}
+        reasonRequired={pendingStatus === 'open'}
+        tone={pendingStatus === 'open' ? 'danger' : 'normal'}
+        onClose={() => setPendingStatus('')}
+        onConfirm={(reason) => setStatus(pendingStatus, reason)}
+      />
     </div>
   );
 }

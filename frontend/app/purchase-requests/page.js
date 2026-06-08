@@ -13,6 +13,7 @@ import {
   updatePurchaseRequestStatus,
 } from '../../lib/api';
 import { shouldPreventEnterSubmit } from '../../lib/formBehavior';
+import { useConfirmAction } from '../../components/ConfirmActionProvider';
 
 const EMPTY_LINE = {
   inventory_item_id: '',
@@ -35,6 +36,7 @@ const EMPTY_FORM = {
 };
 
 export default function PurchaseRequestsPage() {
+  const confirmAction = useConfirmAction();
   const [suppliers, setSuppliers] = useState([]);
   const [items, setItems] = useState([]);
   const [rows, setRows] = useState([]);
@@ -163,7 +165,7 @@ export default function PurchaseRequestsPage() {
   }
 
   async function removeRow(row) {
-    if (!window.confirm(`Delete purchase request ${row.request_no || row.id}?`)) return;
+    if (!await confirmAction({ title: `Delete purchase request ${row.request_no || row.id}?`, description: 'Only draft requests should be removed. Approved requests should be cancelled through the workflow.' })) return;
     setError('');
     try {
       await deletePurchaseRequest(row.id);
@@ -273,7 +275,7 @@ export default function PurchaseRequestsPage() {
                 </label>
                 <label>Description<input value={line.description} onChange={(e) => updateLine(index, { description: e.target.value })} /></label>
                 <label>Qty<input type="number" min="0" step="0.01" value={line.quantity} onChange={(e) => updateLine(index, { quantity: e.target.value })} /></label>
-                <label>Unit<input value={line.unit} onChange={(e) => updateLine(index, { unit: e.target.value })} /></label>
+                <label>Unit<input value={line.unit} readOnly={!!line.inventory_item_id} onChange={(e) => updateLine(index, { unit: e.target.value })} /></label>
                 <label>Est. Unit Cost<input type="number" min="0" step="0.01" value={line.estimated_unit_cost} onChange={(e) => updateLine(index, { estimated_unit_cost: e.target.value })} /></label>
                 <label>Notes<input value={line.notes} onChange={(e) => updateLine(index, { notes: e.target.value })} /></label>
                 <div className="row" style={{ alignItems: 'end' }}>

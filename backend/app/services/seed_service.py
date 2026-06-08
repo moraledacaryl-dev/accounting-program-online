@@ -29,9 +29,9 @@ def seed_demo_data(db: Session):
         chicken = InventoryItem(name='Chicken', category_name='Raw Materials', subcategory_name='Proteins', unit='kg', reorder_level=3)
         coffee = InventoryItem(name='Coffee Beans', category_name='Beverages', subcategory_name='Coffee Ingredients', unit='g', reorder_level=500)
         db.add_all([eggs, chicken, coffee]); db.commit(); db.refresh(eggs); db.refresh(chicken); db.refresh(coffee)
-        create_inbound_movement(db, eggs, 120, 8, 'Purchase', 'inventory', 'SEED-EGGS', 'Demo seed', '2026-04-01', 'Supplier A')
-        create_inbound_movement(db, chicken, 12, 240, 'Purchase', 'inventory', 'SEED-CHICKEN', 'Demo seed', '2026-04-01', 'Supplier A')
-        create_inbound_movement(db, coffee, 3000, 0.9, 'Purchase', 'inventory', 'SEED-COFFEE', 'Demo seed', '2026-04-01', 'Supplier B')
+        create_inbound_movement(db, eggs, 120, 8, None, 0, 0, 'Purchase', 'inventory', 'SEED-EGGS', 'Demo seed', '2026-04-01', 'Supplier A')
+        create_inbound_movement(db, chicken, 12, 240, None, 0, 0, 'Purchase', 'inventory', 'SEED-CHICKEN', 'Demo seed', '2026-04-01', 'Supplier A')
+        create_inbound_movement(db, coffee, 3000, 0.9, None, 0, 0, 'Purchase', 'inventory', 'SEED-COFFEE', 'Demo seed', '2026-04-01', 'Supplier B')
     if db.query(Asset).count() == 0:
         db.add_all([
             Asset(name='Deluxe King Bed', asset_class='Furniture', location='Room 1', acquisition_cost=18000, useful_life_months=84),

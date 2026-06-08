@@ -7,6 +7,7 @@ import {
   fetchBookingChannels,
   fetchRoomsEntity,
 } from '../../../lib/api';
+import { stayIncludesDay } from '../../../lib/stays';
 
 const STATUS_ALL = '__all__';
 
@@ -35,12 +36,6 @@ function buildCalendarDays(monthDate) {
     day.setDate(start.getDate() + idx);
     return day;
   });
-}
-
-function overlapsDay(row, dayISO) {
-  const checkIn = row.check_in || '';
-  const checkOut = row.check_out || checkIn;
-  return checkIn <= dayISO && checkOut >= dayISO;
 }
 
 function statusClass(status) {
@@ -152,7 +147,8 @@ export default function BookingCalendarPage() {
           {days.map((day) => {
             const dayISO = isoDate(day);
             const inMonth = monthKey(day) === monthKey(monthDate);
-            const dayRows = rows.filter((row) => overlapsDay(row, dayISO)).slice(0, 5);
+            const matchingRows = rows.filter((row) => stayIncludesDay(row, dayISO));
+            const dayRows = matchingRows.slice(0, 5);
             return (
               <div key={dayISO} className={`calendar-day${inMonth ? '' : ' muted-day'}`}>
                 <div className="calendar-date">{day.getDate()}</div>
@@ -164,8 +160,8 @@ export default function BookingCalendarPage() {
                       <span>{row.room_display_name || row.room_name || 'Unassigned'} · {row.channel_display_name || row.channel || 'Channel'}</span>
                     </Link>
                   ))}
-                  {rows.filter((row) => overlapsDay(row, dayISO)).length > 5 && (
-                    <span className="small muted">+{rows.filter((row) => overlapsDay(row, dayISO)).length - 5} more</span>
+                  {matchingRows.length > 5 && (
+                    <span className="small muted">+{matchingRows.length - 5} more</span>
                   )}
                 </div>
               </div>

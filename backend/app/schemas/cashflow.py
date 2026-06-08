@@ -53,6 +53,8 @@ class MoneyTransactionCreate(BaseModel):
     status: str = 'posted'
     auto_post_accounting: bool = False
     allow_overdraw: bool = False
+    external_source: str | None = None
+    external_id: str | None = None
 
 
 class MoneyTransactionUpdate(BaseModel):
@@ -88,6 +90,8 @@ class AccountTransferCreate(BaseModel):
     status: str = 'posted'
     auto_post_accounting: bool = False
     allow_overdraw: bool = False
+    external_source: str | None = None
+    external_id: str | None = None
 
 
 class AccountTransferUpdate(BaseModel):
@@ -137,6 +141,10 @@ class ReceivableCreate(BaseModel):
     status: str = 'open'
     notes: str | None = None
     bir_include: bool = False
+    external_source: str | None = None
+    external_id: str | None = None
+    reverses_source_type: str | None = None
+    reverses_source_id: int | None = None
 
 
 class ReceivableCollectPayload(BaseModel):

@@ -5,6 +5,7 @@ from pathlib import Path
 from uuid import uuid4
 
 from fastapi import APIRouter, Depends, File, Form, HTTPException, Query, UploadFile
+from fastapi.responses import FileResponse
 from sqlalchemy.orm import Session
 
 from app.core.settings import settings
@@ -61,6 +62,11 @@ def _sanitize_filename(name: str | None) -> str:
     return base[:240]
 
 
+def _attachment_disk_path(row: Attachment) -> Path:
+    stored_name = row.stored_name or Path(row.file_path or '').name
+    return UPLOAD_ROOT / Path(stored_name).name
+
+
 def _serialize_attachment(row: Attachment) -> dict:
     return {
         'id': row.id,
@@ -71,6 +77,7 @@ def _serialize_attachment(row: Attachment) -> dict:
         'content_type': row.content_type,
         'size_bytes': row.size_bytes,
         'file_path': row.file_path,
+        'download_url': f'{settings.api_prefix}/attachments/{row.id}/download',
         'note': row.note,
         'uploaded_by': row.uploaded_by,
         'created_at': row.created_at.isoformat() if row.created_at else None,
@@ -175,6 +182,25 @@ async def upload_attachment(
         raise
 
 
+@router.get('/{attachment_id}/download')
+def download_attachment(
+    attachment_id: int,
+    db: Session = Depends(get_db),
+    user=Depends(get_current_user),
+):
+    row = db.get(Attachment, int(attachment_id))
+    if not row:
+        raise HTTPException(status_code=404, detail='Attachment not found.')
+    absolute_path = _attachment_disk_path(row)
+    if not absolute_path.exists() or not absolute_path.is_file():
+        raise HTTPException(status_code=404, detail='Attachment file is missing from storage.')
+    return FileResponse(
+        path=str(absolute_path),
+        filename=row.file_name or absolute_path.name,
+        media_type=row.content_type or 'application/octet-stream',
+    )
+
+
 @router.delete('/{attachment_id}')
 def delete_attachment(
     attachment_id: int,
@@ -197,7 +223,7 @@ def delete_attachment(
     if not row:
         raise HTTPException(status_code=404, detail='Attachment not found.')
 
-    absolute_path = UPLOAD_ROOT / Path(row.file_path or '').name
+    absolute_path = _attachment_disk_path(row)
     db.delete(row)
     db.commit()
     if absolute_path.exists():

@@ -1,5 +1,6 @@
 'use client';
 import { useEffect, useMemo, useState } from 'react';
+import { useConfirmAction } from '../../components/ConfirmActionProvider';
 import { createMasterValue, deleteMasterValue, fetchMasterValues, updateMasterValue } from '../../lib/api';
 
 const presets = [
@@ -9,6 +10,7 @@ const presets = [
 ];
 
 export default function MasterDataPage() {
+  const confirmAction = useConfirmAction();
   const [groupName, setGroupName] = useState('room_types');
   const [value, setValue] = useState('');
   const [code, setCode] = useState('');
@@ -129,7 +131,7 @@ export default function MasterDataPage() {
                   ) : (
                     <>
                       <button type="button" className="secondary" onClick={()=>{setEditingId(r.id); setEdit({ value:r.value || '', code:r.code || '', group_name:r.group_name || '', is_active: !!r.is_active });}}>Edit</button>
-                      <button type="button" className="secondary" onClick={async()=>{await deleteMasterValue(r.id); await load();}}>Delete</button>
+                      <button type="button" className="secondary" onClick={async()=>{if (await confirmAction({ title: `Delete ${r.value}?`, description: 'Remove only lookup values that are no longer needed by setup or historical records.' })) {await deleteMasterValue(r.id); await load();}}}>Delete</button>
                     </>
                   )}
                 </td>
