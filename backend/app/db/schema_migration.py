@@ -88,3 +88,42 @@ def run_startup_migrations(engine: Engine):
         )
     ''')
     _sqlite_execute(engine, 'CREATE UNIQUE INDEX IF NOT EXISTS uq_receivable_adjustments_external_event ON receivable_adjustments (external_source, external_id)')
+
+    _sqlite_execute(engine, '''
+        CREATE TABLE IF NOT EXISTS integration_receipts (
+            id INTEGER PRIMARY KEY,
+            external_source VARCHAR(80) NOT NULL,
+            external_id VARCHAR(200) NOT NULL,
+            event_type VARCHAR(120) NOT NULL,
+            source_record_type VARCHAR(120),
+            source_record_id VARCHAR(120),
+            payload_json TEXT DEFAULT '{}',
+            status VARCHAR(40) DEFAULT 'For Review',
+            outcome TEXT,
+            error_message TEXT,
+            received_at VARCHAR(50),
+            processed_at VARCHAR(50),
+            created_review_record_type VARCHAR(120),
+            created_review_record_id VARCHAR(120),
+            created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+            updated_at DATETIME DEFAULT CURRENT_TIMESTAMP
+        )
+    ''')
+    _sqlite_execute(engine, 'CREATE UNIQUE INDEX IF NOT EXISTS uq_integration_receipt_external_event ON integration_receipts (external_source, external_id)')
+    _sqlite_execute(engine, '''
+        CREATE TABLE IF NOT EXISTS external_employee_references (
+            id INTEGER PRIMARY KEY,
+            external_source VARCHAR(80) NOT NULL,
+            source_staff_id VARCHAR(120),
+            employee_code VARCHAR(120) NOT NULL,
+            display_name VARCHAR(255) DEFAULT '',
+            department VARCHAR(120),
+            position VARCHAR(120),
+            role VARCHAR(120),
+            active BOOLEAN DEFAULT 1,
+            primary_department VARCHAR(120),
+            created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+            updated_at DATETIME DEFAULT CURRENT_TIMESTAMP
+        )
+    ''')
+    _sqlite_execute(engine, 'CREATE UNIQUE INDEX IF NOT EXISTS uq_external_employee_reference ON external_employee_references (external_source, employee_code)')

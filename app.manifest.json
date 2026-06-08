@@ -1,0 +1,7 @@
+{
+  "app_key": "accounting",
+  "app_name": "Accounting",
+  "app_description": "Hidden Oasis accounting, review queues, journals, cashflow, procurement and reporting.",
+  "production_url": "https://accounting.hiddenoasis.app",
+  "health_endpoint": "/healthz"
+}
