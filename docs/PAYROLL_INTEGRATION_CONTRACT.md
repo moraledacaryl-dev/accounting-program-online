@@ -31,7 +31,9 @@ All events must use `schema_version: "2026-06-v1"` and `external_source: "hidden
 - `POST /api/integrations/payroll/receipts/{id}/reject?reason=...`
 - `POST /api/integrations/payroll/receipts/{id}/post?confirm=true`
 
-Imports create receipts and review previews only. Posting requires an explicit Accounting action and `confirm=true`; duplicate receipts return `already_applied` without overwriting the original review status.
+Inbound POST endpoints require `X-Integration-Api-Key` when a real `INTEGRATION_API_KEY` or `INTEGRATION_SECRET` is configured. Production rejects integration imports if the shared key is still a placeholder.
+
+Imports create receipts and review previews only. Posting requires an explicit Accounting approve action first, then `confirm=true`; duplicate receipts return `already_applied` without overwriting the original review status.
 
 ## Accounting Outcomes
 

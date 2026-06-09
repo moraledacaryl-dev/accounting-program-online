@@ -62,6 +62,7 @@ class Settings(BaseSettings):
     integration_username: str = 'pos_integration'
     integration_password: str = 'pos1234'
     integration_secret: str = 'pos-integration-secret'
+    integration_api_key: str = ''
     cors_origins: str = 'http://localhost:3000,http://127.0.0.1:3000,http://localhost:3001,http://127.0.0.1:3001'
     uploads_dir: str = str(BACKEND_ROOT / 'uploads')
     public_uploads_enabled: bool = False
@@ -119,7 +120,11 @@ class Settings(BaseSettings):
 
     @property
     def integration_secret_is_placeholder(self) -> bool:
-        return looks_like_placeholder_secret(self.integration_secret)
+        return looks_like_placeholder_secret(self.integration_receive_secret)
+
+    @property
+    def integration_receive_secret(self) -> str:
+        return (self.integration_api_key or self.integration_secret or '').strip()
 
     @property
     def integration_password_is_placeholder(self) -> bool:

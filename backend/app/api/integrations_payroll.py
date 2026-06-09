@@ -1,13 +1,16 @@
 from __future__ import annotations
 
 import json
+from hmac import compare_digest
 from datetime import datetime
 from typing import Any
 
-from fastapi import APIRouter, Depends, HTTPException, Query
+from fastapi import APIRouter, Depends, Header, HTTPException, Query
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session
 
+from app.api.deps import require_any_permissions
+from app.core.settings import looks_like_placeholder_secret, settings
 from app.db.database import get_db
 from app.models.entities import ExternalEmployeeReference, IntegrationReceipt
 
@@ -35,6 +38,16 @@ ACCEPTED_EVENT_TYPES = {
 }
 REVIEW_STATUSES = {'For Review', 'Ready to Post', 'Posted', 'Rejected', 'Errors', 'Already Applied'}
 TERMINAL_STATUSES = {'Posted', 'Rejected', 'Errors'}
+
+
+def require_integration_key(x_integration_api_key: str | None = Header(default=None, alias='X-Integration-Api-Key')):
+    secret = settings.integration_receive_secret
+    if looks_like_placeholder_secret(secret):
+        if settings.is_production:
+            raise HTTPException(status_code=503, detail='Integration API key is not configured')
+        return
+    if not x_integration_api_key or not compare_digest(str(x_integration_api_key), secret):
+        raise HTTPException(status_code=401, detail='Invalid integration API key')
 
 
 def _now() -> str:
@@ -239,32 +252,36 @@ def update_outcome(row: IntegrationReceipt, updates: dict[str, Any]) -> dict[str
 
 
 @router.post('/employees')
-async def receive_employees(payload: dict[str, Any], db: Session = Depends(get_db)):
+async def receive_employees(payload: dict[str, Any], db: Session = Depends(get_db), _=Depends(require_integration_key)):
     return store_receipt(db, payload, {'employee.sync'})
 
 
 @router.post('/runs')
-async def receive_runs(payload: dict[str, Any], db: Session = Depends(get_db)):
+async def receive_runs(payload: dict[str, Any], db: Session = Depends(get_db), _=Depends(require_integration_key)):
     return store_receipt(db, payload, {'payroll.run.approved', 'payroll.run.paid'})
 
 
 @router.post('/13th-month')
-async def receive_13th_month(payload: dict[str, Any], db: Session = Depends(get_db)):
+async def receive_13th_month(payload: dict[str, Any], db: Session = Depends(get_db), _=Depends(require_integration_key)):
     return store_receipt(db, payload, {'payroll.13th_month.paid'})
 
 
 @router.post('/cash-advance-release')
-async def receive_cash_advance_release(payload: dict[str, Any], db: Session = Depends(get_db)):
+async def receive_cash_advance_release(payload: dict[str, Any], db: Session = Depends(get_db), _=Depends(require_integration_key)):
     return store_receipt(db, payload, {'cash_advance.released'})
 
 
 @router.post('/cash-advance-repayment')
-async def receive_cash_advance_repayment(payload: dict[str, Any], db: Session = Depends(get_db)):
+async def receive_cash_advance_repayment(payload: dict[str, Any], db: Session = Depends(get_db), _=Depends(require_integration_key)):
     return store_receipt(db, payload, {'cash_advance.repaid'})
 
 
 @router.get('/review-queue')
-async def review_queue(status: str | None = Query(default=None), db: Session = Depends(get_db)):
+async def review_queue(
+    status: str | None = Query(default=None),
+    db: Session = Depends(get_db),
+    user=Depends(require_any_permissions('reports.view', 'approvals.view', 'cashflow.view')),
+):
     query = db.query(IntegrationReceipt).filter(IntegrationReceipt.external_source == EXTERNAL_SOURCE)
     if status:
         query = query.filter(IntegrationReceipt.status == status)
@@ -273,17 +290,30 @@ async def review_queue(status: str | None = Query(default=None), db: Session = D
 
 
 @router.get('/receipts')
-async def receipts(status: str | None = Query(default=None), db: Session = Depends(get_db)):
+async def receipts(
+    status: str | None = Query(default=None),
+    db: Session = Depends(get_db),
+    user=Depends(require_any_permissions('reports.view', 'approvals.view', 'cashflow.view')),
+):
     return await review_queue(status=status, db=db)
 
 
 @router.get('/receipts/{receipt_id}')
-async def receipt_detail(receipt_id: int, db: Session = Depends(get_db)):
+async def receipt_detail(
+    receipt_id: int,
+    db: Session = Depends(get_db),
+    user=Depends(require_any_permissions('reports.view', 'approvals.view', 'cashflow.view')),
+):
     return receipt_to_dict(get_receipt_or_404(db, receipt_id), include_payload=True)
 
 
 @router.post('/review-queue/{receipt_id}/status')
-async def update_review_status(receipt_id: int, status: str = Query(...), db: Session = Depends(get_db)):
+async def update_review_status(
+    receipt_id: int,
+    status: str = Query(...),
+    db: Session = Depends(get_db),
+    user=Depends(require_any_permissions('approvals.manage', 'cashflow.money_in', 'cashflow.money_out')),
+):
     if status not in REVIEW_STATUSES:
         raise HTTPException(status_code=400, detail='Unsupported review status')
     row = get_receipt_or_404(db, receipt_id)
@@ -294,7 +324,12 @@ async def update_review_status(receipt_id: int, status: str = Query(...), db: Se
 
 
 @router.post('/receipts/{receipt_id}/approve')
-async def approve_receipt(receipt_id: int, approved_by: str = Query(default='accounting_user'), db: Session = Depends(get_db)):
+async def approve_receipt(
+    receipt_id: int,
+    approved_by: str = Query(default='accounting_user'),
+    db: Session = Depends(get_db),
+    user=Depends(require_any_permissions('approvals.manage', 'cashflow.money_in', 'cashflow.money_out')),
+):
     row = get_receipt_or_404(db, receipt_id)
     if row.status in TERMINAL_STATUSES:
         raise HTTPException(status_code=400, detail='Terminal receipts cannot be approved')
@@ -306,7 +341,13 @@ async def approve_receipt(receipt_id: int, approved_by: str = Query(default='acc
 
 
 @router.post('/receipts/{receipt_id}/reject')
-async def reject_receipt(receipt_id: int, reason: str = Query(..., min_length=3), rejected_by: str = Query(default='accounting_user'), db: Session = Depends(get_db)):
+async def reject_receipt(
+    receipt_id: int,
+    reason: str = Query(..., min_length=3),
+    rejected_by: str = Query(default='accounting_user'),
+    db: Session = Depends(get_db),
+    user=Depends(require_any_permissions('approvals.manage', 'cashflow.money_in', 'cashflow.money_out')),
+):
     row = get_receipt_or_404(db, receipt_id)
     if row.status == 'Posted':
         raise HTTPException(status_code=400, detail='Posted receipts cannot be rejected')
@@ -319,12 +360,18 @@ async def reject_receipt(receipt_id: int, reason: str = Query(..., min_length=3)
 
 
 @router.post('/receipts/{receipt_id}/post')
-async def post_receipt(receipt_id: int, posted_by: str = Query(default='accounting_user'), confirm: bool = Query(default=False), db: Session = Depends(get_db)):
+async def post_receipt(
+    receipt_id: int,
+    posted_by: str = Query(default='accounting_user'),
+    confirm: bool = Query(default=False),
+    db: Session = Depends(get_db),
+    user=Depends(require_any_permissions('approvals.manage', 'cashflow.money_in', 'cashflow.money_out')),
+):
     row = get_receipt_or_404(db, receipt_id)
     if not confirm:
         raise HTTPException(status_code=400, detail='Posting requires confirm=true')
-    if row.status not in {'Ready to Post', 'For Review'}:
-        raise HTTPException(status_code=400, detail='Only review-ready receipts can be posted')
+    if row.status != 'Ready to Post':
+        raise HTTPException(status_code=400, detail='Receipt must be approved before posting')
     outcome = load_json(row.outcome)
     if not outcome.get('totals', {}).get('balanced', False):
         raise HTTPException(status_code=400, detail='Journal preview is not balanced')
