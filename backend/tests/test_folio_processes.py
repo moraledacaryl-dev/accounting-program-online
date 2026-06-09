@@ -118,8 +118,15 @@ class FolioProcessTests(unittest.TestCase):
 
     def test_calendar_excludes_checkout_boundary(self):
         db = self.make_session()
-        departing = Booking(
-            guest_name='Departing Guest',
+        multi_night = Booking(
+            guest_name='Multi Night Guest',
+            room_name='100',
+            channel='Walk-in',
+            check_in='2026-06-01',
+            check_out='2026-06-03',
+        )
+        one_night = Booking(
+            guest_name='One Night Guest',
             room_name='101',
             channel='Walk-in',
             check_in='2026-06-01',
@@ -132,11 +139,30 @@ class FolioProcessTests(unittest.TestCase):
             check_in='2026-06-02',
             check_out='2026-06-03',
         )
-        db.add_all([departing, arriving])
+        day_use = Booking(
+            guest_name='Day Use Guest',
+            room_name='103',
+            channel='Walk-in',
+            check_in='2026-06-04',
+            check_out='2026-06-04',
+        )
+        db.add_all([multi_night, one_night, arriving, day_use])
         db.commit()
 
+        rows = list_booking_calendar(db, start_date='2026-06-01', end_date='2026-06-01')
+        self.assertEqual([row['guest_name'] for row in rows], ['Multi Night Guest', 'One Night Guest'])
+
         rows = list_booking_calendar(db, start_date='2026-06-02', end_date='2026-06-02')
-        self.assertEqual([row['guest_name'] for row in rows], ['Arriving Guest'])
+        self.assertEqual([row['guest_name'] for row in rows], ['Multi Night Guest', 'Arriving Guest'])
+
+        rows = list_booking_calendar(db, start_date='2026-06-03', end_date='2026-06-03')
+        self.assertEqual([row['guest_name'] for row in rows], [])
+
+        rows = list_booking_calendar(db, start_date='2026-06-04', end_date='2026-06-04')
+        self.assertEqual([row['guest_name'] for row in rows], ['Day Use Guest'])
+
+        rows = list_booking_calendar(db, start_date='2026-06-05', end_date='2026-06-05')
+        self.assertEqual([row['guest_name'] for row in rows], [])
 
 
 if __name__ == '__main__':
