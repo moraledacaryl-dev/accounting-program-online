@@ -17,22 +17,23 @@ export default function LoginPage() {
       const next = searchParams.get('next') || '/';
       window.location.href = next.startsWith('/') && !next.startsWith('//') ? next : '/';
     } catch (e) {
-      setError(e.message);
+      setError(e.message || 'Invalid username or password.');
     }
   }
 
   return (
-    <section className="section" style={{maxWidth: 520}}>
-      <h1>Login</h1>
-      <p className="muted">Sign in with your assigned Accounting account.</p>
+    <section className="section login-panel" style={{maxWidth: 520}}>
+      <div className="login-mark">HO</div>
+      <h1>Accounting</h1>
       <form onSubmit={submit}>
         <div className="form-grid">
           <label>Username<input required autoComplete="username" value={username} onChange={e=>setUsername(e.target.value)} /></label>
           <label>Password<input required autoComplete="current-password" type="password" value={password} onChange={e=>setPassword(e.target.value)} /></label>
         </div>
         {error && <p className="small error-text">{error}</p>}
-        <button type="submit">Login</button>
+        <button type="submit">Sign in</button>
       </form>
+      <small className="muted">by C.M.</small>
     </section>
   );
 }
