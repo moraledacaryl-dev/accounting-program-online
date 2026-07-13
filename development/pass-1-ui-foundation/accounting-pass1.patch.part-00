@@ -1,0 +1,182 @@
+diff --git a/backend/app/services/permission_service.py b/backend/app/services/permission_service.py
+index 95be35b..40c9f32 100644
+--- a/backend/app/services/permission_service.py
++++ b/backend/app/services/permission_service.py
+@@ -47,6 +47,15 @@ DEFAULT_PERMISSION_DEFS = [
+     ('payroll_periods.manage', 'Manage Payroll Periods', 'People & Payroll'),
+     ('approvals.view', 'View Approvals', 'People & Payroll'),
+     ('approvals.act', 'Act on Approvals', 'People & Payroll'),
++    ('review_inbox.view', 'View Review Inbox', 'Main'),
++    ('review_inbox.act', 'Accept or Reject Review Items', 'Main'),
++    ('hotel.view', 'View Hotel Operations', 'Hotel Operations'),
++    ('events.view', 'View Events', 'Hotel Operations'),
++    ('cash_treasury.view', 'View Cash & Treasury', 'Finance & Accounting'),
++    ('daily_close.count', 'Count Assigned Cash', 'Finance & Accounting'),
++    ('daily_close.approve', 'Approve Daily Close', 'Finance & Accounting'),
++    ('money.reverse', 'Reverse Posted Money Transactions', 'Finance & Accounting'),
++    ('account_access.manage', 'Manage Financial Account Access', 'Settings'),
+     ('cashflow.view', 'View Cashflow', 'Finance & Accounting'),
+     ('cashflow.money_in', 'Create Money In', 'Finance & Accounting'),
+     ('cashflow.money_out', 'Create Money Out', 'Finance & Accounting'),
+@@ -81,6 +90,8 @@ DEFAULT_ROLES = [
+     ('purchasing_admin', 'Purchasing Admin', 'Suppliers and procurement workflows.'),
+     ('payroll_admin', 'Payroll Admin', 'People and payroll period workflows.'),
+     ('accounting_admin', 'Accounting Admin', 'Cashflow, journals, reports, and BIR.'),
++    ('cashier', 'Cashier', 'Assigned drawer and POS-linked financial work.'),
++    ('auditor', 'Auditor', 'Read-only accounting and hotel review.'),
+ ]
+ 
+ 
+@@ -121,7 +132,8 @@ ROLE_PERMISSION_PRESETS = {
+         'journals.view',
+     },
+     'accounting_admin': {
+-        'dashboard.view',
++        'dashboard.view', 'review_inbox.view', 'review_inbox.act', 'hotel.view', 'events.view',
++        'cash_treasury.view', 'daily_close.count', 'daily_close.approve', 'money.reverse',
+         'cashflow.view', 'cashflow.money_in', 'cashflow.money_out', 'cashflow.transfers', 'cashflow.reconcile',
+         'journals.view', 'journals.post', 'reports.view', 'assets.view', 'assets.manage',
+         'bir.view', 'bir.manage',
+@@ -129,6 +141,17 @@ ROLE_PERMISSION_PRESETS = {
+         'master_data.manage', 'taxonomy.manage',
+         'integrations.view', 'integrations.manage', 'integrations.sync', 'integrations.logs.view',
+     },
++    'cashier': {
++        'dashboard.view', 'review_inbox.view',
++        'folios.view', 'cashflow.view', 'cashflow.money_in', 'cashflow.reconcile',
++        'cash_treasury.view', 'daily_close.count',
++    },
++    'auditor': {
++        'dashboard.view', 'review_inbox.view', 'hotel.view', 'events.view',
++        'bookings.view', 'guests.view', 'folios.view', 'cashflow.view',
++        'cash_treasury.view', 'journals.view', 'reports.view', 'assets.view', 'bir.view',
++        'integrations.view', 'integrations.logs.view',
++    },
+ }
+ 
+ 
+diff --git a/frontend/app/dashboard/page.js b/frontend/app/dashboard/page.js
+index 71fe590..2ce2d07 100644
+--- a/frontend/app/dashboard/page.js
++++ b/frontend/app/dashboard/page.js
+@@ -6,13 +6,12 @@ import StaffActionPanel from '../../components/StaffActionPanel';
+ import { getDashboard } from '../../lib/api';
+ 
+ const WORKSPACES = [
+-  ['/workspace/rooms', 'Rooms & Guests', 'Bookings, room setup, guest profiles, folios'],
+-  ['/workspace/events', 'Events', 'Event records, balances, deposits, and payment follow-up'],
+-  ['/workspace/restaurant', 'Restaurant & F&B', 'Sales ops, menu/recipes, staff meals, outlets'],
+-  ['/workspace/inventory', 'Inventory & Purchasing', 'Stock, purchasing, receiving, and reconciliation'],
+-  ['/workspace/payroll', 'People & Payroll', 'Employees, attendance, payroll periods, approvals'],
+-  ['/workspace/finance', 'Finance & Accounting', 'Cashflow, journals, reports, BIR, and assets'],
+-  ['/workspace/settings', 'Settings', 'Master data, taxonomy, users, roles, and system setup'],
++  ['/bookings', 'Hotel Operations', 'Bookings, guests, folios, events, and channel settlements'],
++  ['/cashflow', 'Cash & Treasury', 'Money accounts, transaction ledger, daily close, and reconciliation'],
++  ['/approvals', 'Review Inbox', 'Approvals and financial items received from connected applications'],
++  ['/reports', 'Reports & Compliance', 'Financial statements, management reporting, BIR, and assets'],
++  ['/room-setup', 'Hotel Setup', 'Rooms, types, rates, channels, and packages'],
++  ['/roles-permissions', 'Users & Access', 'Role permissions and account visibility'],
+ ];
+ 
+ function formatValue(value) {
+@@ -93,7 +92,7 @@ export default function DashboardPage() {
+     <div className="stack">
+       <section className="section">
+         <h1>Dashboard</h1>
+-        <p className="muted">Start with the work staff actually need, then review operations and accounting from the widgets below.</p>
++        <p className="muted">Review hotel operations, financial position, exceptions, and work requiring attention.</p>
+         {!!summary?.dashboard_role && <p className="small muted">Current layout: {summary.dashboard_role.replaceAll('_', ' ')}</p>}
+         {!!error && <p className="error-text">{error}</p>}
+       </section>
+diff --git a/frontend/app/globals.css b/frontend/app/globals.css
+index aabdef7..6168d33 100644
+--- a/frontend/app/globals.css
++++ b/frontend/app/globals.css
+@@ -1088,3 +1088,188 @@ button.secondary,
+     max-height: none;
+   }
+ }
++
++/* Pass 1: approved Accounting application shell */
++:root {
++  --sidebar-width: 272px;
++  --app-bg: #f3f5f2;
++  --sidebar-bg: #17201c;
++  --sidebar-surface: #202a25;
++  --sidebar-text: #eef3ef;
++  --sidebar-muted: #98a49d;
++  --accent: #2f6b57;
++  --accent-soft: #e4efe9;
++  --warning-soft: #fff4d9;
++  --danger-soft: #fff0ee;
++  --info-soft: #edf3f7;
++}
++
++body {
++  background: var(--app-bg);
++}
++
++.sidebar {
++  background: var(--sidebar-bg);
++  border-right: 0;
++  color: var(--sidebar-text);
++  padding: 16px 12px;
++  z-index: 40;
++}
++
++.sidebar .brand {
++  border-bottom-color: rgba(255,255,255,.1);
++  padding: 6px 6px 15px;
++}
++
++.sidebar .brand h2 { color: #fff; font-size: 15px; }
++.sidebar .brand-badge { background: #f4f7f4; color: #17201c; border-radius: 11px; }
++.sidebar .muted-on-dark { color: var(--sidebar-muted); }
++.sidebar .sidebar-toggle { background: transparent; color: var(--sidebar-text); border-color: rgba(255,255,255,.16); }
++.sidebar .sidebar-toggle:hover { background: rgba(255,255,255,.08); }
++.sidebar nav { gap: 4px; padding-bottom: 88px; }
++.sidebar .nav-group { margin-bottom: 14px; }
++.sidebar .nav-group-label { color: #7f8d85; margin: 5px 10px 7px; }
++.sidebar a {
++  display: flex;
++  align-items: center;
++  gap: 10px;
++  color: #d5ddd8;
++  padding: 9px 10px;
++  border-radius: 10px;
++  border: 1px solid transparent;
++  font-weight: 500;
++}
++.sidebar a:hover { background: rgba(255,255,255,.06); border-color: rgba(255,255,255,.05); }
++.sidebar a.active { background: #edf4f0; border-color: #edf4f0; color: #1b4334; }
++.nav-symbol {
++  flex: 0 0 28px;
++  width: 28px;
++  height: 28px;
++  display: grid;
++  place-items: center;
++  border-radius: 8px;
++  background: rgba(255,255,255,.08);
++  color: #b7c4bc;
++  font-size: 10px;
++  font-weight: 750;
++  letter-spacing: .04em;
++}
++.sidebar a.active .nav-symbol { background: #d8e8df; color: #245b47; }
++.sidebar.collapsed a { padding: 8px; justify-content: center; }
++.sidebar.collapsed .nav-symbol { flex-basis: 34px; width: 34px; height: 34px; }
++.sidebar-loading { color: var(--sidebar-muted); padding: 10px; font-size: 12px; }
++.sidebar-user {
++  position: absolute;
++  left: 12px;
++  right: 12px;
++  bottom: 14px;
++  display: flex;
++  gap: 10px;
++  align-items: center;
++  padding: 10px;
++  background: rgba(255,255,255,.06);
++  border: 1px solid rgba(255,255,255,.08);
++  border-radius: 12px;
++}
++.user-avata
