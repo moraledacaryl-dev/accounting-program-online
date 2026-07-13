@@ -1,0 +1,144 @@
+duction'],
+-  '/menu-items': ['Menu & Recipes', 'Menu items, recipes, SKUs, and components'],
+-  '/menu-categories': ['Menu Categories', 'Category setup for menu and reporting'],
+-  '/recipes': ['Recipes', 'Recipe structure and costing management'],
+-  '/staff-meals': ['Staff Meals', 'Staff meal ingredient usage and costing'],
+-
+-  '/workspace/inventory': ['Inventory & Purchasing', 'Stock control, suppliers, PR/PO/Receiving'],
+-  '/inventory-items': ['Inventory Items', 'Item master and stock controls'],
+-  '/stock-movements': ['Stock Movements', 'FIFO movements and inventory impacts'],
+-  '/inventory-reconciliation': ['Inventory Reconciliation', 'Actual count variance and adjustments'],
+-  '/suppliers': ['Suppliers', 'Supplier master and procurement linkages'],
+-  '/purchase-requests': ['Purchase Requests', 'PR workflow and approvals'],
+-  '/purchase-orders': ['Purchase Orders', 'PO workflow and receiving progress'],
+-  '/receiving': ['Receiving', 'Receiving workflow and stock/payable integration'],
+-
+-  '/workspace/payroll': ['People & Payroll', 'Employees, attendance, payroll periods, approvals'],
+-  '/employees': ['Employees', 'Employee registry and profile maintenance'],
+-  '/attendance': ['Attendance', 'Attendance logs, import, and review'],
+-  '/payroll-periods': ['Payroll Periods', 'Payroll period input/import/posting'],
+-  '/payroll': ['Payroll', 'Legacy payroll run view (secondary)'],
+-  '/approvals': ['Approvals', 'Cross-module approval queue'],
+-
+-  '/workspace/finance': ['Finance & Accounting', 'Cashflow, journals, reports, assets, and BIR'],
+-  '/cashflow': ['Cashflow', 'Money in, money out, transfers, checks, payments, and bills'],
+-  '/journals': ['Journals', 'Journal entries and trial balance'],
+-  '/reports': ['Reports', 'Management and accounting reports'],
+-  '/assets': ['Assets', 'Asset lifecycle and accounting linkage'],
+-  '/bir': ['BIR', 'Selection, books, and period locks'],
+-  '/attachments': ['Attachments', 'Operational and accounting support files'],
+-
+-  '/workspace/settings': ['Settings', 'Admin setup and controls'],
+-  '/master-data': ['Master Data', 'Generic reusable setup values only'],
+-  '/taxonomy-admin': ['Accounting Taxonomy', 'Accounting classification tree'],
+-  '/users': ['Users', 'User accounts and assigned roles'],
+-  '/roles-permissions': ['Roles & Permissions', 'Checklist permissions per role'],
+-  '/chart-of-accounts': ['Chart of Accounts', 'Account structure setup'],
+-  '/account-mapping': ['Account Mapping', 'Posting rule mapping by module/category'],
+-  '/system-settings': ['System Settings', 'System controls and workflow defaults'],
+-  '/integrations/beds24': ['Beds24 Integration', 'Beds24 API sync and webhook operations'],
++  '/dashboard': ['Dashboard', 'Hotel operations and accounting overview'],
++  '/start-of-day': ['Start of Day', 'Opening checks, arrivals, cash points, and connected systems'],
++  '/staff-guide': ['Staff Guide', 'Role-based procedures and controls'],
++  '/bookings': ['Bookings', 'Reservations, stay details, payments, and Beds24 context'],
++  '/guests': ['Guests', 'Guest profiles, stay history, and balances'],
++  '/room-folios': ['Folios', 'Guest charges, allocations, payments, and settlement'],
++  '/workspace/events': ['Events', 'Commercial event bookings, deposits, and balances'],
++  '/channel-payouts': ['Channel Payouts', 'Expected payouts, actual receipts, and settlement'],
++  '/cashflow': ['Cash & Treasury', 'Authoritative money accounts, ledger, and daily close'],
++  '/journals': ['Journals', 'Journal entries, posting controls, and trial balance'],
++  '/reports': ['Reports', 'Financial, hotel, and management reporting'],
++  '/assets': ['Financial Assets', 'Capitalization, depreciation, impairment, and disposal'],
++  '/bir': ['BIR & Periods', 'Books, tax controls, and locked periods'],
++  '/approvals': ['Review Inbox', 'Approvals and connected-app financial review'],
++  '/attachments': ['Attachments', 'Supporting documents linked to source records'],
++  '/room-setup': ['Hotel Setup', 'Rooms, types, rates, channels, and packages'],
++  '/master-data': ['Master Data', 'Reusable setup values and accounting taxonomy'],
++  '/taxonomy-admin': ['Accounting Taxonomy', 'Classification structure and reporting hierarchy'],
++  '/users': ['Users', 'User accounts and role assignments'],
++  '/roles-permissions': ['Users & Access', 'Roles, actions, modules, and account visibility'],
++  '/chart-of-accounts': ['Chart of Accounts', 'Financial account structure and posting controls'],
++  '/account-mapping': ['Account Mapping', 'Default posting rules for business events'],
++  '/system-settings': ['System Settings', 'Application behavior and connected-app controls'],
++  '/integrations/beds24': ['Beds24', 'Mappings, synchronization, logs, and recovery'],
+ };
+ 
++function resolveTitle(pathname) {
++  const entries = Object.entries(titles).sort(([a], [b]) => b.length - a.length);
++  return entries.find(([path]) => pathname === path || pathname.startsWith(`${path}/`))?.[1]
++    || ['Accounting', 'Hotel operations and finance'];
++}
++
+ export default function Header() {
+   const pathname = usePathname();
+   const router = useRouter();
+-  const found = Object.entries(titles).find(([k]) => pathname === k || pathname.startsWith(k + '/'));
+-  const [title, subtitle] = found
+-    ? found[1]
+-    : ['Hospitality ERP', 'Connected operations, cashflow, payroll, and compliance'];
+-  const showBack = pathname && pathname !== '/dashboard' && pathname !== '/login' && pathname !== '/';
++  const { openMobileNav } = useAppShell();
++  const [title, subtitle] = resolveTitle(pathname);
++  const showBack = pathname && !['/', '/login', '/dashboard'].includes(pathname);
+ 
+-  function goBack() {
+-    if (typeof window !== 'undefined' && window.history.length > 1) {
+-      router.back();
+-      return;
+-    }
+-    router.push('/dashboard');
++  function logout() {
++    clearToken();
++    window.location.href = '/login';
+   }
+ 
+   return (
+     <header className="topbar">
+       <div className="topbar-left">
+-        {showBack && (
+-          <button type="button" className="secondary topbar-back" onClick={goBack}>
+-            Back
+-          </button>
+-        )}
+-        <div>
++        <button type="button" className="mobile-menu-button mobile-only" onClick={openMobileNav} aria-label="Open navigation">☰</button>
++        {showBack && <button type="button" className="secondary topbar-back desktop-only" onClick={() => router.back()}>Back</button>}
++        <div className="topbar-heading">
+           <div className="topbar-title">{title}</div>
+           <div className="topbar-subtitle">{subtitle}</div>
+         </div>
+       </div>
+       <div className="topbar-actions">
+-        {showBack && <Link href="/dashboard" className="button-link secondary-link">Dashboard</Link>}
+-        <button
+-          className="secondary"
+-          onClick={() => {
+-            clearToken();
+-            if (typeof window !== 'undefined') window.location.href = '/login';
+-          }}
+-        >
+-          Logout
+-        </button>
++        <Link href="/approvals" className="button-link secondary-link review-inbox-link">Review Inbox</Link>
++        <Link href="/dashboard" className="button-link secondary-link desktop-only">Dashboard</Link>
++        <button className="secondary" onClick={logout}>Logout</button>
+       </div>
+     </header>
+   );
+diff --git a/frontend/components/RouteGuard.js b/frontend/components/RouteGuard.js
+index 84343d2..0f59c0c 100644
+--- a/frontend/components/RouteGuard.js
++++ b/frontend/components/RouteGuard.js
+@@ -1,7 +1,8 @@
+ 'use client';
+ 
+ import { usePathname } from 'next/navigation';
+-import { useCurrentUser } from '../lib/useCurrentUser';
++import { useAppShell } from './app-shell/AppShellContext';
++import { LoadingState, PermissionState } from './ui/PageState';
+ 
+ const PERMISSION_RULES = [
+   { prefix: '/dashboard', any: ['dashboard.view'] },
+@@ -77,22 +78,12 @@ function pathHasAccess(pathname, can) {
+ 
+ export d
