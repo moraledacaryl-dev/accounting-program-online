@@ -1,0 +1,173 @@
+r { width: 34px; height: 34px; border-radius: 10px; background: #dfeae4; color: #234c3c; display: grid; place-items: center; font-weight: 750; }
++.sidebar-user-copy { display: grid; min-width: 0; }
++.sidebar-user-copy strong { color: #fff; font-size: 12px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
++.sidebar-user-copy span { color: var(--sidebar-muted); font-size: 11px; }
++
++.topbar { padding: 13px 22px; background: rgba(250,251,249,.92); }
++.topbar-title { font-size: 19px; font-weight: 680; }
++.topbar-subtitle { font-size: 12px; }
++.review-inbox-link { border-color: #cfddd5; background: #f1f6f3; }
++.main { padding: 24px; max-width: 1680px; width: 100%; margin: 0 auto; }
++
++.page-header {
++  display: flex;
++  justify-content: space-between;
++  align-items: flex-start;
++  gap: 18px;
++  padding: 4px 2px 18px;
++}
++.page-header-copy { max-width: 780px; }
++.page-header h1 { font-size: 28px; letter-spacing: -.035em; }
++.page-header-actions { display: flex; gap: 8px; flex-wrap: wrap; }
++.eyebrow { color: var(--accent); font-size: 10px; font-weight: 750; text-transform: uppercase; letter-spacing: .12em; margin-bottom: 7px; }
++
++.metric-card {
++  border: 1px solid var(--line);
++  border-radius: 14px;
++  background: var(--surface);
++  padding: 15px;
++  box-shadow: 0 8px 24px rgba(23,32,28,.035);
++}
++.metric-label { color: var(--muted); font-size: 11px; text-transform: uppercase; letter-spacing: .07em; }
++.metric-value { font-size: 25px; font-weight: 720; letter-spacing: -.035em; margin-top: 7px; }
++.metric-note { color: var(--muted); font-size: 11px; margin-top: 5px; }
++.tone-warning { background: #fffdf7; border-color: #eadfbd; }
++.tone-danger { background: #fffafa; border-color: #ecd3cf; }
++
++.status-badge { display: inline-flex; align-items: center; border-radius: 999px; padding: 4px 8px; font-size: 10px; font-weight: 700; background: #eef0ee; color: #4a504c; }
++.status-success { background: var(--brand-soft); color: var(--brand-ink); }
++.status-warning { background: var(--warning-soft); color: #775a16; }
++.status-danger { background: var(--danger-soft); color: #9b332a; }
++.status-info { background: var(--info-soft); color: #345c72; }
++
++.page-state {
++  min-height: 330px;
++  display: grid;
++  place-items: center;
++  align-content: center;
++  text-align: center;
++  border: 1px dashed var(--line-strong);
++  border-radius: 16px;
++  background: rgba(255,255,255,.65);
++  padding: 28px;
++}
++.page-state h2 { margin-top: 10px; }
++.page-state p { color: var(--muted); max-width: 520px; }
++.state-icon { width: 42px; height: 42px; border-radius: 13px; display: grid; place-items: center; background: var(--accent-soft); color: var(--accent); font-weight: 800; }
++.state-spinner { width: 28px; height: 28px; border: 3px solid #dce5df; border-top-color: var(--accent); border-radius: 50%; animation: shell-spin .8s linear infinite; }
++@keyframes shell-spin { to { transform: rotate(360deg); } }
++
++.mobile-only { display: none !important; }
++.sidebar-scrim { display: none; }
++
++@media (max-width: 980px) {
++  :root { --sidebar-width: 0px !important; }
++  .app-shell { grid-template-columns: 1fr; }
++  .sidebar {
++    position: fixed;
++    left: 0;
++    top: 0;
++    width: min(86vw, 310px);
++    transform: translateX(-105%);
++    transition: transform .2s ease;
++    box-shadow: 20px 0 50px rgba(0,0,0,.25);
++  }
++  .sidebar.mobile-open { transform: translateX(0); }
++  .sidebar.collapsed { width: min(86vw, 310px); }
++  .sidebar.collapsed .brand-copy, .sidebar.collapsed .nav-text, .sidebar.collapsed .nav-group-label, .sidebar.collapsed .sidebar-user-copy { display: block; }
++  .sidebar.collapsed a { justify-content: flex-start; padding: 9px 10px; }
++  .sidebar-scrim { position: fixed; inset: 0; border: 0; background: rgba(10,16,13,.42); z-index: 35; }
++  .sidebar-scrim.visible { display: block; }
++  .mobile-only { display: inline-flex !important; }
++  .desktop-only { display: none !important; }
++  .mobile-menu-button { width: 38px; height: 38px; align-items: center; justify-content: center; border: 1px solid var(--line); background: #fff; border-radius: 10px; }
++  .main { padding: 18px; }
++  .topbar { padding: 11px 14px; }
++  .topbar-actions .review-inbox-link { display: none; }
++}
++
++@media (max-width: 640px) {
++  .topbar-subtitle { display: none; }
++  .topbar-title { font-size: 16px; }
++  .topbar-actions button { padding: 8px 10px; }
++  .main { padding: 14px; }
++  .section { padding: 14px; border-radius: 12px; }
++  .page-header { display: grid; }
++  .page-header h1 { font-size: 24px; }
++  .page-header-actions { width: 100%; }
++  .page-header-actions > * { flex: 1; }
++  .card-grid { grid-template-columns: 1fr !important; }
++  .table { min-width: 720px; }
++  .table-wrap, .section { overflow-x: auto; }
++}
+diff --git a/frontend/app/layout.js b/frontend/app/layout.js
+index 5adfbae..1520746 100644
+--- a/frontend/app/layout.js
++++ b/frontend/app/layout.js
+@@ -2,22 +2,25 @@ import './globals.css';
+ import Sidebar from '../components/Sidebar';
+ import Header from '../components/Header';
+ import RouteGuard from '../components/RouteGuard';
++import { AppShellProvider } from '../components/app-shell/AppShellContext';
+ 
+-export const metadata = { title: 'Resort Accounting ERP' };
++export const metadata = { title: 'Hidden Oasis Accounting' };
+ 
+ export default function RootLayout({ children }) {
+   return (
+     <html lang="en">
+       <body>
+-        <div className="app-shell">
+-          <Sidebar />
+-          <div className="main-shell">
+-            <Header />
+-            <main className="main">
+-              <RouteGuard>{children}</RouteGuard>
+-            </main>
++        <AppShellProvider>
++          <div className="app-shell">
++            <Sidebar />
++            <div className="main-shell">
++              <Header />
++              <main className="main">
++                <RouteGuard>{children}</RouteGuard>
++              </main>
++            </div>
+           </div>
+-        </div>
++        </AppShellProvider>
+       </body>
+     </html>
+   );
+diff --git a/frontend/components/Header.js b/frontend/components/Header.js
+index 30328f3..768fc9a 100644
+--- a/frontend/components/Header.js
++++ b/frontend/components/Header.js
+@@ -3,110 +3,67 @@
+ import Link from 'next/link';
+ import { usePathname, useRouter } from 'next/navigation';
+ import { clearToken } from '../lib/api';
++import { useAppShell } from './app-shell/AppShellContext';
+ 
+ const titles = {
+-  '/dashboard': ['Dashboard', 'Unified resort operations snapshot'],
+-  '/start-of-day': ['Start of Day', 'Opening checks for cash, receivables, deliveries, and sync'],
+-  '/staff-guide': ['Staff Guide', 'Simple steps for staff processes that exist in the system'],
+-
+-  '/workspace/rooms': ['Rooms & Guests', 'Bookings, guests, folios, and room setup'],
+-  '/workspace/events': ['Events', 'Event records, balances, deposits, and payment follow-up'],
+-  '/bookings': ['Bookings', 'Guest booking flow with linked rooms/channels/rates'],
+-  '/guests': ['Guests', 'Guest CRM list with VIP and returning guest context'],
+-  '/room-folios': ['Room Folios', 'Charges, deposits, payments, refunds, and balances'],
+-  '/room-types': ['Room Types', 'Room type setup and occupancy defaults'],
+-  '/rooms': ['Rooms', 'Room master setup and availability profile'],
+-  '/rate-plans': ['Rate Plans', 'Rate plan setup and inclusions'],
+-  '/booking-channels': ['Booking Channels', 'Channel setup and payout defaults'],
+-  '/room-package-rules': ['Package Rules', 'Room package inclusion rules'],
+-  '/channel-payouts': ['Channel Payouts', 'OTA payout tracking and variance control'],
+-
+-  '/workspace/restaurant': ['Restaurant & F&B', 'Restaurant operations, menu, recipes, and records'],
+-  '/workspace/breakfast': ['Breakfast', 'Breakfast operations and records'],
+-  '/workspace/cafe': ['Cafe', 'Cafe operations and records'],
+-  '/workspace/bar': ['Bar', 'Bar operations and records'],
+-  '/restaurant-ops': ['Restaurant Ops', 'Sales, SKU flow, and stock de
