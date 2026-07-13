@@ -1,0 +1,66 @@
+((group) => (
++            <div key={group.label} className="nav-group">
++              {!collapsed && <div className="nav-group-label">{group.label}</div>}
++              {group.items.map((item) => {
++                const active = pathname === item.href || pathname.startsWith(`${item.href}/`);
++                return (
++                  <Link key={item.href} href={item.href} className={active ? 'active' : ''} title={collapsed ? item.label : undefined}>
++                    <span className="nav-symbol">{item.short}</span>
++                    {!collapsed && <span className="nav-text">{item.label}</span>}
++                  </Link>
++                );
++              })}
++            </div>
++          ))}
++          {!loaded && <div className="sidebar-loading">Loading access…</div>}
++        </nav>
++
++        <div className="sidebar-user">
++          <div className="user-avatar">{String(user?.full_name || user?.username || 'U').slice(0, 1).toUpperCase()}</div>
++          {!collapsed && (
++            <div className="sidebar-user-copy">
++              <strong>{user?.full_name || user?.username || 'User'}</strong>
++              <span>{roleName(user)}</span>
++            </div>
++          )}
++        </div>
++      </aside>
++    </>
+   );
+ }
+diff --git a/frontend/lib/permissions.js b/frontend/lib/permissions.js
+index 14205cb..252f089 100644
+--- a/frontend/lib/permissions.js
++++ b/frontend/lib/permissions.js
+@@ -21,13 +21,30 @@ export const ROLE_PERMISSION_FALLBACKS = {
+     'master_data.manage', 'taxonomy.manage', 'chart_of_accounts.manage', 'account_mapping.manage',
+     'integrations.view', 'integrations.manage', 'integrations.sync', 'integrations.logs.view',
+   ],
+-  accountant: [
++  accounting_admin: [
+     'dashboard.view',
+     'cashflow.view', 'cashflow.money_in', 'cashflow.money_out', 'cashflow.transfers', 'cashflow.reconcile',
+     'journals.view', 'journals.post', 'reports.view', 'assets.view', 'assets.manage', 'bir.view', 'bir.manage',
+     'chart_of_accounts.manage', 'account_mapping.manage',
+     'integrations.view', 'integrations.sync', 'integrations.logs.view',
+   ],
++  front_desk: [
++    'dashboard.view',
++    'bookings.view', 'bookings.create', 'bookings.edit',
++    'folios.view', 'folios.manage',
++    'guests.view', 'guests.create', 'guests.edit',
++    'room_setup.view',
++    'cashflow.view', 'cashflow.money_in', 'cashflow.reconcile',
++  ],
++  cashier: [
++    'dashboard.view', 'folios.view', 'cashflow.view', 'cashflow.money_in', 'cashflow.reconcile',
++    'integrations.view',
++  ],
++  auditor: [
++    'dashboard.view', 'bookings.view', 'folios.view', 'guests.view',
++    'cashflow.view', 'journals.view', 'reports.view', 'assets.view', 'bir.view',
++    'integrations.view', 'integrations.logs.view',
++  ],
+   staff: [
+     'dashboard.view',
+     'bookings.view', 'guests.view', 'restaurant.view', 'inventory.view',
