@@ -1,0 +1,211 @@
+efault function RouteGuard({ children }) {
+   const pathname = usePathname();
+-  const { loaded, can } = useCurrentUser();
++  const { loaded, can } = useAppShell();
+ 
+   if (!loaded && pathname !== '/login') {
+-    return (
+-      <section className="section">
+-        <h1>Loading Access</h1>
+-        <p className="muted">Checking your permissions...</p>
+-      </section>
+-    );
++    return <LoadingState title="Checking access" message="Loading your role and workspace permissions…" />;
+   }
+   if (pathHasAccess(pathname, can)) return children;
+ 
+-  return (
+-    <section className="section">
+-      <h1>Access Restricted</h1>
+-      <p className="muted">Your account does not have permission for this page.</p>
+-    </section>
+-  );
++  return <PermissionState />;
+ }
+diff --git a/frontend/components/Sidebar.js b/frontend/components/Sidebar.js
+index 70d3586..1289422 100644
+--- a/frontend/components/Sidebar.js
++++ b/frontend/components/Sidebar.js
+@@ -3,136 +3,102 @@
+ import Link from 'next/link';
+ import { usePathname } from 'next/navigation';
+ import { useEffect, useMemo, useState } from 'react';
+-import { me } from '../lib/api';
+ import { canAccess } from '../lib/permissions';
++import { useAppShell } from './app-shell/AppShellContext';
++import { navigationGroups } from './app-shell/navigation';
+ 
+-const groups = [
+-  {
+-    label: 'Main',
+-    items: [
+-      { href: '/dashboard', label: 'Dashboard', permissionsAny: ['dashboard.view'] },
+-      { href: '/start-of-day', label: 'Start of Day', permissionsAny: ['dashboard.view', 'cashflow.view'] },
+-      { href: '/staff-guide', label: 'Staff Guide', permissionsAny: [] },
+-    ],
+-  },
+-  {
+-    label: 'Workspaces',
+-    items: [
+-      { href: '/workspace/rooms', label: 'Rooms & Guests', permissionsAny: ['bookings.view', 'guests.view', 'folios.view'] },
+-      { href: '/workspace/events', label: 'Events', permissionsAny: ['bookings.view', 'cashflow.view'] },
+-      { href: '/workspace/restaurant', label: 'Restaurant & F&B', permissionsAny: ['restaurant.view', 'menu.view', 'staff_meals.view'] },
+-      { href: '/workspace/inventory', label: 'Inventory & Purchasing', permissionsAny: ['inventory.view', 'suppliers.view', 'purchase_requests.view', 'purchase_orders.view', 'receiving.view'] },
+-      { href: '/workspace/payroll', label: 'People & Payroll', permissionsAny: ['employees.view', 'attendance.view', 'payroll_periods.view', 'approvals.view'] },
+-      { href: '/workspace/finance', label: 'Finance & Accounting', permissionsAny: ['cashflow.view', 'journals.view', 'reports.view', 'assets.view', 'bir.view'] },
+-      {
+-        href: '/workspace/settings',
+-        label: 'Settings',
+-        permissionsAny: [
+-          'master_data.manage',
+-          'taxonomy.manage',
+-          'users.manage',
+-          'roles.manage',
+-          'chart_of_accounts.manage',
+-          'account_mapping.manage',
+-          'system_settings.manage',
+-          'integrations.view',
+-          'integrations.manage',
+-          'integrations.sync',
+-          'integrations.logs.view',
+-        ],
+-      },
+-    ],
+-  },
+-];
+-
+-const SIDEBAR_KEY = 'erp_sidebar_collapsed_v2';
+-
+-function collapsedLabel(label) {
+-  return label
+-    .split('&')[0]
+-    .trim()
+-    .split(' ')
+-    .map((part) => part.slice(0, 1).toUpperCase())
+-    .join('')
+-    .slice(0, 2);
+-}
++const SIDEBAR_KEY = 'accounting_sidebar_collapsed_v3';
+ 
+ function hasAnyPermission(user, keys = []) {
+-  if (!keys || !keys.length) return true;
++  if (!keys.length) return true;
+   return keys.some((key) => canAccess(user, key));
+ }
+ 
++function roleName(user) {
++  const raw = String(user?.role || user?.roles?.[0]?.code || 'user');
++  return raw.replaceAll('_', ' ').replace(/\b\w/g, (letter) => letter.toUpperCase());
++}
++
+ export default function Sidebar() {
+   const pathname = usePathname();
++  const { user, loaded, mobileNavOpen, closeMobileNav } = useAppShell();
+   const [collapsed, setCollapsed] = useState(false);
+-  const [currentUser, setCurrentUser] = useState(null);
+ 
+   useEffect(() => {
+-    if (typeof window === 'undefined') return;
+     const stored = window.localStorage.getItem(SIDEBAR_KEY);
+     setCollapsed(stored === '1');
+   }, []);
+ 
+   useEffect(() => {
+-    if (typeof document === 'undefined') return;
+-    document.documentElement.style.setProperty('--sidebar-width', collapsed ? '94px' : '286px');
+-    if (typeof window !== 'undefined') {
+-      window.localStorage.setItem(SIDEBAR_KEY, collapsed ? '1' : '0');
+-    }
++    document.documentElement.style.setProperty('--sidebar-width', collapsed ? '88px' : '272px');
++    window.localStorage.setItem(SIDEBAR_KEY, collapsed ? '1' : '0');
+   }, [collapsed]);
+ 
+-  useEffect(() => {
+-    me().then(setCurrentUser).catch(() => setCurrentUser(null));
+-  }, []);
++  useEffect(() => closeMobileNav(), [pathname, closeMobileNav]);
+ 
+-  const visibleGroups = useMemo(() => {
+-    return groups
+-      .map((group) => ({
+-        ...group,
+-        items: group.items.filter((item) => hasAnyPermission(currentUser, item.permissionsAny || [])),
+-      }))
+-      .filter((group) => group.items.length > 0);
+-  }, [currentUser]);
++  const visibleGroups = useMemo(() => navigationGroups
++    .map((group) => ({
++      ...group,
++      items: group.items.filter((item) => hasAnyPermission(user, item.permissionsAny)),
++    }))
++    .filter((group) => group.items.length), [user]);
+ 
+   return (
+-    <aside className={collapsed ? 'sidebar collapsed' : 'sidebar'}>
+-      <div className="brand">
+-        <div className="brand-badge">AP</div>
+-        {!collapsed && (
+-          <div>
+-            <h2>Accounting Program</h2>
+-            <div className="small muted-on-dark">Simple, connected hospitality ERP</div>
+-          </div>
+-        )}
+-        <button
+-          type="button"
+-          className="sidebar-toggle"
+-          aria-label={collapsed ? 'Expand sidebar' : 'Collapse sidebar'}
+-          onClick={() => setCollapsed((v) => !v)}
+-        >
+-          {collapsed ? '>' : '<'}
+-        </button>
+-      </div>
+-      <nav>
+-        {visibleGroups.map((group) => (
+-          <div key={group.label} className="nav-group">
+-            {!collapsed && <div className="nav-group-label">{group.label}</div>}
+-            {group.items.map((item) => {
+-              const active = pathname === item.href || pathname.startsWith(item.href + '/');
+-              return (
+-                <Link
+-                  key={item.href}
+-                  href={item.href}
+-                  className={active ? 'active' : ''}
+-                  title={collapsed ? item.label : undefined}
+-                >
+-                  {collapsed ? collapsedLabel(item.label) : item.label}
+-                </Link>
+-              );
+-            })}
+-          </div>
+-        ))}
+-      </nav>
+-    </aside>
++    <>
++      <button
++        type="button"
++        className={mobileNavOpen ? 'sidebar-scrim visible' : 'sidebar-scrim'}
++        aria-label="Close navigation"
++        onClick={closeMobileNav}
++      />
++      <aside className={`${collapsed ? 'sidebar collapsed' : 'sidebar'} ${mobileNavOpen ? 'mobile-open' : ''}`}>
++        <div className="brand">
++          <div className="brand-badge">HO</div>
++          {!collapsed && (
++            <div className="brand-copy">
++              <h2>Accounting</h2>
++              <div className="small muted-on-dark">Hotel operations & finance</div>
++            </div>
++          )}
++          <button
++            type="button"
++            className="sidebar-toggle desktop-only"
++            aria-label={collapsed ? 'Expand sidebar' : 'Collapse sidebar'}
++            onClick={() => setCollapsed((value) => !value)}
++          >
++            {collapsed ? '›' : '‹'}
++          </button>
++          <button type="button" className="sidebar-toggle mobile-only" onClick={closeMobileNav} aria-label="Close navigation">×</button>
++        </div>
++
++        <nav aria-label="Primary navigation">
++          {visibleGroups.map
