@@ -1,4 +1,5 @@
 'use client';
+import LegacyExternalModuleNotice from '../../components/LegacyExternalModuleNotice';
 import { useEffect, useMemo, useState } from 'react';
 import { useConfirmAction } from '../../components/ConfirmActionProvider';
 import { createMasterValue, deleteMasterValue, fetchMasterValues, updateMasterValue } from '../../lib/api';
@@ -107,6 +108,8 @@ export default function MenuCategoriesPage() {
 
   return (
     <div>
+      <LegacyExternalModuleNotice appName="POS Cloud" />
+      <div>
       <section className="section">
         <h1>Menu Categories</h1>
         <p className="muted">Menu categories are the shared source of truth for menu item setup, recipe assignment, and POS filters. Use this page to manage restaurant, breakfast, cafe, and bar categories. Active categories appear in Menu & Recipes.</p>
@@ -225,6 +228,7 @@ export default function MenuCategoriesPage() {
             </table>
           </section>
         </section>
+      </div>
       </div>
     </div>
   );

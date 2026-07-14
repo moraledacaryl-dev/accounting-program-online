@@ -166,8 +166,11 @@ export const approvePayrollRun = (id) => request(`/approvals/payroll/${id}/appro
 
 export const fetchJournalEntries = () => request('/journals/entries');
 export const createJournalEntry = (payload) => request('/journals/entries', { method:'POST', body: JSON.stringify(payload)});
+export const fetchJournalEntryDetail = (id) => request(`/journals/entries/${id}`);
+export const postJournalEntry = (id) => request(`/journals/entries/${id}/post`, { method:'POST' });
+export const reverseJournalEntry = (id) => request(`/journals/entries/${id}/reverse`, { method:'POST' });
 export const fetchTrialBalance = () => request('/journals/trial-balance');
-export const lockJournalEntry = (id) => request(`/approvals/journals/${id}/lock`, { method:'POST' });
+export const lockJournalEntry = (id) => request(`/journals/entries/${id}/lock`, { method:'POST' });
 
 export const fetchMasterValues = (group = '', activeOnly = true) => {
   const params = [];

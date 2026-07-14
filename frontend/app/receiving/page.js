@@ -1,4 +1,5 @@
 'use client';
+import LegacyExternalModuleNotice from '../../components/LegacyExternalModuleNotice';
 
 import { Suspense, useEffect, useMemo, useState } from 'react';
 import { useSearchParams } from 'next/navigation';
@@ -270,6 +271,7 @@ function ReceivingContent() {
 
   return (
     <div className="stack">
+      <LegacyExternalModuleNotice appName="Inventory & Procurement" />
       <section className="section">
         <div className="row" style={{ justifyContent: 'space-between' }}>
           <div>

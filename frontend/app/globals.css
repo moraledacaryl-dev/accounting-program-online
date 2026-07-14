@@ -1511,3 +1511,5 @@ button.danger {
 @media(max-width:640px){.metric-grid,.cash-account-grid,.filter-bar{grid-template-columns:1fr}.section-title-row{display:block}.section-title-row>button,.section-title-row>a{margin-top:10px}.workspace-drawer{width:100vw}.cash-workspace .table{min-width:760px}}
 
 .compact-kpi{font-size:1rem!important;line-height:1.35}.workspace-tabs{display:flex;gap:8px;flex-wrap:wrap;border-bottom:1px solid var(--line);margin-bottom:18px}.workspace-tabs button{background:transparent;color:var(--muted);border:0;border-bottom:2px solid transparent;border-radius:0;padding:10px 12px}.workspace-tabs button.active{color:var(--text);border-bottom-color:var(--accent)}
+
+.legacy-notice{display:flex;justify-content:space-between;gap:18px;align-items:center;border:1px solid #d9b777;background:#fff9ea}.legacy-notice h2{margin:8px 0 4px}@media(max-width:700px){.legacy-notice{align-items:flex-start;flex-direction:column}}

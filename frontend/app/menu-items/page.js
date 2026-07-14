@@ -1,4 +1,5 @@
 'use client';
+import LegacyExternalModuleNotice from '../../components/LegacyExternalModuleNotice';
 import { useEffect, useMemo, useState } from 'react';
 import { useConfirmAction } from '../../components/ConfirmActionProvider';
 import { createMenuItem, createRecipeLine, deleteMenuItem, deleteRecipeLine, fetchInventoryItems, fetchMasterValues, fetchMenuItems, fetchRecipe, updateMenuItem } from '../../lib/api';
@@ -113,6 +114,8 @@ export default function MenuItemsPage() {
 
   return (
     <div>
+      <LegacyExternalModuleNotice appName="POS Cloud" />
+      <div>
       <section className="section">
         <h1>Menu & Recipes</h1>
         <p className="muted">Create sellable menu items first, then build ingredient recipes for costing and inventory. Variants are handled later in Restaurant Ops only when they are actually required.</p>
@@ -222,6 +225,7 @@ export default function MenuItemsPage() {
           </table>
         </section>
       )}
+      </div>
     </div>
   );
 }

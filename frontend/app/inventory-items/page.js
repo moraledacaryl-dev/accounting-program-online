@@ -1,4 +1,5 @@
 'use client';
+import LegacyExternalModuleNotice from '../../components/LegacyExternalModuleNotice';
 import { useEffect, useMemo, useState } from 'react';
 import { useConfirmAction } from '../../components/ConfirmActionProvider';
 import { createInventoryItem, deleteInventoryItem, fetchInventoryItems, fetchMasterValues, updateInventoryItem } from '../../lib/api';
@@ -84,6 +85,8 @@ export default function InventoryItemsPage() {
 
   return (
     <div>
+      <LegacyExternalModuleNotice appName="Inventory & Procurement" />
+      <div>
       <section className="section">
         <h1>Inventory Items</h1>
         <p className="muted">Create inventory items with a controlled category, subcategory, and purchase unit. Subcategories are surfaced based on the selected category.</p>
@@ -172,6 +175,7 @@ export default function InventoryItemsPage() {
             </tbody>
           </table>
         </section>
+      </div>
       </div>
     </div>
   );

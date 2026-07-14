@@ -140,3 +140,9 @@ def run_startup_migrations(engine: Engine):
         )
     ''')
     _sqlite_execute(engine, 'CREATE UNIQUE INDEX IF NOT EXISTS uq_external_employee_reference ON external_employee_references (external_source, employee_code)')
+
+    # Pass 5: journal control and audit support.
+    _sqlite_add_column_if_missing(engine, 'journal_entries', 'reversed_from_id', 'INTEGER')
+    _sqlite_add_column_if_missing(engine, 'journal_entries', 'is_reversed', 'BOOLEAN DEFAULT 0')
+    _sqlite_add_column_if_missing(engine, 'journal_entries', 'posted_by', 'VARCHAR(100)')
+    _sqlite_add_column_if_missing(engine, 'journal_entries', 'locked_by', 'VARCHAR(100)')

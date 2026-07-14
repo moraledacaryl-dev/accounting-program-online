@@ -193,6 +193,21 @@ class EventPayment(Base, TimestampMixin):
     money_transaction: Mapped["MoneyTransaction"] = relationship()
 
 
+
+
+class AuditEvent(Base, TimestampMixin):
+    __tablename__ = 'audit_events'
+    id: Mapped[int] = mapped_column(Integer, primary_key=True)
+    entity_type: Mapped[str] = mapped_column(String(80), index=True)
+    entity_id: Mapped[int] = mapped_column(Integer, index=True)
+    action: Mapped[str] = mapped_column(String(80), index=True)
+    before_json: Mapped[str] = mapped_column(Text, default='{}')
+    after_json: Mapped[str] = mapped_column(Text, default='{}')
+    user_id: Mapped[int | None] = mapped_column(Integer, nullable=True, index=True)
+    username: Mapped[str | None] = mapped_column(String(100), nullable=True)
+    source_app: Mapped[str | None] = mapped_column(String(80), nullable=True, index=True)
+    correlation_id: Mapped[str | None] = mapped_column(String(120), nullable=True, index=True)
+
 class Attachment(Base, TimestampMixin):
     __tablename__ = 'attachments'
     id: Mapped[int] = mapped_column(Integer, primary_key=True)
@@ -1359,6 +1374,10 @@ class JournalEntry(Base, TimestampMixin):
     source_module: Mapped[str | None] = mapped_column(String(100), nullable=True)
     status: Mapped[str] = mapped_column(String(50), default='draft')
     locked: Mapped[bool] = mapped_column(Boolean, default=False)
+    reversed_from_id: Mapped[int | None] = mapped_column(ForeignKey('journal_entries.id'), nullable=True, index=True)
+    is_reversed: Mapped[bool] = mapped_column(Boolean, default=False)
+    posted_by: Mapped[str | None] = mapped_column(String(100), nullable=True)
+    locked_by: Mapped[str | None] = mapped_column(String(100), nullable=True)
     lines: Mapped[list['JournalLine']] = relationship(back_populates='entry', cascade='all, delete-orphan')
 
 class JournalLine(Base):
@@ -1414,6 +1433,10 @@ class BIRBookEntry(Base, TimestampMixin):
     amount: Mapped[float] = mapped_column(Float, default=0)
     tax_type: Mapped[str | None] = mapped_column(String(50), nullable=True)
     locked: Mapped[bool] = mapped_column(Boolean, default=False)
+    reversed_from_id: Mapped[int | None] = mapped_column(ForeignKey('journal_entries.id'), nullable=True, index=True)
+    is_reversed: Mapped[bool] = mapped_column(Boolean, default=False)
+    posted_by: Mapped[str | None] = mapped_column(String(100), nullable=True)
+    locked_by: Mapped[str | None] = mapped_column(String(100), nullable=True)
 
 
 class BIRSelectionEntry(Base, TimestampMixin):

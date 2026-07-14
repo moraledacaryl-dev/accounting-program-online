@@ -1,4 +1,5 @@
 'use client';
+import LegacyExternalModuleNotice from '../../components/LegacyExternalModuleNotice';
 import { useEffect, useState } from 'react';
 import { useConfirmAction } from '../../components/ConfirmActionProvider';
 import {
@@ -89,6 +90,8 @@ export default function EmployeesPage() {
 
   return (
     <div>
+      <LegacyExternalModuleNotice appName="Staff & Payroll" />
+      <div>
       <section className="section">
         <h1>Employees & Attendance</h1>
         <p className="muted">Manage employee profiles and daily attendance in one place.</p>
@@ -169,6 +172,7 @@ export default function EmployeesPage() {
           </tbody>
         </table>
       </section>
+      </div>
     </div>
   );
 }

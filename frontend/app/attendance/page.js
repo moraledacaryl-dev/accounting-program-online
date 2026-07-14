@@ -1,4 +1,5 @@
 'use client';
+import LegacyExternalModuleNotice from '../../components/LegacyExternalModuleNotice';
 
 import { useEffect, useMemo, useState } from 'react';
 import {
@@ -216,7 +217,9 @@ export default function AttendancePage() {
   }
 
   return (
-    <div className="stack">
+    <div>
+      <LegacyExternalModuleNotice appName="Staff & Payroll" />
+      <div className="stack">
       <section className="section">
         <h1>Attendance</h1>
         <p className="muted">Attendance input with employee/date filters and payroll-period-aware review.</p>
@@ -395,6 +398,7 @@ export default function AttendancePage() {
           </tbody>
         </table>
       </section>
+      </div>
     </div>
   );
 }
