@@ -1,4 +1,5 @@
 'use client';
+import LegacyExternalModuleNotice from '../../components/LegacyExternalModuleNotice';
 
 import { useEffect, useMemo, useState } from 'react';
 import {
@@ -162,6 +163,8 @@ export default function StaffMealsPage() {
 
   return (
     <div>
+      <LegacyExternalModuleNotice appName="POS Cloud" />
+      <div>
       <section className="section">
         <h1>Staff Meals</h1>
         <p className="muted">Encode dish name, quantity, and ingredients. Inventory is deducted immediately; accounting posting is optional.</p>
@@ -281,6 +284,7 @@ export default function StaffMealsPage() {
             </tbody>
           </table>
         </section>
+      </div>
       </div>
     </div>
   );

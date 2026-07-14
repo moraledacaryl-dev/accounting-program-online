@@ -175,6 +175,12 @@ def _serialize_account(row: FinancialAccount) -> dict:
         'currency': row.currency,
         'is_active': bool(row.is_active),
         'requires_daily_reconciliation': bool(row.requires_daily_reconciliation),
+        'reconciliation_mode': row.reconciliation_mode or ('daily' if row.requires_daily_reconciliation else 'none'),
+        'requires_physical_count': bool(row.requires_physical_count),
+        'reconciliation_day_of_week': row.reconciliation_day_of_week,
+        'reconciliation_day_of_month': row.reconciliation_day_of_month,
+        'variance_tolerance': float(row.variance_tolerance or 0),
+        'approval_required_on_variance': bool(row.approval_required_on_variance),
         'opening_balance': float(row.opening_balance or 0),
         'current_balance': float(row.current_balance or 0),
         'department': row.department,
@@ -388,6 +394,10 @@ def ensure_default_financial_accounts(db: Session) -> int:
             currency='PHP',
             is_active=True,
             requires_daily_reconciliation=bool(item.get('requires_daily_reconciliation', True)),
+            reconciliation_mode='daily' if bool(item.get('requires_daily_reconciliation', True)) else 'none',
+            requires_physical_count=(item.get('account_type') in {'cash_drawer', 'petty_cash', 'safe'}),
+            variance_tolerance=0,
+            approval_required_on_variance=True,
             opening_balance=0,
             current_balance=0,
             department=item.get('department'),
@@ -2398,6 +2408,29 @@ def launch_template(db: Session, template_id: int, overrides: dict, username: st
     return create_money_transaction(db, MoneyTransactionCreate(**payload), username=username)
 
 
+
+def _reconciliation_due(account: dict, target_date: str) -> bool:
+    from datetime import date as _date
+    mode = _normalize(account.get('reconciliation_mode') or ('daily' if account.get('requires_daily_reconciliation') else 'none'))
+    if mode in {'none', 'manual', ''}:
+        return False
+    try:
+        day = _date.fromisoformat(str(target_date)[:10])
+    except Exception:
+        return mode == 'daily'
+    if mode == 'daily':
+        return True
+    if mode == 'weekly':
+        configured = account.get('reconciliation_day_of_week')
+        return day.weekday() == int(configured if configured is not None else 6)
+    if mode == 'monthly':
+        configured = int(account.get('reconciliation_day_of_month') or 1)
+        return day.day == configured
+    if mode == 'per_settlement':
+        return False
+    return False
+
+
 def cashflow_summary(db: Session, target_date: str | None = None):
     ensure_default_financial_accounts(db)
     date_key = _safe_date(target_date)
@@ -2428,7 +2461,7 @@ def cashflow_summary(db: Session, target_date: str | None = None):
     unreconciled_accounts = 0
     variance_alerts = 0
     for row in accounts:
-        if row.get('requires_daily_reconciliation') and row.get('reconciliation_status') == 'missing':
+        if _reconciliation_due(row, date_key) and row.get('reconciliation_status') == 'missing':
             unreconciled_accounts += 1
         if row.get('reconciliation_variance') is not None and abs(float(row.get('reconciliation_variance') or 0)) >= 0.01:
             variance_alerts += 1
@@ -2475,7 +2508,7 @@ def cashflow_summary(db: Session, target_date: str | None = None):
         },
         'recent_transactions': tx_today[:50],
         'recent_transfers': transfer_today[:50],
-        'accounts_requiring_reconciliation': [row for row in accounts if row.get('requires_daily_reconciliation') and row.get('reconciliation_status') == 'missing'],
+        'accounts_requiring_reconciliation': [row for row in accounts if _reconciliation_due(row, date_key) and row.get('reconciliation_status') == 'missing'],
         'overdue_receivables': [_serialize_receivable(row) for row in overdue_receivables],
         'overdue_payables': [_serialize_payable(row) for row in overdue_payables],
         'recent_variances': [_serialize_reconciliation(row) for row in recent_variances],
@@ -2490,6 +2523,10 @@ def account_ledger(
     start_date: str | None = None,
     end_date: str | None = None,
     include_reconciliations: bool = True,
+    direction: str | None = None,
+    module: str | None = None,
+    status: str | None = None,
+    q: str | None = None,
     limit: int = 500,
 ):
     ensure_default_financial_accounts(db)
@@ -2609,9 +2646,35 @@ def account_ledger(
         out['running_balance'] = round(running_balance, 4)
         result_rows.append(out)
 
+    visible_rows = []
+    q_norm = str(q or '').strip().lower()
+    for row in result_rows:
+        if row.get('entry_type') == 'opening_balance':
+            visible_rows.append(row)
+            continue
+        meta = row.get('meta') or {}
+        if direction and row.get('entry_type') == 'money_transaction' and _normalize(meta.get('direction')) != _normalize(direction):
+            continue
+        if module and row.get('entry_type') == 'money_transaction' and str(meta.get('module') or '') != str(module):
+            continue
+        if status and str(meta.get('status') or '') != str(status):
+            continue
+        if q_norm:
+            haystack = ' '.join([
+                str(row.get('description') or ''), str(row.get('reference_no') or ''),
+                str(meta.get('counterparty_name') or ''), str(meta.get('category') or ''),
+                str(meta.get('subcategory') or ''), str(meta.get('notes') or ''),
+            ]).lower()
+            if q_norm not in haystack:
+                continue
+        visible_rows.append(row)
+
     return {
         'account': _serialize_account(account),
         'opening_balance': round(opening_balance, 4),
-        'rows': result_rows,
+        'rows': visible_rows,
         'closing_balance': round(running_balance, 4),
+        'transaction_count': len([row for row in visible_rows if row.get('entry_type') != 'opening_balance']),
+        'money_in_total': round(sum(float(row.get('debit') or 0) for row in visible_rows if row.get('entry_type') != 'opening_balance'), 4),
+        'money_out_total': round(sum(float(row.get('credit') or 0) for row in visible_rows if row.get('entry_type') != 'opening_balance'), 4),
     }

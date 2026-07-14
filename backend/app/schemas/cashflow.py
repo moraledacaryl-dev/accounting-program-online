@@ -12,6 +12,12 @@ class FinancialAccountCreate(BaseModel):
     currency: str = 'PHP'
     is_active: bool = True
     requires_daily_reconciliation: bool = True
+    reconciliation_mode: str = 'daily'
+    requires_physical_count: bool = False
+    reconciliation_day_of_week: int | None = None
+    reconciliation_day_of_month: int | None = None
+    variance_tolerance: float = 0
+    approval_required_on_variance: bool = True
     opening_balance: float = 0
     current_balance: float | None = None
     department: str | None = None
@@ -26,6 +32,12 @@ class FinancialAccountUpdate(BaseModel):
     currency: str | None = None
     is_active: bool | None = None
     requires_daily_reconciliation: bool | None = None
+    reconciliation_mode: str | None = None
+    requires_physical_count: bool | None = None
+    reconciliation_day_of_week: int | None = None
+    reconciliation_day_of_month: int | None = None
+    variance_tolerance: float | None = None
+    approval_required_on_variance: bool | None = None
     opening_balance: float | None = None
     current_balance: float | None = None
     department: str | None = None

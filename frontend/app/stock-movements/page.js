@@ -1,4 +1,5 @@
 'use client';
+import LegacyExternalModuleNotice from '../../components/LegacyExternalModuleNotice';
 import { useEffect, useMemo, useState } from 'react';
 import {
   createStockMovement,
@@ -196,6 +197,8 @@ export default function StockMovementsPage() {
 
   return (
     <div>
+      <LegacyExternalModuleNotice appName="Inventory & Procurement" />
+      <div>
       <section className="section">
         <h1>Stock Movements</h1>
         <p className="muted">Record stock in and out by item. For purchases, enter landed cost and the system calculates unit cost for you.</p>
@@ -350,6 +353,7 @@ export default function StockMovementsPage() {
           </table>
         </section>
       )}
+      </div>
     </div>
   );
 }

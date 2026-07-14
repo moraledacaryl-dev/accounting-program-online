@@ -3,7 +3,8 @@
 import Link from 'next/link';
 import { useEffect, useState } from 'react';
 import { usePathname, useRouter } from 'next/navigation';
-import { clearToken, globalSearch, logout } from '../lib/api';
+import { clearToken, globalSearch } from '../lib/api';
+import { useAppShell } from './app-shell/AppShellContext';
 
 const titles = {
   '/dashboard': ['Dashboard', 'Unified resort operations snapshot'],
@@ -48,14 +49,14 @@ const titles = {
   '/attendance': ['Attendance', 'Attendance logs, import, and review'],
   '/payroll-periods': ['Payroll Periods', 'Payroll period input/import/posting'],
   '/payroll': ['Payroll', 'Legacy payroll run view (secondary)'],
-  '/approvals': ['Approvals', 'Cross-module approval queue'],
+  '/approvals': ['Review Inbox', 'Approvals and connected-app financial review'],
 
   '/workspace/finance': ['Finance & Accounting', 'Cashflow, journals, reports, assets, and BIR'],
-  '/cashflow': ['Cashflow', 'Money in, money out, transfers, checks, payments, and bills'],
+  '/cashflow': ['Cash & Treasury', 'Authoritative money accounts, ledger, daily close, and reconciliation'],
   '/journals': ['Journals', 'Journal entries and trial balance'],
   '/reports': ['Reports', 'Management and accounting reports'],
-  '/assets': ['Assets', 'Asset lifecycle and accounting linkage'],
-  '/bir': ['BIR', 'Selection, books, and period locks'],
+  '/assets': ['Financial Assets', 'Capitalization, depreciation, impairment, and disposal'],
+  '/bir': ['BIR & Periods', 'Books, tax controls, and locked periods'],
   '/attachments': ['Attachments', 'Operational and accounting support files'],
 
   '/workspace/settings': ['Settings', 'Admin setup and controls'],
@@ -72,6 +73,7 @@ const titles = {
 export default function Header() {
   const pathname = usePathname();
   const router = useRouter();
+  const { openMobileNav } = useAppShell();
   const [searchTerm, setSearchTerm] = useState('');
   const [searchResults, setSearchResults] = useState([]);
   const [searchError, setSearchError] = useState('');
@@ -131,6 +133,7 @@ export default function Header() {
   return (
     <header className="topbar">
       <div className="topbar-left">
+        <button type="button" className="mobile-menu-button mobile-only" onClick={openMobileNav} aria-label="Open navigation">☰</button>
         {showBack && (
           <button type="button" className="secondary topbar-back" onClick={goBack}>
             Back

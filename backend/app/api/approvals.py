@@ -5,6 +5,7 @@ from app.models.entities import JournalEntry, PayrollRun
 from app.api.deps import require_permissions
 from app.schemas.common import RecordUpdate
 from app.services.record_service import update_record
+from app.services.audit_service import record_audit
 
 router = APIRouter()
 
@@ -24,6 +25,8 @@ def lock_journal(entry_id: int, db: Session = Depends(get_db), user=Depends(requ
     if not obj:
         raise HTTPException(status_code=404, detail='Entry not found')
     obj.locked = True
+    obj.locked_by = getattr(user, 'username', None)
+    record_audit(db, entity_type='journal_entry', entity_id=obj.id, action='locked', user=user)
     db.add(obj); db.commit(); db.refresh(obj)
     return obj
 

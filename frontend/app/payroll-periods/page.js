@@ -1,4 +1,5 @@
 'use client';
+import LegacyExternalModuleNotice from '../../components/LegacyExternalModuleNotice';
 
 import Link from 'next/link';
 import { useEffect, useMemo, useState } from 'react';
@@ -225,7 +226,9 @@ export default function PayrollPeriodsPage() {
   }
 
   return (
-    <div className="stack">
+    <div>
+      <LegacyExternalModuleNotice appName="Staff & Payroll" />
+      <div className="stack">
       <section className="section">
         <div className="row" style={{ justifyContent: 'space-between' }}>
           <div>
@@ -349,6 +352,7 @@ export default function PayrollPeriodsPage() {
           </tbody>
         </table>
       </section>
+      </div>
     </div>
   );
 }

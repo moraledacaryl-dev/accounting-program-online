@@ -4,16 +4,9 @@ import Link from 'next/link';
 import { usePathname } from 'next/navigation';
 
 const TABS = [
-  ['/cashflow', 'Overview'],
-  ['/cashflow/accounts', 'Accounts'],
-  ['/cashflow/money-in', 'Money In'],
-  ['/cashflow/money-out', 'Money Out'],
-  ['/cashflow/transfers', 'Transfers'],
-  ['/cashflow/daily-cash', 'Cash Count'],
-  ['/cashflow/receivables', 'To Receive'],
-  ['/cashflow/payables', 'To Pay'],
-  ['/cashflow/reconciliation', 'Periodic Checks'],
-  ['/cashflow/templates', 'Templates'],
+  ['/cashflow', 'Cash & Treasury'],
+  ['/cashflow/receivables', 'Receivables'],
+  ['/cashflow/payables', 'Payables'],
 ];
 
 export default function CashflowTabs() {

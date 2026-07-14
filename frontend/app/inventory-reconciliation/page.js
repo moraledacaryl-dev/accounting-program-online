@@ -1,10 +1,13 @@
 'use client';
+import LegacyExternalModuleNotice from '../../components/LegacyExternalModuleNotice';
 
 import ClientModulePage from '../../components/ClientModulePage';
 
 export default function InventoryReconciliationPage() {
   return (
-    <div className="stack">
+    <div>
+      <LegacyExternalModuleNotice appName="Inventory & Procurement" />
+      <div className="stack">
       <section className="section">
         <h1>Inventory Reconciliation</h1>
         <p className="muted">
@@ -17,6 +20,7 @@ export default function InventoryReconciliationPage() {
         categoryFilter={['Inventory Reconciliation']}
         defaultCategory="Inventory Reconciliation"
       />
+      </div>
     </div>
   );
 }

@@ -22,7 +22,7 @@ const EMPTY_FORM = {
   commission_amount: '',
   net_amount: '',
   payment_method: 'ota_payout',
-  auto_post_accounting: false,
+  auto_post_accounting: true,
   expected_payout_date: '',
   actual_payout_date: '',
   status: 'pending',
@@ -163,7 +163,7 @@ export default function PayoutsPage() {
         payment_method: 'bank_transfer',
         auto_post_accounting: false,
       });
-      setNotice(`Payout ${row.id} marked as settled.`);
+      setNotice(`Payout ${row.id} settled and linked to Accounting.`);
       await load();
     } catch (err) {
       setError(err.message || 'Failed to settle payout.');
@@ -174,7 +174,7 @@ export default function PayoutsPage() {
     <div>
       <section className="section">
         <h1>Channel Payouts</h1>
-        <p className="muted">Track OTA gross, commission, and settlements with optional accounting links to keep postings intentional.</p>
+        <p className="muted">Track OTA gross, commission, expected net, actual receipt, and the linked settlement transaction. Settling posts once to Accounting.</p>
         {!!notice && <p className="success-text">{notice}</p>}
         {!!error && <p className="error-text">{error}</p>}
       </section>

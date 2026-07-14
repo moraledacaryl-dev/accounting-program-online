@@ -6,13 +6,12 @@ import StaffActionPanel from '../../components/StaffActionPanel';
 import { getDashboard } from '../../lib/api';
 
 const WORKSPACES = [
-  ['/workspace/rooms', 'Rooms & Guests', 'Bookings, room setup, guest profiles, folios'],
-  ['/events', 'Events', 'Quotes, confirmations, deposits, balances, and completion'],
-  ['/workspace/restaurant', 'Restaurant & F&B', 'Sales ops, menu/recipes, staff meals, outlets'],
-  ['/workspace/inventory', 'Inventory & Purchasing', 'Stock, purchasing, receiving, and reconciliation'],
-  ['/workspace/payroll', 'People & Payroll', 'Employees, attendance, payroll periods, approvals'],
-  ['/workspace/finance', 'Finance & Accounting', 'Cashflow, journals, reports, BIR, and assets'],
-  ['/workspace/settings', 'Settings', 'Master data, taxonomy, users, roles, and system setup'],
+  ['/bookings', 'Hotel Operations', 'Bookings, guests, folios, rooms, rates, and Beds24 context'],
+  ['/events', 'Events', 'Commercial event bookings, deposits, balances, and Operations handoff'],
+  ['/cashflow', 'Cash & Treasury', 'Accounts, authoritative ledger, daily close, and reconciliation'],
+  ['/approvals', 'Review Inbox', 'Approvals and connected-app financial items requiring review'],
+  ['/reports', 'Reports', 'Hotel, financial, compliance, and management reporting'],
+  ['/system-settings', 'Setup', 'Hotel setup, accounting mappings, access, and integrations'],
 ];
 
 function formatValue(value) {

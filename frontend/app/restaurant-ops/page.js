@@ -1,4 +1,5 @@
 'use client';
+import LegacyExternalModuleNotice from '../../components/LegacyExternalModuleNotice';
 
 import Link from 'next/link';
 import { useEffect, useMemo, useState } from 'react';
@@ -890,6 +891,7 @@ export default function RestaurantOpsPage() {
 
   return (
     <div className="stack">
+      <LegacyExternalModuleNotice appName="POS Cloud" />
       <section className="section ops-hero">
         <div className="row wrap" style={{ justifyContent: 'space-between' }}>
           <div>

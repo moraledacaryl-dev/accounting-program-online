@@ -322,6 +322,11 @@ def update_guest(db: Session, guest_id: int, payload: GuestUpdate):
     if not row:
         raise ValueError('Guest not found.')
 
+    folio = db.get(BookingFolio, int(row.folio_id))
+    if folio and (folio.status or 'open') in {'settled', 'closed', 'cancelled'}:
+        raise ValueError('Closed or settled folio lines cannot be edited. Reopen or reverse instead.')
+    if row.external_source or row.linked_money_transaction_id or row.linked_receivable_id or row.linked_payable_id:
+        raise ValueError('Linked or external folio lines cannot be edited. Reverse the line instead.')
     data = payload.model_dump(exclude_unset=True)
     for key in ('first_name', 'last_name', 'phone', 'email', 'address', 'city', 'nationality', 'birthday', 'company', 'status_tags'):
         if key in data:
@@ -634,11 +639,13 @@ def set_folio_status(db: Session, folio_id: int, payload: BookingFolioAction):
     if not row:
         raise ValueError('Folio not found.')
     status = _norm(payload.status)
-    if status not in {'open', 'reviewed', 'closed', 'cancelled'}:
+    if status not in {'open', 'reviewed', 'pending_settlement', 'settled', 'closed', 'cancelled', 'reopened'}:
         raise ValueError('Invalid folio status.')
     row.status = status
-    if status == 'closed':
+    if status in {'settled', 'closed'}:
         row.closed_at = _today()
+    elif status in {'open', 'reopened'}:
+        row.closed_at = None
     if payload.notes:
         row.notes = f'{row.notes or ""}\n{payload.notes}'.strip()
     db.add(row)
@@ -650,6 +657,8 @@ def add_folio_line(db: Session, folio_id: int, payload: BookingFolioLineCreate, 
     folio = db.get(BookingFolio, int(folio_id))
     if not folio:
         raise ValueError('Folio not found.')
+    if (folio.status or 'open') in {'settled', 'closed', 'cancelled'}:
+        raise ValueError('Closed or settled folios cannot accept new lines. Reopen the folio first.')
 
     qty = float(payload.quantity or 0)
     if qty <= 0:
@@ -717,6 +726,98 @@ def delete_folio_line(db: Session, folio_line_id: int):
     if not row:
         raise ValueError('Folio line not found.')
     folio_id = row.folio_id
+    folio = db.get(BookingFolio, int(folio_id))
+    if folio and (folio.status or 'open') in {'settled', 'closed', 'cancelled'}:
+        raise ValueError('Closed or settled folio lines cannot be deleted.')
+    if row.external_source or row.linked_money_transaction_id or row.linked_receivable_id or row.linked_payable_id:
+        raise ValueError('Linked or external folio lines cannot be deleted. Reverse the line instead.')
     db.delete(row)
     db.commit()
     return get_folio(db, folio_id)
+
+
+def reverse_folio_line(db: Session, folio_line_id: int, payload, username: str | None = None):
+    original = db.get(BookingFolioLine, int(folio_line_id))
+    if not original:
+        raise ValueError('Folio line not found.')
+    folio = db.get(BookingFolio, int(original.folio_id))
+    if not folio:
+        raise ValueError('Folio not found.')
+    reversal_key = f'reversal:{original.id}'
+    duplicate = db.query(BookingFolioLine).filter(
+        BookingFolioLine.folio_id == folio.id,
+        BookingFolioLine.external_line_key == reversal_key,
+    ).first()
+    if duplicate:
+        raise ValueError('This folio line has already been reversed.')
+    amount = abs(float(original.amount or 0))
+    line_type = (original.line_type or '').strip().lower()
+    # Charges reverse as a negative charge; payments/deposits reverse as a positive reversal effect.
+    reversal_amount = -amount if line_type in POSITIVE_FOLIO_TYPES or line_type not in {'deposit','payment','refund','reversal'} else amount
+    row = BookingFolioLine(
+        folio_id=folio.id,
+        line_type='reversal',
+        description=f'Reversal of line #{original.id}: {original.description}',
+        quantity=1,
+        unit_price=reversal_amount,
+        amount=reversal_amount,
+        transaction_date=_norm(payload.transaction_date) or _today(),
+        reference_no=original.reference_no,
+        linked_money_transaction_id=original.linked_money_transaction_id,
+        linked_receivable_id=original.linked_receivable_id,
+        linked_payable_id=original.linked_payable_id,
+        linked_record_id=original.linked_record_id,
+        external_source='accounting',
+        external_line_key=reversal_key,
+        notes=_norm(payload.reason) or 'Folio line reversal',
+        created_by=username,
+    )
+    db.add(row)
+    db.commit()
+    return get_folio(db, folio.id)
+
+
+def transfer_folio_line(db: Session, folio_line_id: int, payload, username: str | None = None):
+    original = db.get(BookingFolioLine, int(folio_line_id))
+    target = db.get(BookingFolio, int(payload.target_folio_id))
+    if not original or not target:
+        raise ValueError('Folio line or target folio not found.')
+    if original.folio_id == target.id:
+        raise ValueError('Target folio must be different.')
+    if (target.status or 'open') in {'settled','closed','cancelled'}:
+        raise ValueError('Target folio is not open.')
+    transfer_key = f'transfer:{original.id}:{target.id}'
+    if db.query(BookingFolioLine).filter(BookingFolioLine.external_line_key == transfer_key).first():
+        raise ValueError('This line has already been transferred to the selected folio.')
+    amount = float(original.amount or 0)
+    moved = BookingFolioLine(
+        folio_id=target.id, line_type=original.line_type, description=original.description,
+        quantity=float(original.quantity or 1), unit_price=float(original.unit_price or 0), amount=amount,
+        transaction_date=_norm(payload.transaction_date) or _today(), reference_no=original.reference_no,
+        linked_money_transaction_id=original.linked_money_transaction_id, linked_receivable_id=original.linked_receivable_id,
+        linked_payable_id=original.linked_payable_id, linked_record_id=original.linked_record_id,
+        external_source=original.external_source or 'accounting', external_line_key=transfer_key,
+        notes=f'Transferred from folio #{original.folio_id}. {_norm(payload.reason) or ""}'.strip(), created_by=username,
+    )
+    db.add(moved)
+    reverse_payload = type('ReversePayload', (), {'transaction_date': payload.transaction_date, 'reason': f'Transferred to folio #{target.id}. {_norm(payload.reason) or ""}'})()
+    db.flush()
+    reverse_folio_line(db, original.id, reverse_payload, username=username)
+    return {'source_folio': get_folio(db, original.folio_id), 'target_folio': get_folio(db, target.id)}
+
+
+def settle_folio(db: Session, folio_id: int, payload):
+    folio = db.get(BookingFolio, int(folio_id))
+    if not folio:
+        raise ValueError('Folio not found.')
+    summary = folio_balance_summary(folio)
+    tolerance = abs(float(payload.tolerance or 0))
+    if abs(float(summary['balance'])) > tolerance:
+        raise ValueError(f'Folio balance must be within {tolerance:.2f} before settlement.')
+    folio.status = 'settled'
+    folio.closed_at = _today()
+    if payload.notes:
+        folio.notes = f'{folio.notes or ""}\n{payload.notes}'.strip()
+    db.add(folio)
+    db.commit()
+    return get_folio(db, folio.id)

@@ -99,3 +99,19 @@ class BookingFolioLineUpdate(BaseModel):
 class BookingFolioAction(BaseModel):
     status: str
     notes: str | None = None
+
+
+class BookingFolioLineReverse(BaseModel):
+    transaction_date: str | None = None
+    reason: str | None = None
+
+
+class BookingFolioLineTransfer(BaseModel):
+    target_folio_id: int
+    transaction_date: str | None = None
+    reason: str | None = None
+
+
+class BookingFolioSettlement(BaseModel):
+    notes: str | None = None
+    tolerance: float = 0

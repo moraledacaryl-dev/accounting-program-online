@@ -193,6 +193,21 @@ class EventPayment(Base, TimestampMixin):
     money_transaction: Mapped["MoneyTransaction"] = relationship()
 
 
+
+
+class AuditEvent(Base, TimestampMixin):
+    __tablename__ = 'audit_events'
+    id: Mapped[int] = mapped_column(Integer, primary_key=True)
+    entity_type: Mapped[str] = mapped_column(String(80), index=True)
+    entity_id: Mapped[int] = mapped_column(Integer, index=True)
+    action: Mapped[str] = mapped_column(String(80), index=True)
+    before_json: Mapped[str] = mapped_column(Text, default='{}')
+    after_json: Mapped[str] = mapped_column(Text, default='{}')
+    user_id: Mapped[int | None] = mapped_column(Integer, nullable=True, index=True)
+    username: Mapped[str | None] = mapped_column(String(100), nullable=True)
+    source_app: Mapped[str | None] = mapped_column(String(80), nullable=True, index=True)
+    correlation_id: Mapped[str | None] = mapped_column(String(120), nullable=True, index=True)
+
 class Attachment(Base, TimestampMixin):
     __tablename__ = 'attachments'
     id: Mapped[int] = mapped_column(Integer, primary_key=True)
@@ -358,6 +373,12 @@ class FinancialAccount(Base, TimestampMixin):
     currency: Mapped[str] = mapped_column(String(10), default='PHP')
     is_active: Mapped[bool] = mapped_column(Boolean, default=True)
     requires_daily_reconciliation: Mapped[bool] = mapped_column(Boolean, default=True)
+    reconciliation_mode: Mapped[str] = mapped_column(String(30), default='daily', index=True)
+    requires_physical_count: Mapped[bool] = mapped_column(Boolean, default=False)
+    reconciliation_day_of_week: Mapped[int | None] = mapped_column(Integer, nullable=True)
+    reconciliation_day_of_month: Mapped[int | None] = mapped_column(Integer, nullable=True)
+    variance_tolerance: Mapped[float] = mapped_column(Float, default=0)
+    approval_required_on_variance: Mapped[bool] = mapped_column(Boolean, default=True)
     opening_balance: Mapped[float] = mapped_column(Float, default=0)
     current_balance: Mapped[float] = mapped_column(Float, default=0)
     department: Mapped[str | None] = mapped_column(String(120), nullable=True, index=True)
@@ -1353,6 +1374,10 @@ class JournalEntry(Base, TimestampMixin):
     source_module: Mapped[str | None] = mapped_column(String(100), nullable=True)
     status: Mapped[str] = mapped_column(String(50), default='draft')
     locked: Mapped[bool] = mapped_column(Boolean, default=False)
+    reversed_from_id: Mapped[int | None] = mapped_column(ForeignKey('journal_entries.id'), nullable=True, index=True)
+    is_reversed: Mapped[bool] = mapped_column(Boolean, default=False)
+    posted_by: Mapped[str | None] = mapped_column(String(100), nullable=True)
+    locked_by: Mapped[str | None] = mapped_column(String(100), nullable=True)
     lines: Mapped[list['JournalLine']] = relationship(back_populates='entry', cascade='all, delete-orphan')
 
 class JournalLine(Base):
@@ -1408,6 +1433,10 @@ class BIRBookEntry(Base, TimestampMixin):
     amount: Mapped[float] = mapped_column(Float, default=0)
     tax_type: Mapped[str | None] = mapped_column(String(50), nullable=True)
     locked: Mapped[bool] = mapped_column(Boolean, default=False)
+    reversed_from_id: Mapped[int | None] = mapped_column(ForeignKey('journal_entries.id'), nullable=True, index=True)
+    is_reversed: Mapped[bool] = mapped_column(Boolean, default=False)
+    posted_by: Mapped[str | None] = mapped_column(String(100), nullable=True)
+    locked_by: Mapped[str | None] = mapped_column(String(100), nullable=True)
 
 
 class BIRSelectionEntry(Base, TimestampMixin):
@@ -1474,3 +1503,39 @@ class AssetDisposalLog(Base, TimestampMixin):
     notes: Mapped[str | None] = mapped_column(Text, nullable=True)
     created_by: Mapped[str | None] = mapped_column(String(100), nullable=True)
     asset: Mapped["Asset"] = relationship()
+
+class IntegrationReviewItem(Base, TimestampMixin):
+    __tablename__ = 'integration_review_items'
+    id: Mapped[int] = mapped_column(Integer, primary_key=True)
+    source_app: Mapped[str] = mapped_column(String(80), index=True)
+    source_event_id: Mapped[str] = mapped_column(String(180), index=True)
+    source_entity_type: Mapped[str] = mapped_column(String(100), index=True)
+    source_entity_id: Mapped[str | None] = mapped_column(String(180), nullable=True, index=True)
+    source_revision: Mapped[int] = mapped_column(Integer, default=1)
+    financial_effect: Mapped[str] = mapped_column(String(40), index=True)
+    amount: Mapped[float] = mapped_column(Float, default=0)
+    currency: Mapped[str] = mapped_column(String(10), default='PHP')
+    proposed_account_id: Mapped[int | None] = mapped_column(ForeignKey('financial_accounts.id'), nullable=True, index=True)
+    proposed_journal_json: Mapped[str | None] = mapped_column(Text, nullable=True)
+    proposed_links_json: Mapped[str | None] = mapped_column(Text, nullable=True)
+    payload_json: Mapped[str | None] = mapped_column(Text, nullable=True)
+    validation_json: Mapped[str | None] = mapped_column(Text, nullable=True)
+    status: Mapped[str] = mapped_column(String(40), default='ready_for_review', index=True)
+    reviewed_at: Mapped[str | None] = mapped_column(String(50), nullable=True, index=True)
+    reviewed_by: Mapped[str | None] = mapped_column(String(100), nullable=True)
+    accepted_transaction_id: Mapped[int | None] = mapped_column(ForeignKey('money_transactions.id'), nullable=True, index=True)
+    accepted_journal_entry_id: Mapped[int | None] = mapped_column(ForeignKey('journal_entries.id'), nullable=True, index=True)
+    accepted_receivable_id: Mapped[int | None] = mapped_column(ForeignKey('receivables.id'), nullable=True, index=True)
+    accepted_payable_id: Mapped[int | None] = mapped_column(ForeignKey('payables.id'), nullable=True, index=True)
+    rejection_reason: Mapped[str | None] = mapped_column(Text, nullable=True)
+    idempotency_key: Mapped[str] = mapped_column(String(255), index=True)
+    correlation_id: Mapped[str | None] = mapped_column(String(255), nullable=True, index=True)
+    proposed_account: Mapped['FinancialAccount'] = relationship(foreign_keys=[proposed_account_id])
+    accepted_transaction: Mapped['MoneyTransaction'] = relationship(foreign_keys=[accepted_transaction_id])
+    accepted_journal_entry: Mapped['JournalEntry'] = relationship(foreign_keys=[accepted_journal_entry_id])
+    accepted_receivable: Mapped['Receivable'] = relationship(foreign_keys=[accepted_receivable_id])
+    accepted_payable: Mapped['Payable'] = relationship(foreign_keys=[accepted_payable_id])
+    __table_args__ = (
+        UniqueConstraint('source_app', 'source_event_id', 'source_revision', name='uq_integration_review_source_revision'),
+        UniqueConstraint('idempotency_key', name='uq_integration_review_idempotency'),
+    )

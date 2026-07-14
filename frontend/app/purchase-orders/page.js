@@ -1,4 +1,5 @@
 'use client';
+import LegacyExternalModuleNotice from '../../components/LegacyExternalModuleNotice';
 
 import Link from 'next/link';
 import { useEffect, useMemo, useState } from 'react';
@@ -251,7 +252,9 @@ export default function PurchaseOrdersPage() {
   }
 
   return (
-    <div className="stack">
+    <div>
+      <LegacyExternalModuleNotice appName="Inventory & Procurement" />
+      <div className="stack">
       <section className="section">
         <div className="row" style={{ justifyContent: 'space-between' }}>
           <div>
@@ -376,6 +379,7 @@ export default function PurchaseOrdersPage() {
           </tbody>
         </table>
       </section>
+      </div>
     </div>
   );
 }

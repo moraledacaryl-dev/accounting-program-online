@@ -166,8 +166,11 @@ export const approvePayrollRun = (id) => request(`/approvals/payroll/${id}/appro
 
 export const fetchJournalEntries = () => request('/journals/entries');
 export const createJournalEntry = (payload) => request('/journals/entries', { method:'POST', body: JSON.stringify(payload)});
+export const fetchJournalEntryDetail = (id) => request(`/journals/entries/${id}`);
+export const postJournalEntry = (id) => request(`/journals/entries/${id}/post`, { method:'POST' });
+export const reverseJournalEntry = (id) => request(`/journals/entries/${id}/reverse`, { method:'POST' });
 export const fetchTrialBalance = () => request('/journals/trial-balance');
-export const lockJournalEntry = (id) => request(`/approvals/journals/${id}/lock`, { method:'POST' });
+export const lockJournalEntry = (id) => request(`/journals/entries/${id}/lock`, { method:'POST' });
 
 export const fetchMasterValues = (group = '', activeOnly = true) => {
   const params = [];
@@ -330,6 +333,9 @@ export const updateRoomFolioStatus = (id, payload) => request(`/room-folios/${id
 export const createRoomFolioLine = (folioId, payload) => request(`/room-folios/${folioId}/lines`, { method: 'POST', body: JSON.stringify(payload) });
 export const updateRoomFolioLine = (lineId, payload) => request(`/room-folios/lines/${lineId}`, { method: 'PUT', body: JSON.stringify(payload) });
 export const deleteRoomFolioLine = (lineId) => request(`/room-folios/lines/${lineId}`, { method: 'DELETE' });
+export const reverseRoomFolioLine = (lineId, payload) => request(`/room-folios/lines/${lineId}/reverse`, { method: 'POST', body: JSON.stringify(payload) });
+export const transferRoomFolioLine = (lineId, payload) => request(`/room-folios/lines/${lineId}/transfer`, { method: 'POST', body: JSON.stringify(payload) });
+export const settleRoomFolio = (folioId, payload = {}) => request(`/room-folios/${folioId}/settle`, { method: 'POST', body: JSON.stringify(payload) });
 
 // Rooms setup entities
 export const fetchRoomTypes = (activeOnly = false) => request(`/room-types?active_only=${String(!!activeOnly)}`);
@@ -412,3 +418,10 @@ export const fetchAccountMappings = (params = {}) => request(`/account-mappings$
 export const createAccountMapping = (payload) => request('/account-mappings', { method: 'POST', body: JSON.stringify(payload) });
 export const updateAccountMapping = (id, payload) => request(`/account-mappings/${id}`, { method: 'PUT', body: JSON.stringify(payload) });
 export const deleteAccountMapping = (id) => request(`/account-mappings/${id}`, { method: 'DELETE' });
+
+export const fetchIntegrationReviewItems = (params = {}) => request(`/integration-review${Object.keys(params).length ? `?${new URLSearchParams(Object.entries(params).filter(([, v]) => v !== '' && v !== null && typeof v !== 'undefined')).toString()}` : ''}`);
+export const fetchIntegrationReviewSummary = () => request('/integration-review/summary');
+export const fetchIntegrationReviewItem = (id) => request(`/integration-review/${id}`);
+export const acceptIntegrationReviewItem = (id, payload = {}) => request(`/integration-review/${id}/accept`, { method:'POST', body: JSON.stringify(payload) });
+export const rejectIntegrationReviewItem = (id, payload = {}) => request(`/integration-review/${id}/reject`, { method:'POST', body: JSON.stringify(payload) });
+export const retryIntegrationReviewItem = (id, payload = {}) => request(`/integration-review/${id}/retry`, { method:'POST', body: JSON.stringify(payload) });

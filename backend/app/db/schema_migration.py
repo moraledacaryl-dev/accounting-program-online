@@ -57,6 +57,15 @@ def run_startup_migrations(engine: Engine):
     _sqlite_add_column_if_missing(engine, 'payables', 'posted_at', 'VARCHAR(50)')
     _sqlite_add_column_if_missing(engine, 'payables', 'closed_at', 'VARCHAR(50)')
 
+
+    # Pass 2: configurable reconciliation and physical-count behavior.
+    _sqlite_add_column_if_missing(engine, 'financial_accounts', 'reconciliation_mode', "VARCHAR(30) DEFAULT 'daily'")
+    _sqlite_add_column_if_missing(engine, 'financial_accounts', 'requires_physical_count', 'BOOLEAN DEFAULT 0')
+    _sqlite_add_column_if_missing(engine, 'financial_accounts', 'reconciliation_day_of_week', 'INTEGER')
+    _sqlite_add_column_if_missing(engine, 'financial_accounts', 'reconciliation_day_of_month', 'INTEGER')
+    _sqlite_add_column_if_missing(engine, 'financial_accounts', 'variance_tolerance', 'FLOAT DEFAULT 0')
+    _sqlite_add_column_if_missing(engine, 'financial_accounts', 'approval_required_on_variance', 'BOOLEAN DEFAULT 1')
+
     # Channel payout linkage to booking channel setup.
     _sqlite_add_column_if_missing(engine, 'channel_payouts', 'channel_id', 'INTEGER')
 
@@ -131,3 +140,9 @@ def run_startup_migrations(engine: Engine):
         )
     ''')
     _sqlite_execute(engine, 'CREATE UNIQUE INDEX IF NOT EXISTS uq_external_employee_reference ON external_employee_references (external_source, employee_code)')
+
+    # Pass 5: journal control and audit support.
+    _sqlite_add_column_if_missing(engine, 'journal_entries', 'reversed_from_id', 'INTEGER')
+    _sqlite_add_column_if_missing(engine, 'journal_entries', 'is_reversed', 'BOOLEAN DEFAULT 0')
+    _sqlite_add_column_if_missing(engine, 'journal_entries', 'posted_by', 'VARCHAR(100)')
+    _sqlite_add_column_if_missing(engine, 'journal_entries', 'locked_by', 'VARCHAR(100)')

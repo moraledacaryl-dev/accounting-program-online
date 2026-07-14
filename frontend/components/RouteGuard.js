@@ -2,7 +2,8 @@
 
 import { useEffect } from 'react';
 import { usePathname } from 'next/navigation';
-import { useCurrentUser } from '../lib/useCurrentUser';
+import { useAppShell } from './app-shell/AppShellContext';
+import { LoadingState, PermissionState } from './ui/PageState';
 
 const PERMISSION_RULES = [
   { prefix: '/dashboard', any: ['dashboard.view'] },
@@ -93,7 +94,7 @@ function defaultRouteForUser(can) {
 
 export default function RouteGuard({ children }) {
   const pathname = usePathname();
-  const { loaded, can, user } = useCurrentUser();
+  const { loaded, can, user } = useAppShell();
 
   useEffect(() => {
     if (!loaded || !user || pathname === '/login' || pathHasAccess(pathname, can)) return;
