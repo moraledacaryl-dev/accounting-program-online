@@ -1454,3 +1454,48 @@ button.danger {
     grid-column: 1 / -1;
   }
 }
+
+
+/* Pass 1 application shell */
+.sidebar-scrim { display: none; }
+
+@media (max-width: 980px) {
+  :root { --sidebar-width: 0px !important; }
+  .app-shell { grid-template-columns: 1fr; }
+  .sidebar {
+    position: fixed;
+    left: 0;
+    top: 0;
+    width: min(86vw, 310px);
+    transform: translateX(-105%);
+    transition: transform .2s ease;
+    box-shadow: 20px 0 50px rgba(0,0,0,.25);
+  }
+  .sidebar.mobile-open { transform: translateX(0); }
+  .sidebar.collapsed { width: min(86vw, 310px); }
+  .sidebar.collapsed .brand-copy, .sidebar.collapsed .nav-text, .sidebar.collapsed .nav-group-label, .sidebar.collapsed .sidebar-user-copy { display: block; }
+  .sidebar.collapsed a { justify-content: flex-start; padding: 9px 10px; }
+  .sidebar-scrim { position: fixed; inset: 0; border: 0; background: rgba(10,16,13,.42); z-index: 35; }
+  .sidebar-scrim.visible { display: block; }
+  .mobile-only { display: inline-flex !important; }
+  .desktop-only { display: none !important; }
+  .mobile-menu-button { width: 38px; height: 38px; align-items: center; justify-content: center; border: 1px solid var(--line); background: #fff; border-radius: 10px; }
+  .main { padding: 18px; }
+  .topbar { padding: 11px 14px; }
+  .topbar-actions .review-inbox-link { display: none; }
+}
+
+@media (max-width: 640px) {
+  .topbar-subtitle { display: none; }
+  .topbar-title { font-size: 16px; }
+  .topbar-actions button { padding: 8px 10px; }
+  .main { padding: 14px; }
+  .section { padding: 14px; border-radius: 12px; }
+  .page-header { display: grid; }
+  .page-header h1 { font-size: 24px; }
+  .page-header-actions { width: 100%; }
+  .page-header-actions > * { flex: 1; }
+  .card-grid { grid-template-columns: 1fr !important; }
+  .table { min-width: 720px; }
+  .table-wrap, .section { overflow-x: auto; }
+}

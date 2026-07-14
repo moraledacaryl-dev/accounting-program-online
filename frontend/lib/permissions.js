@@ -21,12 +21,29 @@ export const ROLE_PERMISSION_FALLBACKS = {
     'master_data.manage', 'taxonomy.manage', 'chart_of_accounts.manage', 'account_mapping.manage',
     'integrations.view', 'integrations.manage', 'integrations.sync', 'integrations.logs.view',
   ],
-  accountant: [
+  accounting_admin: [
     'dashboard.view',
     'cashflow.view', 'cashflow.money_in', 'cashflow.money_out', 'cashflow.transfers', 'cashflow.reconcile',
     'journals.view', 'journals.post', 'reports.view', 'assets.view', 'assets.manage', 'bir.view', 'bir.manage',
     'chart_of_accounts.manage', 'account_mapping.manage',
     'integrations.view', 'integrations.sync', 'integrations.logs.view',
+  ],
+  front_desk: [
+    'dashboard.view',
+    'bookings.view', 'bookings.create', 'bookings.edit',
+    'folios.view', 'folios.manage',
+    'guests.view', 'guests.create', 'guests.edit',
+    'room_setup.view',
+    'cashflow.view', 'cashflow.money_in', 'cashflow.reconcile',
+  ],
+  cashier: [
+    'dashboard.view', 'folios.view', 'cashflow.view', 'cashflow.money_in', 'cashflow.reconcile',
+    'integrations.view',
+  ],
+  auditor: [
+    'dashboard.view', 'bookings.view', 'folios.view', 'guests.view',
+    'cashflow.view', 'journals.view', 'reports.view', 'assets.view', 'bir.view',
+    'integrations.view', 'integrations.logs.view',
   ],
   staff: [
     'dashboard.view',
