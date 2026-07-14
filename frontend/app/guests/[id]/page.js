@@ -2,7 +2,7 @@
 
 import Link from 'next/link';
 import { useEffect, useMemo, useState } from 'react';
-import { fetchGuestHistory, fetchRoomFolios } from '../../../lib/api';
+import { fetchGuestHistory, fetchRoomFolios, mergeGuests, searchGuests } from '../../../lib/api';
 
 function php(value) {
   return Number(value || 0).toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 });
@@ -18,6 +18,9 @@ export default function GuestProfilePage({ params }) {
   const [history, setHistory] = useState(null);
   const [guestFolios, setGuestFolios] = useState([]);
   const [error, setError] = useState('');
+  const [mergeQuery, setMergeQuery] = useState('');
+  const [mergeCandidates, setMergeCandidates] = useState([]);
+  const [mergeNotice, setMergeNotice] = useState('');
 
   async function load() {
     const [guestHistory, folios] = await Promise.all([
@@ -56,6 +59,17 @@ export default function GuestProfilePage({ params }) {
       payments,
     };
   }, [guest, bookings, stayHistory, paymentHistory, history]);
+
+
+  async function findDuplicates() {
+    setMergeCandidates(await searchGuests(mergeQuery || guest?.email || guest?.phone || guest?.full_name || '', 20));
+  }
+
+  async function mergeIntoCurrent(sourceId) {
+    if (!window.confirm('Merge this guest into the current profile? Bookings, folios, and Beds24 links will move to this guest.')) return;
+    await mergeGuests({ source_guest_id: sourceId, target_guest_id: guestId, reason: 'Duplicate guest merged from profile review' });
+    setMergeNotice('Guest records merged.'); setMergeCandidates([]); await load();
+  }
 
   if (error) {
     return (
@@ -157,6 +171,14 @@ export default function GuestProfilePage({ params }) {
           </table>
         </section>
       </div>
+
+
+      <section className="section">
+        <div className="row wrap" style={{ justifyContent: 'space-between' }}><div><h2>Duplicate Guest Review</h2><p className="muted">Merge OTA or direct-booking duplicates while preserving bookings, folios, and audit history.</p></div></div>
+        {!!mergeNotice && <p className="success-text">{mergeNotice}</p>}
+        <div className="row wrap"><input placeholder="Name, email, or phone" value={mergeQuery} onChange={(e)=>setMergeQuery(e.target.value)} /><button type="button" className="secondary" onClick={findDuplicates}>Find Duplicates</button></div>
+        {!!mergeCandidates.length && <table className="table"><thead><tr><th>Guest</th><th>Contact</th><th>Bookings</th><th></th></tr></thead><tbody>{mergeCandidates.filter(x=>Number(x.id)!==guestId).map(x=><tr key={x.id}><td>{x.full_name}</td><td>{x.email||x.phone||'-'}</td><td>{x.booking_count||0}</td><td><button type="button" className="secondary" onClick={()=>mergeIntoCurrent(x.id)}>Merge into current</button></td></tr>)}</tbody></table>}
+      </section>
 
       <section className="section">
         <h2>Booking History</h2>

@@ -3,7 +3,7 @@
 import Link from 'next/link';
 import { useEffect, useState } from 'react';
 import { useConfirmAction } from '../../../components/ConfirmActionProvider';
-import { fetchBooking, reclassifyBookingFolioLines } from '../../../lib/api';
+import { fetchBooking, fetchBreakfastLogs, reclassifyBookingFolioLines } from '../../../lib/api';
 import { useCurrentUser } from '../../../lib/useCurrentUser';
 
 function money(value) {
@@ -23,13 +23,17 @@ export default function BookingDetailPage({ params }) {
   const [loading, setLoading] = useState(true);
   const [classificationRunning, setClassificationRunning] = useState(false);
   const [classificationResult, setClassificationResult] = useState(null);
+  const [breakfastLogs, setBreakfastLogs] = useState([]);
   const canRepairFolio = can('folios.manage') || can('bookings.edit');
 
   useEffect(() => {
     setLoading(true);
     setError('');
-    fetchBooking(params.id)
-      .then((row) => setBooking(row || null))
+    Promise.all([fetchBooking(params.id), fetchBreakfastLogs()])
+      .then(([row, logs]) => {
+        setBooking(row || null);
+        setBreakfastLogs((Array.isArray(logs) ? logs : []).filter((item) => Number(item.booking_id) === Number(params.id)));
+      })
       .catch((err) => setError(err.message || 'Failed to load booking.'))
       .finally(() => setLoading(false));
   }, [params.id]);
@@ -132,6 +136,27 @@ export default function BookingDetailPage({ params }) {
           </table>
         </section>
       </div>
+
+      <section className="section">
+        <div className="row wrap" style={{ justifyContent: 'space-between', alignItems: 'flex-start' }}>
+          <div>
+            <h2>Breakfast Status</h2>
+            <p className="muted">Breakfast service is recorded in POS. Accounting displays entitlement, service usage, excess charges, and the linked folio result.</p>
+          </div>
+          <button type="button" className="secondary">Open in POS</button>
+        </div>
+        <div className="card-grid" style={{ marginTop: 10 }}>
+          <div className="card"><div className="small muted">Included</div><div className="kpi compact-kpi">{booking.breakfast_included_count ?? booking.adults ?? '-'}</div></div>
+          <div className="card"><div className="small muted">Served</div><div className="kpi compact-kpi">{breakfastLogs.reduce((sum, item) => sum + Number(item.quantity || item.served_count || 0), 0)}</div></div>
+          <div className="card"><div className="small muted">Excess</div><div className="kpi compact-kpi">{breakfastLogs.reduce((sum, item) => sum + Number(item.excess_quantity || 0), 0)}</div></div>
+        </div>
+      </section>
+
+      <section className="section">
+        <h2>Operations Links</h2>
+        <p className="muted">Housekeeping readiness and operational execution remain in Operations Command Center.</p>
+        <div className="row wrap"><button type="button" className="secondary">Open Housekeeping</button><button type="button" className="secondary">Open Event Links</button></div>
+      </section>
 
       {canRepairFolio && (
         <section className="section">

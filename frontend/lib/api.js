@@ -330,6 +330,9 @@ export const updateRoomFolioStatus = (id, payload) => request(`/room-folios/${id
 export const createRoomFolioLine = (folioId, payload) => request(`/room-folios/${folioId}/lines`, { method: 'POST', body: JSON.stringify(payload) });
 export const updateRoomFolioLine = (lineId, payload) => request(`/room-folios/lines/${lineId}`, { method: 'PUT', body: JSON.stringify(payload) });
 export const deleteRoomFolioLine = (lineId) => request(`/room-folios/lines/${lineId}`, { method: 'DELETE' });
+export const reverseRoomFolioLine = (lineId, payload) => request(`/room-folios/lines/${lineId}/reverse`, { method: 'POST', body: JSON.stringify(payload) });
+export const transferRoomFolioLine = (lineId, payload) => request(`/room-folios/lines/${lineId}/transfer`, { method: 'POST', body: JSON.stringify(payload) });
+export const settleRoomFolio = (folioId, payload = {}) => request(`/room-folios/${folioId}/settle`, { method: 'POST', body: JSON.stringify(payload) });
 
 // Rooms setup entities
 export const fetchRoomTypes = (activeOnly = false) => request(`/room-types?active_only=${String(!!activeOnly)}`);

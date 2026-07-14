@@ -5,6 +5,9 @@ import { useEffect, useMemo, useState } from 'react';
 import {
   createRoomFolioLine,
   deleteRoomFolioLine,
+  reverseRoomFolioLine,
+  transferRoomFolioLine,
+  settleRoomFolio,
   fetchRoomFolio,
   fetchRoomFolios,
   updateRoomFolio,
@@ -155,6 +158,22 @@ export default function RoomFolioDetailPage({ params }) {
     });
   }
 
+  async function reverseLine(row) {
+    const reason = window.prompt('Reason for reversal:');
+    if (!reason) return;
+    setError('');
+    try { await reverseRoomFolioLine(row.id, { transaction_date: todayIso(), reason }); setNotice('Folio line reversed.'); await load(); } catch (err) { setError(err.message || 'Failed to reverse folio line.'); }
+  }
+
+  async function transferLine(row) {
+    const target = window.prompt('Target folio ID:'); if (!target) return;
+    try { await transferRoomFolioLine(row.id, { target_folio_id: Number(target), transaction_date: todayIso(), reason: 'Transferred from folio detail' }); setNotice('Folio line transferred.'); await load(); } catch (err) { setError(err.message || 'Failed to transfer folio line.'); }
+  }
+
+  async function settleCurrentFolio() {
+    try { await settleRoomFolio(folioId, { notes: 'Settled from folio detail', tolerance: 0.01 }); setNotice('Folio settled.'); await load(); } catch (err) { setError(err.message || 'Failed to settle folio.'); }
+  }
+
   async function removeLine(row) {
     if (!await confirmAction({ title: `Delete folio line ${row.description}?`, description: 'Remove only incorrect draft lines. Settled charges should be handled with a reversal.' })) return;
     setError('');
@@ -291,7 +310,7 @@ export default function RoomFolioDetailPage({ params }) {
             <div className="row wrap">
               <button type="button" className="secondary" onClick={saveFolioMeta}>Save Notes</button>
               <button type="button" className="secondary" onClick={() => setStatus('reviewed')}>Set Reviewed</button>
-              <button type="button" className="secondary" onClick={() => setPendingStatus('closed')}>Close Folio</button>
+              <button type="button" className="secondary" onClick={settleCurrentFolio}>Settle Folio</button>
               <button type="button" className="secondary" onClick={() => setPendingStatus('open')}>Reopen</button>
               <button type="button" className="secondary" onClick={syncOpenSnapshot}>Check Related</button>
             </div>
@@ -330,10 +349,12 @@ export default function RoomFolioDetailPage({ params }) {
                 <td>{Number(row.quantity || 0).toLocaleString(undefined, { maximumFractionDigits: 2 })}</td>
                 <td>{Number(row.unit_price || 0).toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</td>
                 <td>{php(row.amount || 0)}</td>
-                <td>{row.reference_no || '-'}</td>
+                <td>{row.reference_no || '-'}<br /><span className="small muted">{row.external_source ? `Source: ${row.external_source}` : row.linked_money_transaction_id ? `Money TX #${row.linked_money_transaction_id}` : 'Manual'}</span></td>
                 <td className="row wrap">
-                  <button type="button" className="secondary" onClick={() => editLine(row)}>Edit</button>
-                  <button type="button" className="secondary" onClick={() => removeLine(row)}>Delete</button>
+                  {!row.external_source && !row.linked_money_transaction_id && folio.status === 'open' && <button type="button" className="secondary" onClick={() => editLine(row)}>Edit</button>}
+                  <button type="button" className="secondary" onClick={() => transferLine(row)}>Transfer</button>
+                  <button type="button" className="secondary" onClick={() => reverseLine(row)}>Reverse</button>
+                  {!row.external_source && !row.linked_money_transaction_id && folio.status === 'open' && <button type="button" className="secondary" onClick={() => removeLine(row)}>Delete draft</button>}
                 </td>
               </tr>
             ))}

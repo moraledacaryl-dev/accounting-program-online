@@ -8,6 +8,9 @@ from app.schemas.guests import (
     BookingFolioCreate,
     BookingFolioLineCreate,
     BookingFolioLineUpdate,
+    BookingFolioLineReverse,
+    BookingFolioLineTransfer,
+    BookingFolioSettlement,
     BookingFolioUpdate,
 )
 from app.services.guest_service import (
@@ -19,6 +22,9 @@ from app.services.guest_service import (
     set_folio_status,
     update_folio,
     update_folio_line,
+    reverse_folio_line,
+    transfer_folio_line,
+    settle_folio,
 )
 
 router = APIRouter()
@@ -120,6 +126,42 @@ def remove_room_folio_line(
 ):
     try:
         return delete_folio_line(db, folio_line_id)
+    except ValueError as e:
+        db.rollback()
+        raise HTTPException(status_code=400, detail=str(e))
+
+
+@router.post('/lines/{folio_line_id}/reverse')
+def reverse_room_folio_line(
+    folio_line_id: int, payload: BookingFolioLineReverse, db: Session = Depends(get_db),
+    user=Depends(require_permissions('folios.manage')),
+):
+    try:
+        return reverse_folio_line(db, folio_line_id, payload, username=getattr(user, 'username', None))
+    except ValueError as e:
+        db.rollback()
+        raise HTTPException(status_code=400, detail=str(e))
+
+
+@router.post('/lines/{folio_line_id}/transfer')
+def transfer_room_folio_line(
+    folio_line_id: int, payload: BookingFolioLineTransfer, db: Session = Depends(get_db),
+    user=Depends(require_permissions('folios.manage')),
+):
+    try:
+        return transfer_folio_line(db, folio_line_id, payload, username=getattr(user, 'username', None))
+    except ValueError as e:
+        db.rollback()
+        raise HTTPException(status_code=400, detail=str(e))
+
+
+@router.post('/{folio_id}/settle')
+def settle_room_folio(
+    folio_id: int, payload: BookingFolioSettlement, db: Session = Depends(get_db),
+    user=Depends(require_permissions('folios.manage')),
+):
+    try:
+        return settle_folio(db, folio_id, payload)
     except ValueError as e:
         db.rollback()
         raise HTTPException(status_code=400, detail=str(e))

@@ -14,7 +14,7 @@ export const navigationGroups = [
       { href: '/bookings', label: 'Bookings', short: 'BK', permissionsAny: ['bookings.view'] },
       { href: '/guests', label: 'Guests', short: 'GU', permissionsAny: ['guests.view'] },
       { href: '/room-folios', label: 'Folios', short: 'FO', permissionsAny: ['folios.view'] },
-      { href: '/workspace/events', label: 'Events', short: 'EV', permissionsAny: ['bookings.view', 'cashflow.view'] },
+      { href: '/events', label: 'Events', short: 'EV', permissionsAny: ['bookings.view', 'cashflow.view'] },
       { href: '/channel-payouts', label: 'Channel Payouts', short: 'CP', permissionsAny: ['bookings.view', 'cashflow.view', 'reports.view'] },
     ],
   },
