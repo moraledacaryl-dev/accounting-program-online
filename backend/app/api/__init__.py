@@ -46,6 +46,7 @@ from app.api.integrations_payroll import router as integrations_payroll_router
 from app.api.setup_imports import router as setup_imports_router
 from app.api.search import router as search_router
 from app.api.events import router as events_router
+from app.api.integration_review import router as integration_review_router
 
 api_router = APIRouter()
 api_router.include_router(auth_router, prefix='/auth', tags=['auth'])
@@ -90,6 +91,7 @@ api_router.include_router(room_folios_router, prefix='/room-folios', tags=['room
 api_router.include_router(roles_permissions_router, prefix='/roles-permissions', tags=['roles-permissions'])
 api_router.include_router(system_settings_router, prefix='/system-settings', tags=['system-settings'])
 api_router.include_router(integration_router, prefix='/integration', tags=['integration'])
+api_router.include_router(integration_review_router, prefix='/integration-review', tags=['integration-review'])
 api_router.include_router(integrations_beds24_router, prefix='/integrations/beds24', tags=['integrations-beds24'])
 api_router.include_router(integrations_payroll_router, prefix='/integrations/payroll', tags=['integrations-payroll'])
 api_router.include_router(setup_imports_router, prefix='/setup-imports', tags=['setup-imports'])

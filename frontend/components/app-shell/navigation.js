@@ -4,7 +4,7 @@ export const navigationGroups = [
     items: [
       { href: '/dashboard', label: 'Dashboard', short: 'DB', permissionsAny: ['dashboard.view'] },
       { href: '/start-of-day', label: 'Start of Day', short: 'SD', permissionsAny: ['dashboard.view', 'cashflow.view'] },
-      { href: '/approvals', label: 'Review Inbox', short: 'RI', permissionsAny: ['approvals.view', 'integrations.view', 'cashflow.view'] },
+      { href: '/review-inbox', label: 'Review Inbox', short: 'RI', permissionsAny: ['approvals.view', 'integrations.view'] },
       { href: '/staff-guide', label: 'Staff Guide', short: 'SG', permissionsAny: [] },
     ],
   },
