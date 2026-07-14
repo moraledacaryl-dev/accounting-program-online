@@ -92,6 +92,11 @@ DEFAULT_ROLES = [
     ('accounting_admin', 'Accounting Admin', 'Cashflow, journals, reports, and BIR.'),
     ('cashier', 'Cashier', 'Assigned drawer and POS-linked financial work.'),
     ('auditor', 'Auditor', 'Read-only accounting and hotel review.'),
+    (
+        'pos_integration',
+        'POS Integration',
+        'Limited service access for POS to Accounting posting and lookup.',
+    ),
 ]
 
 
@@ -151,6 +156,20 @@ ROLE_PERMISSION_PRESETS = {
         'bookings.view', 'guests.view', 'folios.view', 'cashflow.view',
         'cash_treasury.view', 'journals.view', 'reports.view', 'assets.view', 'bir.view',
         'integrations.view', 'integrations.logs.view',
+    },
+    'pos_integration': {
+        'restaurant.view',
+        'menu.view',
+        'bookings.view',
+        'guests.view',
+        'folios.view',
+        'folios.manage',
+        'cashflow.view',
+        'cashflow.money_in',
+        'cashflow.money_out',
+        'cashflow.transfers',
+        'cashflow.reconcile',
+        'inventory.view',
     },
 }
 
