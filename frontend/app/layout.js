@@ -4,6 +4,7 @@ import Header from '../components/Header';
 import RouteGuard from '../components/RouteGuard';
 import ConfirmActionProvider from '../components/ConfirmActionProvider';
 import { AppShellProvider } from '../components/app-shell/AppShellContext';
+import { CurrentUserProvider } from '../lib/useCurrentUser';
 
 export const metadata = { title: 'Hidden Oasis Accounting' };
 
@@ -11,19 +12,21 @@ export default function RootLayout({ children }) {
   return (
     <html lang="en">
       <body>
-        <AppShellProvider>
-          <ConfirmActionProvider>
-            <div className="app-shell">
-              <Sidebar />
-              <div className="main-shell">
-                <Header />
-                <main className="main">
-                  <RouteGuard>{children}</RouteGuard>
-                </main>
+        <CurrentUserProvider>
+          <AppShellProvider>
+            <ConfirmActionProvider>
+              <div className="app-shell">
+                <Sidebar />
+                <div className="main-shell">
+                  <Header />
+                  <main className="main">
+                    <RouteGuard>{children}</RouteGuard>
+                  </main>
+                </div>
               </div>
-            </div>
-          </ConfirmActionProvider>
-        </AppShellProvider>
+            </ConfirmActionProvider>
+          </AppShellProvider>
+        </CurrentUserProvider>
       </body>
     </html>
   );
