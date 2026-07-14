@@ -1499,3 +1499,13 @@ button.danger {
   .table { min-width: 720px; }
   .table-wrap, .section { overflow-x: auto; }
 }
+
+
+/* Pass 2: unified Cash & Treasury */
+.workspace-hero{display:flex;justify-content:space-between;gap:24px;align-items:flex-start;background:linear-gradient(135deg,#fff,#f3f7f4)}
+.eyebrow{font-size:11px;text-transform:uppercase;letter-spacing:.12em;color:var(--muted);font-weight:800;margin-bottom:6px}
+.metric-grid{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:12px}.metric-grid.compact{margin:16px 0}.metric-card{background:var(--panel,#fff);border:1px solid var(--line);border-radius:14px;padding:15px}.metric-card span{display:block;font-size:12px;color:var(--muted);margin-bottom:6px}.metric-card strong{font-size:22px;letter-spacing:-.03em}
+.unified-tabs{margin:0}.section-title-row{display:flex;justify-content:space-between;gap:16px;align-items:flex-start;margin-bottom:14px}.cash-account-grid{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:10px}.cash-account-card,.cash-account-pill{border:1px solid var(--line);background:#fff;color:inherit;text-align:left;border-radius:13px;padding:13px;display:flex;flex-direction:column;gap:5px}.cash-account-card:hover,.cash-account-pill:hover,.cash-account-pill.active{border-color:#668a78;background:#f2f7f4}.cash-account-card strong,.cash-account-pill strong{font-size:18px}.cash-account-card small{color:var(--muted)}.cash-account-strip{display:flex;gap:9px;overflow:auto;padding-bottom:10px;margin-bottom:10px}.cash-account-pill{min-width:175px;flex:0 0 auto}.filter-bar{display:grid;grid-template-columns:repeat(5,minmax(120px,1fr)) auto;gap:8px;margin:14px 0}.short-input{max-width:100px}.clickable-row{cursor:pointer}.clickable-row:hover{background:#f1f6f3}
+.workspace-drawer-backdrop{position:fixed;inset:0;background:rgba(10,20,15,.45);z-index:1000;display:flex;justify-content:flex-end}.workspace-drawer{width:min(720px,92vw);height:100%;background:#f7f9f7;overflow:auto;box-shadow:-15px 0 40px rgba(0,0,0,.18)}.workspace-drawer-head{position:sticky;top:0;background:#fff;border-bottom:1px solid var(--line);padding:18px;display:flex;justify-content:space-between;gap:12px;z-index:2}.workspace-drawer-body{padding:18px}.workspace-drawer-body>.grid{display:block}.workspace-drawer-body .section{margin-bottom:14px}
+@media(max-width:1000px){.metric-grid{grid-template-columns:repeat(2,1fr)}.filter-bar{grid-template-columns:repeat(2,1fr)}.workspace-hero{display:block}.workspace-hero>.row{margin-top:14px}}
+@media(max-width:640px){.metric-grid,.cash-account-grid,.filter-bar{grid-template-columns:1fr}.section-title-row{display:block}.section-title-row>button,.section-title-row>a{margin-top:10px}.workspace-drawer{width:100vw}.cash-workspace .table{min-width:760px}}

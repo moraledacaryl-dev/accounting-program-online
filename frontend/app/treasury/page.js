@@ -1,5 +1,2 @@
-import { permanentRedirect } from 'next/navigation';
-
-export default function TreasuryLegacyPage() {
-  permanentRedirect('/cashflow');
-}
+import { redirect } from 'next/navigation';
+export default function TreasuryRedirect() { redirect('/cashflow'); }

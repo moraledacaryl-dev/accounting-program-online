@@ -8,7 +8,7 @@ const TYPE_LABELS = {
   reconciliation: 'Count / check',
 };
 
-export default function AccountLedgerTable({ rows = [] }) {
+export default function AccountLedgerTable({ rows = [], interactive = false }) {
   return (
     <table className="table">
       <thead>
@@ -24,7 +24,7 @@ export default function AccountLedgerTable({ rows = [] }) {
       </thead>
       <tbody>
         {rows.map((row) => (
-          <tr key={`${row.entry_type}-${row.entry_id}-${row.date}`}>
+          <tr key={`${row.entry_type}-${row.entry_id}-${row.date}`} data-entry-type={row.entry_type} data-entry-id={row.entry_id} className={interactive && row.entry_type === 'money_transaction' ? 'clickable-row' : ''}>
             <td>{row.date}</td>
             <td>{TYPE_LABELS[row.entry_type] || row.entry_type}</td>
             <td>{row.description}</td>

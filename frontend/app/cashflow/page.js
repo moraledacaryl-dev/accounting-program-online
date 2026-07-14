@@ -1,189 +1,71 @@
+
 'use client';
 
-import Link from 'next/link';
-import { useEffect, useState } from 'react';
-import CashflowTabs from '../../components/cashflow/CashflowTabs';
-import CashflowSummaryCards from '../../components/cashflow/CashflowSummaryCards';
-import QuickEntryButtons from '../../components/cashflow/QuickEntryButtons';
-import PaymentMethodBadge from '../../components/cashflow/PaymentMethodBadge';
-import CashVarianceBadge from '../../components/cashflow/CashVarianceBadge';
-import { fetchCashflowSummary } from '../../lib/cashflowApi';
+import { useEffect, useMemo, useState } from 'react';
+import { useRouter, useSearchParams } from 'next/navigation';
+import AccountLedgerTable from '../../components/cashflow/AccountLedgerTable';
+import MoneyInForm from '../../components/cashflow/MoneyInForm';
+import MoneyOutForm from '../../components/cashflow/MoneyOutForm';
+import TransferForm from '../../components/cashflow/TransferForm';
+import DailyCashForm from '../../components/cashflow/DailyCashForm';
+import {
+  approveMoneyTransaction, approveReconciliation, approveTransfer, cancelMoneyTransaction, cancelTransfer, closeReconciliation,
+  createMoneyTransaction, createReconciliation, createTransfer, fetchAccountLedger, fetchCashflowSummary, fetchFinancialAccounts,
+  fetchMoneyTransaction, fetchMoneyTransactions, fetchReconciliations, fetchTransfers, reverseMoneyTransaction, reverseReconciliation, reverseTransfer,
+  updateFinancialAccount, fetchCashflowTemplates,
+} from '../../lib/cashflowApi';
+import { fetchModuleTaxonomy } from '../../lib/api';
 import { money, todayISO } from './shared';
 
-const RECEIVABLE_TYPE_LABELS = {
-  guest_balance: 'Guest',
-  ota_receivable: 'OTA',
-  event_balance: 'Event',
-  corporate_receivable: 'Company / group',
-};
+const TABS = ['overview', 'ledger', 'close', 'settings'];
+const EMPTY_TX = { transaction_date: todayISO(), direction: 'in', financial_account_id: '', module: 'finance', category: '', subcategory: '', level3_item: '', amount: '', payment_method: 'cash', reference_no: '', counterparty_name: '', notes: '', linked_record_type: '', linked_record_id: '', receivable_id: '', payable_id: '', bir_include: false, status: 'posted', auto_post_accounting: false, allow_overdraw: false };
+const EMPTY_TRANSFER = { transfer_date: todayISO(), from_account_id: '', to_account_id: '', amount: '', reference_no: '', notes: '', status: 'posted', auto_post_accounting: false, allow_overdraw: false };
 
-const PAYABLE_TYPE_LABELS = {
-  supplier_bill: 'Supplier',
-  utility_bill: 'Utility',
-  payroll_liability: 'Payroll / gov',
-  tax_liability: 'Tax',
-  service_provider_bill: 'Service provider',
-};
+function badge(status) { return <span className={`badge status-${String(status || '').toLowerCase().replaceAll(' ', '-')}`}>{status || '-'}</span>; }
+function Drawer({ title, children, onClose }) { return <div className="workspace-drawer-backdrop" onClick={onClose}><aside className="workspace-drawer" onClick={(e)=>e.stopPropagation()}><div className="workspace-drawer-head"><div><div className="eyebrow">Cash & Treasury</div><h2>{title}</h2></div><button className="secondary" onClick={onClose}>Close</button></div><div className="workspace-drawer-body">{children}</div></aside></div>; }
 
-export default function CashflowLandingPage() {
-  const [date, setDate] = useState(todayISO());
-  const [summary, setSummary] = useState(null);
-  const [error, setError] = useState('');
+export default function CashTreasuryPage() {
+  const router = useRouter(); const search = useSearchParams();
+  const requested = search.get('tab'); const [tab, setTab] = useState(TABS.includes(requested) ? requested : 'overview');
+  const [accounts, setAccounts] = useState([]); const [summary, setSummary] = useState(null); const [transactions, setTransactions] = useState([]);
+  const [transfers, setTransfers] = useState([]); const [reconciliations, setReconciliations] = useState([]); const [templates, setTemplates] = useState([]);
+  const [selectedAccount, setSelectedAccount] = useState(null); const [ledger, setLedger] = useState(null); const [detail, setDetail] = useState(null);
+  const [drawer, setDrawer] = useState(''); const [error, setError] = useState(''); const [busy, setBusy] = useState(false);
+  const [taxonomy, setTaxonomy] = useState({}); const [txForm, setTxForm] = useState(EMPTY_TX); const [transferForm, setTransferForm] = useState(EMPTY_TRANSFER);
+  const [filters, setFilters] = useState({ start_date: '', end_date: '', direction: '', module: '', status: '', q: '' });
+  const action = search.get('action');
 
-  async function load(targetDate = date) {
+  async function loadBase() {
     setError('');
     try {
-      setSummary(await fetchCashflowSummary({ date: targetDate }));
-    } catch (e) {
-      setError(e.message || 'Failed to load cashflow summary.');
-    }
+      const [a,s,t,tr,r,tpl,tax] = await Promise.all([fetchFinancialAccounts({only_active:true}), fetchCashflowSummary({date:todayISO()}), fetchMoneyTransactions({limit:200}), fetchTransfers({limit:100}), fetchReconciliations({limit:100}), fetchCashflowTemplates({active_only:false}), fetchModuleTaxonomy('finance').catch(()=>({}))]);
+      setAccounts(a||[]); setSummary(s); setTransactions(t||[]); setTransfers(tr||[]); setReconciliations(r||[]); setTemplates(tpl||[]); setTaxonomy(tax||{});
+      if (!selectedAccount && a?.length) setSelectedAccount(a[0]);
+    } catch(e){ setError(e.message || 'Failed to load Cash & Treasury.'); }
   }
-
-  useEffect(() => {
-    load().catch(console.error);
-  }, []);
-
-  return (
-    <div className="stack">
-      <CashflowTabs />
-
-      <section className="section">
-        <div className="row" style={{ justifyContent: 'space-between' }}>
-          <div>
-            <h1>Cashflow</h1>
-            <p className="muted">Money received, money spent, transfers, open balances, and periodic checks from one workspace.</p>
-          </div>
-          <div className="row wrap">
-            <input type="date" value={date} onChange={(e) => setDate(e.target.value)} />
-            <button className="secondary" onClick={() => load(date).catch(console.error)}>Refresh</button>
-          </div>
-        </div>
-        {!!error && <p className="error-text">{error}</p>}
-      </section>
-
-      <CashflowSummaryCards cards={summary?.summary_cards || {}} />
-
-      <section className="section">
-        <h2>Quick Entry</h2>
-        <QuickEntryButtons />
-      </section>
-
-      <div className="grid">
-        <section className="section">
-          <h2>Recent Transactions</h2>
-          <table className="table dense-table">
-            <thead><tr><th>Date</th><th>Flow</th><th>Account</th><th>Reason</th><th>Amount</th><th>Method</th></tr></thead>
-            <tbody>
-              {(summary?.recent_transactions || []).slice(0, 20).map((row) => (
-                <tr key={row.id}>
-                  <td>{row.transaction_date}</td>
-                  <td>{row.direction === 'in' ? 'In' : row.direction === 'out' ? 'Out' : row.direction}</td>
-                  <td>{row.financial_account_code} · {row.financial_account_name}</td>
-                  <td>{row.category || '-'} / {row.subcategory || '-'}</td>
-                  <td>P{money(row.amount)}</td>
-                  <td><PaymentMethodBadge method={row.payment_method} /></td>
-                </tr>
-              ))}
-              {!(summary?.recent_transactions || []).length && <tr><td colSpan="6" className="muted">No transactions yet.</td></tr>}
-            </tbody>
-          </table>
-        </section>
-
-        <section className="section">
-          <h2>Accounts to Check</h2>
-          <table className="table dense-table">
-            <thead><tr><th>Code</th><th>Name</th><th>Type</th><th>Balance</th><th></th></tr></thead>
-            <tbody>
-              {(summary?.accounts_requiring_reconciliation || []).slice(0, 20).map((row) => (
-                <tr key={row.id}>
-                  <td>{row.code}</td>
-                  <td>{row.name}</td>
-                  <td>{row.account_type}</td>
-                  <td>P{money(row.current_balance)}</td>
-                  <td><Link className="button-link secondary-link" href={`/cashflow/daily-cash?account_id=${row.id}`}>Count Now</Link></td>
-                </tr>
-              ))}
-              {!(summary?.accounts_requiring_reconciliation || []).length && <tr><td colSpan="5" className="muted">No accounts need checking for the selected date.</td></tr>}
-            </tbody>
-          </table>
-        </section>
-      </div>
-
-      <div className="grid">
-        <section className="section">
-          <h2>Payments to Follow Up</h2>
-          <table className="table dense-table">
-            <thead><tr><th>Type</th><th>Counterparty</th><th>Due</th><th>Balance</th></tr></thead>
-            <tbody>
-              {(summary?.overdue_receivables || []).slice(0, 20).map((row) => (
-                <tr key={row.id}>
-                  <td>{RECEIVABLE_TYPE_LABELS[row.receivable_type] || row.receivable_type || '-'}</td>
-                  <td>{row.counterparty_name}</td>
-                  <td>{row.due_date || '-'}</td>
-                  <td>P{money(row.balance_due)}</td>
-                </tr>
-              ))}
-              {!(summary?.overdue_receivables || []).length && <tr><td colSpan="4" className="muted">No overdue payments to receive.</td></tr>}
-            </tbody>
-          </table>
-        </section>
-
-        <section className="section">
-          <h2>Bills to Follow Up</h2>
-          <table className="table dense-table">
-            <thead><tr><th>Type</th><th>Supplier</th><th>Due</th><th>Balance</th></tr></thead>
-            <tbody>
-              {(summary?.overdue_payables || []).slice(0, 20).map((row) => (
-                <tr key={row.id}>
-                  <td>{PAYABLE_TYPE_LABELS[row.payable_type] || row.payable_type || '-'}</td>
-                  <td>{row.supplier_name}</td>
-                  <td>{row.due_date || '-'}</td>
-                  <td>P{money(row.balance_due)}</td>
-                </tr>
-              ))}
-              {!(summary?.overdue_payables || []).length && <tr><td colSpan="4" className="muted">No overdue bills.</td></tr>}
-            </tbody>
-          </table>
-        </section>
-      </div>
-
-      <section className="section">
-        <h2>Recent Count Differences</h2>
-        <table className="table dense-table">
-          <thead><tr><th>Date</th><th>Account</th><th>Shift</th><th>Difference</th><th>Status</th></tr></thead>
-          <tbody>
-            {(summary?.recent_variances || []).slice(0, 20).map((row) => (
-              <tr key={row.id}>
-                <td>{row.reconciliation_date}</td>
-                <td>{row.financial_account_code} · {row.financial_account_name}</td>
-                <td>{row.shift_name || 'day'}</td>
-                <td><CashVarianceBadge variance={row.variance} /></td>
-                <td>{row.status}</td>
-              </tr>
-            ))}
-            {!(summary?.recent_variances || []).length && <tr><td colSpan="5" className="muted">No count differences.</td></tr>}
-          </tbody>
-        </table>
-      </section>
-
-      <section className="section">
-        <h2>Posting Issues for Manager</h2>
-        <table className="table dense-table">
-          <thead><tr><th>Date</th><th>ID</th><th>Flow</th><th>Account</th><th>Amount</th></tr></thead>
-          <tbody>
-            {(summary?.journal_posting_failures || []).slice(0, 20).map((row) => (
-              <tr key={row.id}>
-                <td>{row.transaction_date}</td>
-                <td>{row.id}</td>
-                <td>{row.direction === 'in' ? 'In' : row.direction === 'out' ? 'Out' : row.direction}</td>
-                <td>{row.financial_account_code}</td>
-                <td>P{money(row.amount)}</td>
-              </tr>
-            ))}
-            {!(summary?.journal_posting_failures || []).length && <tr><td colSpan="5" className="muted">No posting issues for the selected date.</td></tr>}
-          </tbody>
-        </table>
-      </section>
-    </div>
-  );
+  async function loadLedger(account=selectedAccount) { if(!account) return; try { setLedger(await fetchAccountLedger(account.id,{...filters,include_reconciliations:true,limit:1000})); } catch(e){setError(e.message||'Failed to load ledger.');} }
+  useEffect(()=>{loadBase();},[]);
+  useEffect(()=>{ if(action==='money-in'){setTxForm({...EMPTY_TX,direction:'in'});setDrawer('money-in');} if(action==='money-out'){setTxForm({...EMPTY_TX,direction:'out'});setDrawer('money-out');} if(action==='transfer')setDrawer('transfer'); },[action]);
+  useEffect(()=>{ if(tab==='ledger' && selectedAccount) loadLedger(selectedAccount); },[tab, selectedAccount]);
+  function chooseTab(next){setTab(next);router.replace(`/cashflow?tab=${next}`,{scroll:false});}
+  async function submitTx(e){e.preventDefault();setBusy(true);try{await createMoneyTransaction({...txForm,financial_account_id:Number(txForm.financial_account_id),amount:Number(txForm.amount),linked_record_id:txForm.linked_record_id?Number(txForm.linked_record_id):null,receivable_id:txForm.receivable_id?Number(txForm.receivable_id):null,payable_id:txForm.payable_id?Number(txForm.payable_id):null});setDrawer('');setTxForm(EMPTY_TX);await loadBase();if(selectedAccount)await loadLedger();}catch(e2){setError(e2.message);}finally{setBusy(false);}}
+  async function submitTransfer(e){e.preventDefault();setBusy(true);try{await createTransfer({...transferForm,from_account_id:Number(transferForm.from_account_id),to_account_id:Number(transferForm.to_account_id),amount:Number(transferForm.amount)});setDrawer('');setTransferForm(EMPTY_TRANSFER);await loadBase();}catch(e2){setError(e2.message);}finally{setBusy(false);}}
+  async function openTx(id){try{setDetail(await fetchMoneyTransaction(id));setDrawer('detail');}catch(e){setError(e.message);}}
+  const physicalDue=(summary?.accounts_requiring_reconciliation||[]);
+  const totals=summary?.summary_cards||{};
+  return <div className="stack cash-workspace">
+    <section className="section workspace-hero"><div><div className="eyebrow">One money source of truth</div><h1>Cash & Treasury</h1><p className="muted">Account balances, money actions, running ledgers, transfers, physical cash closing, and scheduled reconciliation from one workspace.</p></div><div className="row wrap"><button className="secondary" onClick={()=>{setTxForm({...EMPTY_TX,direction:'out'});setDrawer('money-out')}}>Money Out</button><button className="secondary" onClick={()=>setDrawer('transfer')}>Transfer</button><button onClick={()=>{setTxForm({...EMPTY_TX,direction:'in'});setDrawer('money-in')}}>Add Money Action</button></div></section>
+    {error && <section className="section error-text">{error}</section>}
+    <section className="metric-grid"><div className="metric-card"><span>Cash on hand</span><strong>P{money(totals.total_cash_on_hand)}</strong></div><div className="metric-card"><span>Bank balance</span><strong>P{money(totals.total_bank_balance)}</strong></div><div className="metric-card"><span>Money in today</span><strong>P{money(totals.todays_money_in)}</strong></div><div className="metric-card"><span>Needs close/check</span><strong>{totals.unreconciled_accounts||0}</strong></div></section>
+    <section className="section"><div className="tabs unified-tabs">{TABS.map(x=><button key={x} className={tab===x?'tab active':'tab'} onClick={()=>chooseTab(x)}>{x==='close'?'Daily Close':x[0].toUpperCase()+x.slice(1)}</button>)}</div></section>
+    {tab==='overview' && <><div className="grid"><section className="section"><div className="section-title-row"><div><h2>Account position</h2><p className="small muted">Click an account to open its authoritative ledger.</p></div><button className="secondary" onClick={()=>chooseTab('ledger')}>Open ledger</button></div><div className="cash-account-grid">{accounts.map(a=><button className="cash-account-card" key={a.id} onClick={()=>{setSelectedAccount(a);chooseTab('ledger')}}><span>{a.name}</span><strong>P{money(a.current_balance)}</strong><small>{a.account_type} · {a.reconciliation_mode||'daily'}</small></button>)}</div></section><section className="section"><div className="section-title-row"><h2>Today&apos;s close</h2><button className="secondary" onClick={()=>chooseTab('close')}>Open</button></div>{physicalDue.slice(0,8).map(a=><div className="command-row" key={a.id}><span><strong>{a.name}</strong><small>{a.requires_physical_count?'Physical count':'Scheduled reconciliation'} · {a.reconciliation_mode||'daily'}</small></span>{badge(a.reconciliation_status||'missing')}</div>)}{!physicalDue.length&&<p className="muted">No accounts are due today.</p>}</section></div><section className="section"><div className="section-title-row"><h2>Recent ledger activity</h2><button className="secondary" onClick={()=>chooseTab('ledger')}>Full ledger</button></div><table className="table dense-table"><thead><tr><th>Date</th><th>Account</th><th>Description</th><th>Source</th><th>In</th><th>Out</th><th>Status</th></tr></thead><tbody>{transactions.slice(0,12).map(r=><tr key={r.id} onClick={()=>openTx(r.id)} className="clickable-row"><td>{r.transaction_date}</td><td>{r.financial_account_name}</td><td>{r.category||'-'} / {r.subcategory||'-'}</td><td>{r.linked_record_type||r.module||'manual'} {r.linked_record_id||''}</td><td>{r.direction==='in'?`P${money(r.amount)}`:'-'}</td><td>{r.direction==='out'?`P${money(r.amount)}`:'-'}</td><td>{badge(r.status)}</td></tr>)}</tbody></table></section></>}
+    {tab==='ledger' && <section className="section"><div className="cash-account-strip">{accounts.map(a=><button key={a.id} className={selectedAccount?.id===a.id?'cash-account-pill active':'cash-account-pill'} onClick={()=>setSelectedAccount(a)}><span>{a.name}</span><strong>P{money(a.current_balance)}</strong></button>)}</div><div className="section-title-row"><div><h2>{selectedAccount?.name||'Account'} Ledger</h2><p className="small muted">Backend-calculated running balance and one authoritative transaction history.</p></div><div className="row wrap"><button className="secondary" onClick={()=>{setTxForm({...EMPTY_TX,direction:'out',financial_account_id:selectedAccount?.id||''});setDrawer('money-out')}}>Money Out</button><button onClick={()=>{setTxForm({...EMPTY_TX,direction:'in',financial_account_id:selectedAccount?.id||''});setDrawer('money-in')}}>Money In</button></div></div><div className="filter-bar"><input type="date" value={filters.start_date} onChange={e=>setFilters(f=>({...f,start_date:e.target.value}))}/><input type="date" value={filters.end_date} onChange={e=>setFilters(f=>({...f,end_date:e.target.value}))}/><select value={filters.direction} onChange={e=>setFilters(f=>({...f,direction:e.target.value}))}><option value="">All flows</option><option value="in">Money In</option><option value="out">Money Out</option></select><select value={filters.status} onChange={e=>setFilters(f=>({...f,status:e.target.value}))}><option value="">All statuses</option><option value="draft">Draft</option><option value="posted">Posted</option><option value="cancelled">Cancelled</option><option value="reversed">Reversed</option></select><input placeholder="Search reference or description" value={filters.q} onChange={e=>setFilters(f=>({...f,q:e.target.value}))}/><button className="secondary" onClick={()=>loadLedger()}>Apply</button></div>{ledger&&<><div className="metric-grid compact"><div className="metric-card"><span>Opening</span><strong>P{money(ledger.opening_balance)}</strong></div><div className="metric-card"><span>Money In</span><strong>P{money(ledger.money_in_total)}</strong></div><div className="metric-card"><span>Money Out</span><strong>P{money(ledger.money_out_total)}</strong></div><div className="metric-card"><span>Closing</span><strong>P{money(ledger.closing_balance)}</strong></div></div><div onClick={e=>{const tr=e.target.closest('tr[data-entry-id]');if(tr&&tr.dataset.entryType==='money_transaction')openTx(tr.dataset.entryId)}}><AccountLedgerTable rows={ledger.rows||[]} interactive /></div></>}</section>}
+    {tab==='close' && <><section className="section"><div className="section-title-row"><div><h2>Daily Close</h2><p className="small muted">Physical drawers appear daily. Other accounts appear only when their configured rule is due.</p></div></div><table className="table"><thead><tr><th>Account</th><th>Rule</th><th>Book balance</th><th>Last count/check</th><th>Variance</th><th>Action</th></tr></thead><tbody>{accounts.filter(a=>a.requires_physical_count||physicalDue.some(d=>d.id===a.id)).map(a=>{const r=reconciliations.find(x=>x.financial_account_id===a.id);return <tr key={a.id}><td>{a.name}</td><td>{a.requires_physical_count?'Physical count':a.reconciliation_mode}</td><td>P{money(a.current_balance)}</td><td>{r?.actual_counted!=null?`P${money(r.actual_counted)}`:'-'}</td><td>{r?`P${money(r.variance)}`:'-'}</td><td><button className="secondary" onClick={()=>{setSelectedAccount(a);setDrawer('count')}}>{r?'View / update':'Count / reconcile'}</button></td></tr>})}</tbody></table></section><section className="section"><div className="section-title-row"><h2>Transfer lifecycle</h2><button onClick={()=>setDrawer('transfer')}>New Transfer</button></div><table className="table dense-table"><thead><tr><th>Date</th><th>From</th><th>To</th><th>Amount</th><th>Status</th><th>Actions</th></tr></thead><tbody>{transfers.map(t=><tr key={t.id}><td>{t.transfer_date}</td><td>{t.from_account_name}</td><td>{t.to_account_name}</td><td>P{money(t.amount)}</td><td>{badge(t.status)}</td><td className="row wrap">{t.status==='draft'&&<button className="secondary" onClick={async()=>{await approveTransfer(t.id,{});loadBase()}}>Approve</button>}{!t.is_reversed&&t.status!=='cancelled'&&<button className="secondary" onClick={async()=>{await reverseTransfer(t.id,{reason:'Correction'});loadBase()}}>Reverse</button>}{t.status==='draft'&&<button className="secondary" onClick={async()=>{await cancelTransfer(t.id,{});loadBase()}}>Cancel</button>}</td></tr>)}</tbody></table></section></>}
+    {tab==='settings' && <><section className="section"><div className="section-title-row"><div><h2>Money account settings</h2><p className="small muted">Configure physical counting and reconciliation only where needed.</p></div></div><table className="table"><thead><tr><th>Account</th><th>Type</th><th>Physical count</th><th>Reconciliation</th><th>Tolerance</th><th>Active</th></tr></thead><tbody>{accounts.map(a=><tr key={a.id}><td>{a.name}<div className="small muted">{a.code}</div></td><td>{a.account_type}</td><td><input type="checkbox" checked={!!a.requires_physical_count} onChange={async e=>{await updateFinancialAccount(a.id,{requires_physical_count:e.target.checked});loadBase()}}/></td><td><select value={a.reconciliation_mode||'daily'} onChange={async e=>{await updateFinancialAccount(a.id,{reconciliation_mode:e.target.value,requires_daily_reconciliation:e.target.value==='daily'});loadBase()}}><option value="daily">Daily</option><option value="weekly">Weekly</option><option value="monthly">Monthly</option><option value="per_settlement">Per settlement</option><option value="manual">Manual</option><option value="none">Not required</option></select></td><td><input className="short-input" type="number" value={a.variance_tolerance||0} onChange={e=>setAccounts(rows=>rows.map(x=>x.id===a.id?{...x,variance_tolerance:e.target.value}:x))} onBlur={async e=>{await updateFinancialAccount(a.id,{variance_tolerance:Number(e.target.value||0)})}}/></td><td>{badge(a.is_active?'Active':'Inactive')}</td></tr>)}</tbody></table></section><section className="section"><div className="section-title-row"><div><h2>Recurring Money Templates</h2><p className="small muted">Reusable defaults; launching a template still creates one normal ledger transaction.</p></div><a className="button-link secondary-link" href="/cashflow/templates">Manage templates</a></div><table className="table dense-table"><thead><tr><th>Name</th><th>Direction</th><th>Account</th><th>Category</th><th>Status</th></tr></thead><tbody>{templates.map(t=><tr key={t.id}><td>{t.name}</td><td>{t.direction}</td><td>{t.default_account_name||'-'}</td><td>{t.default_category||'-'}</td><td>{badge(t.is_active?'Active':'Inactive')}</td></tr>)}</tbody></table></section></>}
+    {drawer==='money-in'&&<Drawer title="Money In" onClose={()=>setDrawer('')}><MoneyInForm accounts={accounts} financeTaxonomy={taxonomy} form={txForm} setForm={setTxForm} receivables={[]} onSubmit={submitTx} submitLabel={busy?'Saving...':'Save Money In'}/></Drawer>}
+    {drawer==='money-out'&&<Drawer title="Money Out" onClose={()=>setDrawer('')}><MoneyOutForm accounts={accounts} financeTaxonomy={taxonomy} form={txForm} setForm={setTxForm} payables={[]} onSubmit={submitTx} submitLabel={busy?'Saving...':'Save Money Out'}/></Drawer>}
+    {drawer==='transfer'&&<Drawer title="Transfer" onClose={()=>setDrawer('')}><TransferForm accounts={accounts} form={transferForm} setForm={setTransferForm} onSubmit={submitTransfer} submitLabel={busy?'Saving...':'Save Transfer'}/></Drawer>}
+    {drawer==='count'&&<Drawer title={`${selectedAccount?.name||''} Close`} onClose={()=>setDrawer('')}><DailyCashForm accounts={accounts} form={{financial_account_id:selectedAccount?.id||'',reconciliation_date:todayISO(),shift_name:'day',actual_counted:selectedAccount?.current_balance||0,status:'counted',counted_by:'',notes:'',lines:[]}} setForm={()=>{}} expected={{opening_balance:0,expected_in:0,expected_out:0,expected_closing:selectedAccount?.current_balance||0,variance:0}} onSubmit={async e=>{e.preventDefault();await createReconciliation({financial_account_id:selectedAccount.id,reconciliation_date:todayISO(),shift_name:'day',actual_counted:Number(selectedAccount.current_balance||0),status:'counted',lines:[]});setDrawer('');loadBase()}}/></Drawer>}
+    {drawer==='detail'&&detail&&<Drawer title={`Transaction #${detail.id}`} onClose={()=>setDrawer('')}><div className="stack"><div className="metric-grid compact"><div className="metric-card"><span>Status</span><strong>{detail.status}</strong></div><div className="metric-card"><span>Account</span><strong>{detail.financial_account_name}</strong></div><div className="metric-card"><span>Amount</span><strong>P{money(detail.amount)}</strong></div><div className="metric-card"><span>Direction</span><strong>{detail.direction}</strong></div></div><div className="section"><p><strong>Source:</strong> {detail.linked_record_type||detail.module||'manual'} {detail.linked_record_id||''}</p><p><strong>Reference:</strong> {detail.reference_no||'-'}</p><p><strong>Counterparty:</strong> {detail.counterparty_name||'-'}</p><p><strong>Journal:</strong> {detail.journal_entry_id||'Not posted'}</p></div><div className="row wrap">{detail.status==='draft'&&<button onClick={async()=>{await approveMoneyTransaction(detail.id,{});setDrawer('');loadBase()}}>Approve</button>}{detail.status==='draft'&&<button className="secondary" onClick={async()=>{await cancelMoneyTransaction(detail.id,{});setDrawer('');loadBase()}}>Cancel</button>}{!detail.is_reversed&&detail.status!=='cancelled'&&<button className="secondary" onClick={async()=>{await reverseMoneyTransaction(detail.id,{reason:'Correction'});setDrawer('');loadBase()}}>Reverse</button>}</div></div></Drawer>}
+  </div>;
 }

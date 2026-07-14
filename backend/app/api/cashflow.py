@@ -153,6 +153,10 @@ def get_account_ledger(
     start_date: str | None = None,
     end_date: str | None = None,
     include_reconciliations: bool = True,
+    direction: str | None = None,
+    module: str | None = None,
+    status: str | None = None,
+    q: str | None = None,
     limit: int = Query(500, ge=1, le=2000),
 ):
     try:
@@ -162,6 +166,10 @@ def get_account_ledger(
             start_date=start_date,
             end_date=end_date,
             include_reconciliations=include_reconciliations,
+            direction=direction,
+            module=module,
+            status=status,
+            q=q,
             limit=limit,
         )
     except ValueError as e:
