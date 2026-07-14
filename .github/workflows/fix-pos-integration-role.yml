@@ -1,0 +1,78 @@
+name: Fix POS integration role
+
+on:
+  push:
+    branches:
+      - accounting/framework-refactor
+    paths:
+      - .github/workflows/fix-pos-integration-role.yml
+
+permissions:
+  contents: write
+
+jobs:
+  patch-and-test:
+    runs-on: ubuntu-latest
+    env:
+      ENVIRONMENT: test
+      DATABASE_URL: sqlite:///./ci-accounting.db
+      SECRET_KEY: ci-secret-key-do-not-use
+      STARTUP_REQUIRE_MIGRATIONS: "false"
+      ALLOW_DEFAULT_ADMIN_BOOTSTRAP: "false"
+      ALLOW_DEMO_SEED: "false"
+    steps:
+      - name: Check out branch
+        uses: actions/checkout@v6
+        with:
+          ref: accounting/framework-refactor
+
+      - name: Restore POS integration role
+        run: |
+          python - <<'PY'
+          from pathlib import Path
+
+          path = Path('backend/app/services/permission_service.py')
+          text = path.read_text()
+
+          role_marker = "    ('auditor', 'Auditor', 'Read-only accounting and hotel review.'),\n]"
+          role_replacement = "    ('auditor', 'Auditor', 'Read-only accounting and hotel review.'),\n    ('pos_integration', 'POS Integration', 'Limited service access for POS to Accounting posting and lookup.'),\n]"
+
+          preset_marker = "    'auditor': {\n        'dashboard.view', 'review_inbox.view', 'hotel.view', 'events.view',\n        'bookings.view', 'guests.view', 'folios.view', 'cashflow.view',\n        'cash_treasury.view', 'journals.view', 'reports.view', 'assets.view', 'bir.view',\n        'integrations.view', 'integrations.logs.view',\n    },\n}"
+          preset_replacement = "    'auditor': {\n        'dashboard.view', 'review_inbox.view', 'hotel.view', 'events.view',\n        'bookings.view', 'guests.view', 'folios.view', 'cashflow.view',\n        'cash_treasury.view', 'journals.view', 'reports.view', 'assets.view', 'bir.view',\n        'integrations.view', 'integrations.logs.view',\n    },\n    'pos_integration': {\n        'restaurant.view',\n        'menu.view',\n        'bookings.view',\n        'guests.view',\n        'folios.view',\n        'folios.manage',\n        'cashflow.view',\n        'cashflow.money_in',\n        'cashflow.money_out',\n        'cashflow.transfers',\n        'cashflow.reconcile',\n        'inventory.view',\n    },\n}"
+
+          if "('pos_integration', 'POS Integration'" not in text:
+              if role_marker not in text:
+                  raise SystemExit('DEFAULT_ROLES insertion marker not found')
+              text = text.replace(role_marker, role_replacement, 1)
+
+          if "'pos_integration': {" not in text:
+              if preset_marker not in text:
+                  raise SystemExit('ROLE_PERMISSION_PRESETS insertion marker not found')
+              text = text.replace(preset_marker, preset_replacement, 1)
+
+          path.write_text(text)
+          PY
+
+      - name: Set up Python
+        uses: actions/setup-python@v6
+        with:
+          python-version: '3.12'
+
+      - name: Install backend dependencies
+        run: pip install -r backend/requirements.txt
+
+      - name: Run backend tests
+        working-directory: backend
+        run: python -m pytest tests
+
+      - name: Commit and push fix
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add backend/app/services/permission_service.py
+          if git diff --cached --quiet; then
+            echo "No permission change required."
+            exit 0
+          fi
+          git commit -m "Restore POS integration role permissions"
+          git push origin HEAD:accounting/framework-refactor
