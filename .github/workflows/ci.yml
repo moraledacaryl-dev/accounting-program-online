@@ -9,6 +9,7 @@ on:
       - 'recovery/**'
       - 'pass-*/**'
       - 'pass-*'
+      - 'hotfix/**'
 
 permissions:
   contents: read
@@ -43,6 +44,18 @@ jobs:
 
       - name: Compile backend
         run: python -m compileall -q app tests
+
+      - name: Validate Alembic revision lengths
+        run: |
+          python - <<'PY'
+          from alembic.config import Config
+          from alembic.script import ScriptDirectory
+
+          scripts = ScriptDirectory.from_config(Config('alembic.ini'))
+          invalid = [(revision.revision, len(revision.revision)) for revision in scripts.walk_revisions() if len(revision.revision) > 32]
+          if invalid:
+              raise SystemExit(f'Alembic revision IDs exceed PostgreSQL alembic_version VARCHAR(32): {invalid}')
+          PY
 
       - name: Validate Alembic migration chain
         env:
