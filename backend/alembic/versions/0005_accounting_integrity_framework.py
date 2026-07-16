@@ -1,6 +1,6 @@
 """Accounting integrity and integration-review framework
 
-Revision ID: 0005_accounting_integrity_framework
+Revision ID: 0005_accounting_integrity
 Revises: 0004_event_workflow
 Create Date: 2026-07-17
 """
@@ -9,7 +9,7 @@ from alembic import op
 import sqlalchemy as sa
 from sqlalchemy import inspect
 
-revision = '0005_accounting_integrity_framework'
+revision = '0005_accounting_integrity'
 down_revision = '0004_event_workflow'
 branch_labels = None
 depends_on = None
