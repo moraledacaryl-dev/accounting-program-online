@@ -43,6 +43,7 @@ from app.api.system_settings import router as system_settings_router
 from app.api.integration import router as integration_router
 from app.api.integrations_beds24 import router as integrations_beds24_router
 from app.api.integrations_payroll import router as integrations_payroll_router
+from app.api.integrations_pos_review import router as integrations_pos_review_router
 from app.api.setup_imports import router as setup_imports_router
 from app.api.search import router as search_router
 from app.api.events import router as events_router
@@ -94,6 +95,7 @@ api_router.include_router(integration_router, prefix='/integration', tags=['inte
 api_router.include_router(integration_review_router, prefix='/integration-review', tags=['integration-review'])
 api_router.include_router(integrations_beds24_router, prefix='/integrations/beds24', tags=['integrations-beds24'])
 api_router.include_router(integrations_payroll_router, prefix='/integrations/payroll', tags=['integrations-payroll'])
+api_router.include_router(integrations_pos_review_router, prefix='/integrations/pos-review', tags=['integrations-pos-review'])
 api_router.include_router(setup_imports_router, prefix='/setup-imports', tags=['setup-imports'])
 api_router.include_router(search_router, prefix='/search', tags=['search'])
 api_router.include_router(events_router, prefix='/events', tags=['events'])
