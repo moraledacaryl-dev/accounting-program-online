@@ -116,6 +116,7 @@ def transfer(
     db: Session = Depends(get_db),
     _user: User = Depends(require_pos_integration_user),
 ):
+    reference = payload.get('reference_no') or _event_id('cash_transfer', payload)
     return _create_review(
         db,
         kind='cash_transfer',
@@ -123,6 +124,8 @@ def transfer(
         effect='reference_only',
         amount=_amount(payload, 'amount'),
         links={
+            'target_type': 'pos_cash_transfer',
+            'target_id': str(reference),
             'from_account_id': payload.get('from_account_id'),
             'to_account_id': payload.get('to_account_id'),
             'transaction_date': payload.get('transfer_date'),
@@ -139,21 +142,27 @@ def room_charge(
 ):
     gross = float(payload.get('gross_amount') or 0)
     effect = 'receivable' if gross >= 0 else 'reference_only'
+    links = {
+        'counterparty_name': payload.get('counterparty_name'),
+        'receivable_type': payload.get('receivable_type') or 'guest_balance',
+        'transaction_date': payload.get('transaction_date'),
+        'source_type': payload.get('source_type'),
+        'source_id': payload.get('source_id'),
+        'reverses_source_type': payload.get('reverses_source_type'),
+        'reverses_source_id': payload.get('reverses_source_id'),
+    }
+    if effect == 'reference_only':
+        links.update({
+            'target_type': 'pos_room_charge_reversal',
+            'target_id': str(payload.get('source_id') or _event_id('room_charge', payload)),
+        })
     return _create_review(
         db,
         kind='room_charge',
         payload=payload,
         effect=effect,
         amount=abs(round(gross, 2)),
-        links={
-            'counterparty_name': payload.get('counterparty_name'),
-            'receivable_type': payload.get('receivable_type') or 'guest_balance',
-            'transaction_date': payload.get('transaction_date'),
-            'source_type': payload.get('source_type'),
-            'source_id': payload.get('source_id'),
-            'reverses_source_type': payload.get('reverses_source_type'),
-            'reverses_source_id': payload.get('reverses_source_id'),
-        },
+        links=links,
     )
 
 
@@ -167,6 +176,7 @@ def order(
         float(line.get('quantity') or 0) * float(line.get('unit_price') or 0) - float(line.get('discount_amount') or 0)
         for line in payload.get('lines') or []
     )
+    order_no = str(payload.get('order_no') or payload.get('external_id') or _event_id('order_finalized', payload))
     return _create_review(
         db,
         kind='order_finalized',
@@ -174,6 +184,8 @@ def order(
         effect='reference_only',
         amount=round(max(total, 0), 2),
         links={
+            'target_type': 'pos_order',
+            'target_id': order_no,
             'order_no': payload.get('order_no'),
             'transaction_date': payload.get('order_date'),
             'payment_method': payload.get('payment_method'),
@@ -190,12 +202,18 @@ def order_void(
     db: Session = Depends(get_db),
     _user: User = Depends(require_pos_integration_user),
 ):
+    order_no = str(payload.get('order_no') or _event_id('order_voided', payload))
     return _create_review(
         db,
         kind='order_voided',
         payload=payload,
         effect='reference_only',
-        links={'order_no': payload.get('order_no'), 'reason': payload.get('reason')},
+        links={
+            'target_type': 'pos_order_void',
+            'target_id': order_no,
+            'order_no': payload.get('order_no'),
+            'reason': payload.get('reason'),
+        },
     )
 
 
@@ -205,6 +223,7 @@ def reconciliation(
     db: Session = Depends(get_db),
     _user: User = Depends(require_pos_integration_user),
 ):
+    target_id = f"{payload.get('reconciliation_date') or ''}:{payload.get('shift_name') or ''}"
     return _create_review(
         db,
         kind='register_reconciliation',
@@ -213,6 +232,8 @@ def reconciliation(
         amount=_amount(payload, 'actual_counted'),
         account_id=payload.get('financial_account_id'),
         links={
+            'target_type': 'pos_register_reconciliation',
+            'target_id': target_id,
             'transaction_date': payload.get('reconciliation_date'),
             'shift_name': payload.get('shift_name'),
             'actual_counted': payload.get('actual_counted'),
