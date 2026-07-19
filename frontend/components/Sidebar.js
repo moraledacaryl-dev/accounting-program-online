@@ -7,7 +7,6 @@ import { canAccess } from '../lib/permissions';
 import { useAppShell } from './app-shell/AppShellContext';
 import { navigationGroups } from './app-shell/navigation';
 
-
 const connectedApps = [
   { label: 'Staff & Payroll', href: process.env.NEXT_PUBLIC_STAFF_PAYROLL_APP_URL, short: 'SP' },
   { label: 'Operations', href: process.env.NEXT_PUBLIC_OPERATIONS_APP_URL, short: 'OP' },
@@ -38,7 +37,7 @@ export default function Sidebar() {
   }, []);
 
   useEffect(() => {
-    document.documentElement.style.setProperty('--sidebar-width', collapsed ? '88px' : '272px');
+    document.documentElement.style.setProperty('--sidebar-width', collapsed ? '88px' : '282px');
     window.localStorage.setItem(SIDEBAR_KEY, collapsed ? '1' : '0');
   }, [collapsed]);
 
@@ -64,8 +63,8 @@ export default function Sidebar() {
           <div className="brand-badge">HO</div>
           {!collapsed && (
             <div className="brand-copy">
-              <h2>Accounting</h2>
-              <div className="small muted-on-dark">Hotel operations & finance</div>
+              <h2>Accounting & Hotel</h2>
+              <div className="small muted-on-dark">Hidden Oasis finance system</div>
             </div>
           )}
           <button
@@ -107,6 +106,13 @@ export default function Sidebar() {
           )}
           {!loaded && <div className="sidebar-loading">Loading access…</div>}
         </nav>
+
+        {!collapsed && (
+          <div className="sidebar-status">
+            <strong><span className="sidebar-status-dot" />System status</strong>
+            Core services operational. Connected-app events remain subject to Accounting review.
+          </div>
+        )}
 
         <div className="sidebar-user">
           <div className="user-avatar">{String(user?.full_name || user?.username || 'U').slice(0, 1).toUpperCase()}</div>
