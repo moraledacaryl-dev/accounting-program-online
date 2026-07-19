@@ -1,0 +1,166 @@
+/* Pass 10: final consistency, accessibility, and responsive QA layer. */
+
+:root {
+  --qa-focus: rgba(47, 107, 87, .28);
+}
+
+*, *::before, *::after { box-sizing: border-box; }
+
+html { scroll-behavior: smooth; }
+
+body { overflow-x: hidden; }
+
+button,
+a,
+input,
+select,
+textarea { -webkit-tap-highlight-color: transparent; }
+
+button,
+.button-link,
+input,
+select,
+textarea { font: inherit; }
+
+button:focus-visible,
+a:focus-visible,
+input:focus-visible,
+select:focus-visible,
+textarea:focus-visible,
+[tabindex]:focus-visible {
+  outline: 3px solid var(--qa-focus);
+  outline-offset: 2px;
+}
+
+button:disabled,
+input:disabled,
+select:disabled,
+textarea:disabled {
+  cursor: not-allowed;
+  opacity: .58;
+}
+
+.main img,
+.main svg,
+.main canvas { max-width: 100%; }
+
+.main .section,
+.main .card,
+.main .metric-card { min-width: 0; }
+
+.main h1,
+.main h2,
+.main h3,
+.main p { overflow-wrap: anywhere; }
+
+.main .row { min-width: 0; }
+
+.main .table-wrap,
+.main .table-container {
+  width: 100%;
+  overflow-x: auto;
+  overscroll-behavior-inline: contain;
+}
+
+.main .table { width: 100%; }
+
+.main .table th,
+.main .table td { vertical-align: top; }
+
+.main .table td:last-child .row,
+.main .table td:last-child.row {
+  align-items: center;
+  gap: 6px;
+}
+
+.main input,
+.main select,
+.main textarea { max-width: 100%; }
+
+.main textarea { resize: vertical; }
+
+.main .error-text,
+.main .success-text {
+  border-radius: 10px;
+  padding: 10px 12px;
+}
+
+.main .error-text { background: #fff4f2; }
+.main .success-text { background: #eff8f2; }
+
+.main .badge { line-height: 1.2; }
+
+.main .empty-state,
+.main td.muted[colspan] {
+  text-align: center;
+  padding-block: 28px;
+}
+
+@media (max-width: 1024px) {
+  .main .grid,
+  .main .metric-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+
+  .main .form-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+}
+
+@media (max-width: 760px) {
+  .main { padding-inline: 14px; }
+
+  .main .grid,
+  .main .metric-grid,
+  .main .form-grid { grid-template-columns: minmax(0, 1fr); }
+
+  .main .section { padding: 16px; }
+
+  .main .row.wrap > button,
+  .main .row.wrap > .button-link { min-height: 42px; }
+
+  .main .table { min-width: 680px; }
+
+  .main .dense-table { min-width: 760px; }
+
+  .main .filter-bar {
+    display: grid;
+    grid-template-columns: minmax(0, 1fr);
+    gap: 9px;
+  }
+
+  .main .filter-bar > * { width: 100%; }
+
+  .main .tabs { scroll-snap-type: x proximity; }
+  .main .tabs .tab { scroll-snap-align: start; }
+}
+
+@media (max-width: 420px) {
+  .main { padding-inline: 10px; }
+  .main .section { padding: 14px; border-radius: 14px; }
+  .main h1 { font-size: clamp(1.7rem, 9vw, 2.2rem); }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  html { scroll-behavior: auto; }
+  *, *::before, *::after {
+    animation-duration: .01ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: .01ms !important;
+  }
+}
+
+@media print {
+  .sidebar,
+  .app-header,
+  .ho-drawer-layer,
+  .drawer-backdrop,
+  button,
+  .button-link { display: none !important; }
+
+  .main-shell,
+  .main { width: 100% !important; margin: 0 !important; padding: 0 !important; }
+
+  .main .section,
+  .main .card,
+  .main .metric-card {
+    box-shadow: none !important;
+    break-inside: avoid;
+  }
+}
