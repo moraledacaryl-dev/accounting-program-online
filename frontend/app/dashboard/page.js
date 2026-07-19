@@ -2,8 +2,9 @@
 
 import Link from 'next/link';
 import { useEffect, useMemo, useState } from 'react';
-import StaffActionPanel from '../../components/StaffActionPanel';
 import { getDashboard } from '../../lib/api';
+import { useAppShell } from '../../components/app-shell/AppShellContext';
+import './dashboard.css';
 
 const WORKSPACES = [
   ['/bookings', 'Hotel Operations', 'Bookings, guests, folios, rooms, rates, and Beds24 context'],
@@ -14,257 +15,293 @@ const WORKSPACES = [
   ['/system-settings', 'Setup', 'Hotel setup, accounting mappings, access, and integrations'],
 ];
 
-function formatValue(value) {
-  if (typeof value === 'number') return Number(value).toLocaleString();
-  if (value && typeof value === 'object') {
-    if (Object.prototype.hasOwnProperty.call(value, 'locked_periods')) {
-      return `${Number(value.locked_periods || 0).toLocaleString()} locked`;
-    }
-    if (
-      Object.prototype.hasOwnProperty.call(value, 'employees')
-      && Object.prototype.hasOwnProperty.call(value, 'payroll_periods_pending')
-    ) {
-      return `${Number(value.employees || 0).toLocaleString()} emp / ${Number(value.payroll_periods_pending || 0).toLocaleString()} pending`;
-    }
-    return JSON.stringify(value);
-  }
-  if (value === null || typeof value === 'undefined') return '-';
+function currency(value, decimals = 0) {
+  return `₱${Number(value || 0).toLocaleString('en-PH', { minimumFractionDigits: decimals, maximumFractionDigits: decimals })}`;
+}
+
+function plain(value) {
+  if (value === null || typeof value === 'undefined') return '—';
+  if (typeof value === 'number') return Number(value).toLocaleString('en-PH');
   return String(value);
 }
 
-function currency(value) {
-  return Number(value || 0).toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+function firstName(user) {
+  const raw = String(user?.full_name || user?.username || 'Caryl').trim();
+  return raw.split(/\s+/)[0] || 'Caryl';
 }
 
-function typeLabel(value) {
-  return String(value || '').replaceAll('_', ' ');
+function timeGreeting() {
+  const hour = new Date().getHours();
+  if (hour < 12) return 'Good morning';
+  if (hour < 18) return 'Good afternoon';
+  return 'Good evening';
 }
 
-function toRowsFromWorkflowMap(map) {
-  return Object.entries(map || {}).map(([workflow, pending]) => ({ workflow, pending }));
+function metricValue(key, summary) {
+  const map = {
+    revenue_today: currency(summary?.revenue_today),
+    outstanding_receivables: currency(summary?.outstanding_receivables || summary?.open_receivables || summary?.receivables_total),
+    occupancy_rate: `${Number(summary?.occupancy_rate || 0).toLocaleString('en-PH', { maximumFractionDigits: 1 })}%`,
+    pending_approvals: plain(summary?.pending_approvals || summary?.unposted_integrations || 0),
+  };
+  return map[key];
 }
 
-function BookingQueue({ title, rows, empty }) {
+function movementRows(commandCenter, activeTab) {
+  if (activeTab === 'departures') return commandCenter.departures || [];
+  if (activeTab === 'in_house') return commandCenter.in_house || [];
+  return commandCenter.arrivals || [];
+}
+
+function DashboardTable({ card }) {
   return (
-    <article className="card command-card">
-      <div className="row" style={{ justifyContent: 'space-between' }}>
-        <strong>{title}</strong>
-        <span className="badge">{rows.length}</span>
+    <section className="dashboard-panel">
+      <div className="dashboard-panel-head">
+        <div>
+          <h2>{card.label}</h2>
+          {!!card.description && <p>{card.description}</p>}
+        </div>
       </div>
-      <div className="stack" style={{ marginTop: 10 }}>
-        {rows.map((row) => (
-          <Link key={`${title}-${row.id}`} href={`/bookings/${row.id}`} className="command-row">
-            <span>
-              <strong>{row.room_name || 'No room'} · {row.guest_name}</strong>
-              <small>{row.check_in || '-'} to {row.check_out || '-'} · {row.channel || 'Walk-in'}</small>
-            </span>
-            <span className="command-amount">{currency(row.folio_balance || 0)}</span>
-          </Link>
-        ))}
-        {!rows.length && <p className="small muted">{empty}</p>}
+      <div className="dashboard-widget-table">
+        <table className="table dense-table">
+          <thead>
+            <tr>{(card.columns || []).map((col) => <th key={`${card.key}-${col}`}>{String(col).replaceAll('_', ' ')}</th>)}</tr>
+          </thead>
+          <tbody>
+            {(card.rows || []).map((row, idx) => (
+              <tr key={`${card.key}-${idx}`}>
+                {(card.columns || []).map((col) => <td key={`${card.key}-${idx}-${col}`}>{plain(row?.[col])}</td>)}
+              </tr>
+            ))}
+            {!(card.rows || []).length && <tr><td colSpan={(card.columns || []).length || 1} className="muted">No data yet.</td></tr>}
+          </tbody>
+        </table>
       </div>
-    </article>
-  );
-}
-
-function FolioQueue({ rows }) {
-  return (
-    <article className="card command-card">
-      <div className="row" style={{ justifyContent: 'space-between' }}>
-        <strong>Open Folio Balances</strong>
-        <Link className="button-link secondary-link" href="/room-folios">All</Link>
-      </div>
-      <div className="stack" style={{ marginTop: 10 }}>
-        {rows.map((row) => (
-          <Link key={`folio-${row.id}`} href={`/room-folios/${row.id}`} className="command-row">
-            <span>
-              <strong>{row.room_name || row.folio_no} · {row.guest_name || '-'}</strong>
-              <small>{row.booking_ref} · deposits {currency(row.deposits || 0)} · payments {currency(row.payments || 0)}</small>
-            </span>
-            <span className="command-amount">{currency(row.balance || 0)}</span>
-          </Link>
-        ))}
-        {!rows.length && <p className="small muted">No open folio balances needing attention.</p>}
-      </div>
-    </article>
-  );
-}
-
-function FolioLineReview({ title, rows }) {
-  return (
-    <article className="card command-card">
-      <strong>{title}</strong>
-      <div className="stack" style={{ marginTop: 10 }}>
-        {rows.map((row) => (
-          <Link key={`${title}-${row.id}`} href={`/room-folios/${row.folio_id}`} className="command-row">
-            <span>
-              <strong>{typeLabel(row.line_type)} · {row.room_name || row.folio_no}</strong>
-              <small>{row.description || row.reference_no || '-'} · {row.external_source || 'manual'}</small>
-            </span>
-            <span className="command-amount">{currency(row.amount || 0)}</span>
-          </Link>
-        ))}
-        {!rows.length && <p className="small muted">No recent lines to review.</p>}
-      </div>
-    </article>
+    </section>
   );
 }
 
 export default function DashboardPage() {
+  const { user } = useAppShell();
   const [summary, setSummary] = useState(null);
   const [error, setError] = useState('');
+  const [activeTab, setActiveTab] = useState('arrivals');
 
   useEffect(() => {
-    getDashboard()
-      .then((data) => setSummary(data))
-      .catch((err) => setError(err.message || 'Failed to load dashboard.'));
+    getDashboard().then(setSummary).catch((err) => setError(err.message || 'Failed to load dashboard.'));
   }, []);
 
   const widgetCards = useMemo(() => {
     const incoming = Array.isArray(summary?.dashboard_widget_cards) ? summary.dashboard_widget_cards : [];
-    if (incoming.length) return incoming;
-
-    if (!summary) return [];
-    return [
-      { key: 'arrivals_today', type: 'metric', label: 'Arrivals Today', value: summary.arrivals_today },
-      { key: 'departures_today', type: 'metric', label: 'Departures Today', value: summary.departures_today },
-      { key: 'in_house_guests', type: 'metric', label: 'In-house Guests', value: summary.in_house_guests || summary.bookings_checked_in },
-      { key: 'occupancy_rate', type: 'metric', label: 'Occupancy', value: summary.occupancy_rate },
-      { key: 'revenue_today', type: 'metric', label: 'Revenue Today', value: summary.revenue_today },
-      { key: 'cash_in_today', type: 'metric', label: 'Cash In Today', value: summary.cash_in_today },
-      { key: 'cash_out_today', type: 'metric', label: 'Cash Out Today', value: summary.cash_out_today },
-      { key: 'pending_approvals', type: 'metric', label: 'Pending Approvals', value: summary.pending_approvals },
-      { key: 'low_stock_count', type: 'metric', label: 'Low Stock Alerts', value: summary.low_stock_count },
-      {
-        key: 'pending_by_workflow',
-        type: 'table',
-        label: 'Pending by Workflow',
-        columns: ['workflow', 'pending'],
-        rows: toRowsFromWorkflowMap(summary.pending_by_workflow),
-      },
-      {
-        key: 'top_channels',
-        type: 'table',
-        label: 'Top Channels',
-        columns: ['channel', 'booking_count', 'revenue'],
-        rows: summary.top_channels || [],
-      },
-      {
-        key: 'low_stock_items',
-        type: 'table',
-        label: 'Low Stock Items',
-        columns: ['name', 'quantity_on_hand', 'reorder_level', 'unit'],
-        rows: summary.low_stock_items || [],
-      },
-    ];
+    return incoming;
   }, [summary]);
 
-  const metricCards = widgetCards.filter((card) => card.type === 'metric');
   const tableCards = widgetCards.filter((card) => card.type === 'table');
   const commandCenter = summary?.command_center || {};
+  const rows = movementRows(commandCenter, activeTab);
+  const beds24 = commandCenter.beds24_sync || {};
+
+  const primaryMetrics = [
+    {
+      key: 'revenue_today',
+      label: 'Today’s recognized revenue',
+      note: summary?.cash_in_today ? `${currency(summary.cash_in_today)} cash received today` : 'Based on posted hotel and accounting activity',
+    },
+    {
+      key: 'outstanding_receivables',
+      label: 'Outstanding receivables',
+      note: summary?.open_folio_balance ? `${currency(summary.open_folio_balance)} in open folios` : 'Guest, event, company, and channel balances',
+    },
+    {
+      key: 'occupancy_rate',
+      label: 'Occupancy tonight',
+      note: `${plain(summary?.in_house_guests || summary?.bookings_checked_in || 0)} in-house guests`,
+    },
+    {
+      key: 'pending_approvals',
+      label: 'Unposted integrations',
+      note: `${plain(summary?.pending_approvals || 0)} items requiring review`,
+    },
+  ];
+
+  const actions = [
+    {
+      href: '/approvals',
+      title: 'Connected-app items ready for review',
+      note: `${plain(summary?.pending_approvals || 0)} pending approvals and posting decisions`,
+      tone: Number(summary?.pending_approvals || 0) > 0 ? 'warn' : 'ok',
+      label: Number(summary?.pending_approvals || 0) > 0 ? 'Review' : 'Clear',
+    },
+    {
+      href: '/room-folios',
+      title: 'Open folio balances',
+      note: `${plain((commandCenter.open_folio_alerts || []).length)} folios currently surfaced by the command center`,
+      tone: (commandCenter.open_folio_alerts || []).length ? 'warn' : 'ok',
+      label: (commandCenter.open_folio_alerts || []).length ? 'Due' : 'Clear',
+    },
+    {
+      href: '/channel-payouts',
+      title: 'Channel settlement review',
+      note: 'Validate expected OTA payouts, fees, and receiving-account matches',
+      tone: 'info',
+      label: 'Open',
+    },
+    {
+      href: '/journals',
+      title: 'Journal and close controls',
+      note: 'Review drafts, source-linked journals, and locked-period exceptions',
+      tone: 'info',
+      label: 'Open',
+    },
+  ];
+
+  const integrations = [
+    {
+      name: 'Inventory & Procurement',
+      status: summary?.low_stock_count > 0 ? 'Review' : 'Connected',
+      tone: summary?.low_stock_count > 0 ? 'warn' : 'ok',
+      text: `${plain(summary?.low_stock_count || 0)} low-stock alerts. Purchase and receiving records remain authoritative in Inventory.`,
+      href: '/workspace/inventory',
+    },
+    {
+      name: 'Staff & Payroll',
+      status: summary?.people_payroll?.payroll_periods_pending ? 'Review' : 'Connected',
+      tone: summary?.people_payroll?.payroll_periods_pending ? 'warn' : 'ok',
+      text: `${plain(summary?.people_payroll?.payroll_periods_pending || 0)} payroll periods pending. Accounting receives approved financial packages only.`,
+      href: '/workspace/payroll',
+    },
+    {
+      name: 'POS Cloud',
+      status: 'Connected',
+      tone: 'ok',
+      text: `${plain((commandCenter.room_charge_review || []).length)} recent room-charge lines available for folio and settlement review.`,
+      href: '/workspace/restaurant',
+    },
+    {
+      name: 'Beds24',
+      status: beds24.status || 'Connected',
+      tone: String(beds24.status || '').toLowerCase().includes('fail') ? 'danger' : 'ok',
+      text: beds24.event_type ? `Latest event: ${String(beds24.event_type).replaceAll('_', ' ')}.` : 'Booking, room, and folio context synchronized with Accounting.',
+      href: '/integrations/beds24',
+    },
+  ];
 
   return (
-    <div className="stack">
-      <section className="section">
-        <h1>Dashboard</h1>
-        <p className="muted">Start with the work staff actually need, then review operations and accounting from the widgets below.</p>
-        {!!summary?.dashboard_role && <p className="small muted">Current layout: {summary.dashboard_role.replaceAll('_', ' ')}</p>}
-        {!!error && <p className="error-text">{error}</p>}
-      </section>
-
-      <StaffActionPanel title="Common Work" />
-
-      {!!summary && (
-        <section className="section">
-          <div className="row wrap" style={{ justifyContent: 'space-between', alignItems: 'flex-end' }}>
-            <div>
-              <h2>Today&apos;s Command Center</h2>
-              <p className="muted">Front desk money, stay movement, Beds24 sync, and cafe room-charge review in one place.</p>
-            </div>
-            {!!commandCenter.beds24_sync && (
-              <span className="badge">
-                Beds24 {commandCenter.beds24_sync.status}: {commandCenter.beds24_sync.event_type}
-              </span>
-            )}
-          </div>
-          <div className="card-grid command-grid" style={{ marginTop: 12 }}>
-            <BookingQueue title="Arrivals" rows={commandCenter.arrivals || []} empty="No arrivals loaded for today." />
-            <BookingQueue title="In-house" rows={commandCenter.in_house || []} empty="No in-house stays loaded." />
-            <BookingQueue title="Departures" rows={commandCenter.departures || []} empty="No departures loaded for today." />
-            <FolioQueue rows={commandCenter.open_folio_alerts || []} />
-            <FolioLineReview title="Deposits & Payments" rows={commandCenter.payment_review || []} />
-            <FolioLineReview title="Charges & Room Service" rows={commandCenter.room_charge_review || []} />
-          </div>
-        </section>
-      )}
-
-      {!!summary && (
-        <section className="section">
-          <h2>Snapshot</h2>
-          <div className="card-grid" style={{ marginTop: 10 }}>
-            {metricCards.map((card) => (
-              <div key={card.key} className="card">
-                <div className="muted">{card.label}</div>
-                <div className="kpi">{formatValue(card.value)}</div>
-                {!!card.description && <div className="small muted" style={{ marginTop: 6 }}>{card.description}</div>}
-              </div>
-            ))}
-            {!metricCards.length && <div className="card muted">No widget cards enabled for this dashboard.</div>}
-          </div>
-        </section>
-      )}
-
-      {!!tableCards.length && (
-        <section className="section">
-          <h2>Detailed Widgets</h2>
-          <div className="grid">
-            {tableCards.map((card) => (
-              <div key={card.key} className="card" style={{ padding: 0, overflow: 'hidden' }}>
-                <div style={{ padding: '12px 14px', borderBottom: '1px solid var(--line)' }}>
-                  <strong>{card.label}</strong>
-                  {!!card.description && <div className="small muted" style={{ marginTop: 4 }}>{card.description}</div>}
-                </div>
-                <div style={{ padding: '0 10px 10px' }}>
-                  <table className="table dense-table">
-                    <thead>
-                      <tr>
-                        {(card.columns || []).map((col) => <th key={`${card.key}-${col}`}>{String(col).replaceAll('_', ' ')}</th>)}
-                      </tr>
-                    </thead>
-                    <tbody>
-                      {(card.rows || []).map((row, idx) => (
-                        <tr key={`${card.key}-${idx}`}>
-                          {(card.columns || []).map((col) => <td key={`${card.key}-${idx}-${col}`}>{formatValue(row?.[col])}</td>)}
-                        </tr>
-                      ))}
-                      {!(card.rows || []).length && (
-                        <tr>
-                          <td colSpan={(card.columns || []).length || 1} className="muted">No data yet.</td>
-                        </tr>
-                      )}
-                    </tbody>
-                  </table>
-                </div>
-              </div>
-            ))}
-          </div>
-        </section>
-      )}
-
-      <section className="section">
-        <h2>Workspaces</h2>
-        <div className="card-grid" style={{ marginTop: 10 }}>
-          {WORKSPACES.map(([href, label, note]) => (
-            <Link key={href} href={href} className="card card-link">
-              <div className="row" style={{ justifyContent: 'space-between' }}>
-                <strong>{label}</strong>
-                <span>→</span>
-              </div>
-              <div className="small muted">{note}</div>
-            </Link>
-          ))}
+    <div className="dashboard-page">
+      <section className="dashboard-hero">
+        <div>
+          <div className="dashboard-eyebrow">Unified hospitality finance</div>
+          <h1>{timeGreeting()}, {firstName(user)}</h1>
+          <p>Financial control, hotel movement, receivables, and connected-app posting in one focused workspace.</p>
+          {!!summary?.dashboard_role && <div className="small muted" style={{ marginTop: 8 }}>Current layout: {String(summary.dashboard_role).replaceAll('_', ' ')}</div>}
+          {!!error && <div className="notice danger" style={{ marginTop: 12 }}>{error}</div>}
+        </div>
+        <div className="dashboard-actions">
+          <Link href="/integrations/beds24" className="button-link secondary-link">Beds24 sync</Link>
+          <Link href="/cashflow" className="button-link primary-link">Receive payment</Link>
+          <Link href="/system-settings" className="button-link secondary-link">Customize dashboard</Link>
         </div>
       </section>
+
+      {!summary && !error && <div className="dashboard-panel dashboard-loading">Loading the hospitality command center…</div>}
+
+      {!!summary && (
+        <>
+          <section className="dashboard-metrics" aria-label="Key performance indicators">
+            {primaryMetrics.map((metric) => (
+              <article className="dashboard-metric" key={metric.key}>
+                <div className="dashboard-metric-label">{metric.label}</div>
+                <div className="dashboard-metric-value">{metricValue(metric.key, summary)}</div>
+                <div className="dashboard-metric-note">{metric.note}</div>
+              </article>
+            ))}
+          </section>
+
+          <section className="dashboard-main-grid">
+            <article className="dashboard-panel">
+              <div className="dashboard-panel-head">
+                <div>
+                  <h2>Today’s hotel movement</h2>
+                  <p>Arrivals, departures, in-house stays, rooms, channels, and balances from the live booking workflow.</p>
+                </div>
+                <Link href="/bookings" className="button-link secondary-link">Open calendar</Link>
+              </div>
+              <div className="movement-tabs" role="tablist" aria-label="Hotel movement">
+                {[
+                  ['arrivals', 'Arrivals', commandCenter.arrivals || []],
+                  ['departures', 'Departures', commandCenter.departures || []],
+                  ['in_house', 'In-house', commandCenter.in_house || []],
+                ].map(([key, label, items]) => (
+                  <button key={key} type="button" className={activeTab === key ? 'movement-tab active' : 'movement-tab'} onClick={() => setActiveTab(key)}>
+                    {label} <span className="badge">{items.length}</span>
+                  </button>
+                ))}
+              </div>
+              <div className="movement-list">
+                {rows.slice(0, 8).map((row) => (
+                  <Link href={`/bookings/${row.id}`} className="movement-row" key={`${activeTab}-${row.id}`}>
+                    <span><strong>{row.guest_name || 'Guest not set'}</strong><small>{row.booking_ref || row.reference_no || `Booking #${row.id}`}</small></span>
+                    <span><strong>{row.room_name || 'Room pending'}</strong><small>{row.check_in || '—'} to {row.check_out || '—'}</small></span>
+                    <span><strong>{row.channel || 'Direct'}</strong><small>{String(row.status || activeTab).replaceAll('_', ' ')}</small></span>
+                    <span className="movement-amount">{currency(row.folio_balance || 0)}<small>balance</small></span>
+                  </Link>
+                ))}
+                {!rows.length && <div className="empty-state"><strong>No {activeTab.replaceAll('_', '-')} records today</strong><span>The live command-center feed has no items in this view.</span></div>}
+              </div>
+            </article>
+
+            <aside className="dashboard-panel">
+              <div className="dashboard-panel-head">
+                <div><h2>Action center</h2><p>Accounting, commercial, and posting exceptions only.</p></div>
+              </div>
+              <div className="action-list">
+                {actions.map((action) => (
+                  <Link href={action.href} className="action-item" key={action.href}>
+                    <span><strong>{action.title}</strong><small>{action.note}</small></span>
+                    <span className={`badge ${action.tone}`}>{action.label}</span>
+                  </Link>
+                ))}
+              </div>
+            </aside>
+          </section>
+
+          <section className="dashboard-panel">
+            <div className="dashboard-panel-head">
+              <div>
+                <h2>Connected applications</h2>
+                <p>Operational systems remain authoritative. Accounting receives financial events, balances, and source references.</p>
+              </div>
+              <Link href="/approvals" className="button-link secondary-link">Open Review Inbox</Link>
+            </div>
+            <div className="dashboard-integrations">
+              {integrations.map((item) => (
+                <article className="integration-card" key={item.name}>
+                  <div className="integration-card-head"><strong>{item.name}</strong><span className={`badge ${item.tone}`}>{item.status}</span></div>
+                  <p>{item.text}</p>
+                  <Link href={item.href} className="button-link secondary-link">Open workspace</Link>
+                </article>
+              ))}
+            </div>
+          </section>
+
+          {!!tableCards.length && (
+            <section className="dashboard-secondary-grid">
+              {tableCards.slice(0, 4).map((card) => <DashboardTable key={card.key} card={card} />)}
+            </section>
+          )}
+
+          <section className="dashboard-panel">
+            <div className="dashboard-panel-head"><div><h2>Workspaces</h2><p>Continue into the full operational and accounting modules.</p></div></div>
+            <div className="dashboard-workspaces">
+              {WORKSPACES.map(([href, label, note]) => (
+                <Link key={href} href={href} className="workspace-link">
+                  <span><strong>{label}</strong><small>{note}</small></span><span>→</span>
+                </Link>
+              ))}
+            </div>
+          </section>
+        </>
+      )}
     </div>
   );
 }
