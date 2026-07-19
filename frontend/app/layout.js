@@ -6,6 +6,7 @@ import './drawers.css';
 import './hotel-operations.css';
 import './finance-treasury.css';
 import './review-inbox.css';
+import './admin-settings.css';
 import Sidebar from '../components/Sidebar';
 import Header from '../components/Header';
 import RouteGuard from '../components/RouteGuard';
