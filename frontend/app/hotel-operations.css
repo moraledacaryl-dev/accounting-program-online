@@ -1,0 +1,267 @@
+/* Pass 6: hospitality-specific treatment for bookings, guests, folios, events, and stay operations. */
+
+.main:has(a[href="/bookings/calendar"]),
+.main:has(a[href="/room-folios"]),
+.main:has(a[href="/guests"]),
+.main:has(a[href="/events"]) {
+  --hotel-ink: #17352f;
+  --hotel-accent: #2f6b57;
+  --hotel-accent-soft: #e8f2ed;
+  --hotel-gold: #c99545;
+  --hotel-gold-soft: #f5ead8;
+}
+
+.main:has(a[href="/bookings/calendar"]) > .stack > .section:first-child,
+.main:has(a[href="/room-folios"]) > .stack > .section:first-child,
+.main:has(a[href="/guests"]) > .stack > .section:first-child,
+.main:has(a[href="/events"]) > .stack > .section:first-child {
+  position: relative;
+  overflow: hidden;
+  border: 0;
+  color: #fff;
+  background:
+    radial-gradient(circle at 88% 18%, rgba(201, 149, 69, .23), transparent 26%),
+    linear-gradient(135deg, #132c27 0%, #1b4439 58%, #2f6b57 100%);
+  box-shadow: 0 22px 48px rgba(19, 44, 39, .17);
+}
+
+.main:has(a[href="/bookings/calendar"]) > .stack > .section:first-child::after,
+.main:has(a[href="/room-folios"]) > .stack > .section:first-child::after,
+.main:has(a[href="/guests"]) > .stack > .section:first-child::after,
+.main:has(a[href="/events"]) > .stack > .section:first-child::after {
+  content: '';
+  position: absolute;
+  inset: auto -40px -80px auto;
+  width: 220px;
+  height: 220px;
+  border: 1px solid rgba(255, 255, 255, .12);
+  border-radius: 50%;
+  pointer-events: none;
+}
+
+.main:has(a[href="/bookings/calendar"]) > .stack > .section:first-child h1,
+.main:has(a[href="/room-folios"]) > .stack > .section:first-child h1,
+.main:has(a[href="/guests"]) > .stack > .section:first-child h1,
+.main:has(a[href="/events"]) > .stack > .section:first-child h1 {
+  font-size: clamp(2rem, 3vw, 3.15rem);
+  color: #fff;
+}
+
+.main:has(a[href="/bookings/calendar"]) > .stack > .section:first-child .muted,
+.main:has(a[href="/room-folios"]) > .stack > .section:first-child .muted,
+.main:has(a[href="/guests"]) > .stack > .section:first-child .muted,
+.main:has(a[href="/events"]) > .stack > .section:first-child .muted {
+  color: rgba(255, 255, 255, .76);
+  max-width: 760px;
+  line-height: 1.65;
+}
+
+.main:has(a[href="/bookings/calendar"]) > .stack > .section:first-child .button-link,
+.main:has(a[href="/room-folios"]) > .stack > .section:first-child .button-link,
+.main:has(a[href="/guests"]) > .stack > .section:first-child .button-link,
+.main:has(a[href="/events"]) > .stack > .section:first-child .button-link {
+  border-color: rgba(255, 255, 255, .2);
+  color: #fff;
+  background: rgba(255, 255, 255, .1);
+  backdrop-filter: blur(10px);
+}
+
+.main:has(a[href="/bookings/calendar"]) > .stack > .section:first-child .button-link:hover,
+.main:has(a[href="/room-folios"]) > .stack > .section:first-child .button-link:hover,
+.main:has(a[href="/guests"]) > .stack > .section:first-child .button-link:hover,
+.main:has(a[href="/events"]) > .stack > .section:first-child .button-link:hover {
+  background: rgba(255, 255, 255, .18);
+  border-color: rgba(255, 255, 255, .36);
+}
+
+/* Operational data tables become lighter, more scannable stay-management surfaces. */
+.main:has(a[href="/bookings/calendar"]) .table,
+.main:has(a[href="/room-folios"]) .table,
+.main:has(a[href="/guests"]) .table,
+.main:has(a[href="/events"]) .table {
+  border-collapse: separate;
+  border-spacing: 0;
+}
+
+.main:has(a[href="/bookings/calendar"]) .table thead th,
+.main:has(a[href="/room-folios"]) .table thead th,
+.main:has(a[href="/guests"]) .table thead th,
+.main:has(a[href="/events"]) .table thead th {
+  background: #f5f7f4;
+  color: #68716b;
+  font-size: 10px;
+  letter-spacing: .09em;
+  text-transform: uppercase;
+  border-bottom-color: #dfe5e0;
+}
+
+.main:has(a[href="/bookings/calendar"]) .table tbody tr,
+.main:has(a[href="/room-folios"]) .table tbody tr,
+.main:has(a[href="/guests"]) .table tbody tr,
+.main:has(a[href="/events"]) .table tbody tr {
+  transition: background-color .16s ease, box-shadow .16s ease;
+}
+
+.main:has(a[href="/bookings/calendar"]) .table tbody tr:hover,
+.main:has(a[href="/room-folios"]) .table tbody tr:hover,
+.main:has(a[href="/guests"]) .table tbody tr:hover,
+.main:has(a[href="/events"]) .table tbody tr:hover {
+  background: #f8fbf9;
+  box-shadow: inset 3px 0 0 var(--hotel-accent);
+}
+
+.main:has(a[href="/bookings/calendar"]) .table td:first-child,
+.main:has(a[href="/room-folios"]) .table td:first-child,
+.main:has(a[href="/guests"]) .table td:first-child,
+.main:has(a[href="/events"]) .table td:first-child {
+  color: var(--hotel-ink);
+  font-weight: 650;
+}
+
+/* Booking and folio status language. */
+.main .badge,
+.main .ho-badge {
+  white-space: nowrap;
+}
+
+.main:has(a[href="/bookings/calendar"]) td:nth-child(6),
+.main:has(a[href="/room-folios"]) td:nth-child(5) {
+  font-weight: 620;
+  color: var(--hotel-accent);
+}
+
+.main:has(a[href="/bookings/calendar"]) .ops-alert-list,
+.main:has(a[href="/room-folios"]) .ops-alert-list,
+.main:has(a[href="/guests"]) .ops-alert-list,
+.main:has(a[href="/events"]) .ops-alert-list {
+  border: 1px solid #dce8e1;
+  border-left: 4px solid var(--hotel-accent);
+  border-radius: 14px;
+  padding: 16px;
+  background: linear-gradient(135deg, #f8fcfa, #fff);
+}
+
+/* Reservation forms read as a guided workflow instead of a dense admin form. */
+.main:has(a[href="/bookings/calendar"]) form .form-grid,
+.main:has(a[href="/room-folios"]) form .form-grid,
+.main:has(a[href="/guests"]) form .form-grid,
+.main:has(a[href="/events"]) form .form-grid {
+  gap: 14px 16px;
+}
+
+.main:has(a[href="/bookings/calendar"]) form label,
+.main:has(a[href="/room-folios"]) form label,
+.main:has(a[href="/guests"]) form label,
+.main:has(a[href="/events"]) form label {
+  color: #465049;
+  font-size: 12px;
+  font-weight: 650;
+}
+
+.main:has(a[href="/bookings/calendar"]) form input,
+.main:has(a[href="/bookings/calendar"]) form select,
+.main:has(a[href="/bookings/calendar"]) form textarea,
+.main:has(a[href="/room-folios"]) form input,
+.main:has(a[href="/room-folios"]) form select,
+.main:has(a[href="/room-folios"]) form textarea,
+.main:has(a[href="/guests"]) form input,
+.main:has(a[href="/guests"]) form select,
+.main:has(a[href="/guests"]) form textarea,
+.main:has(a[href="/events"]) form input,
+.main:has(a[href="/events"]) form select,
+.main:has(a[href="/events"]) form textarea {
+  background: #fcfdfc;
+  border-color: #dce2dd;
+}
+
+.main:has(a[href="/bookings/calendar"]) form input:focus,
+.main:has(a[href="/bookings/calendar"]) form select:focus,
+.main:has(a[href="/bookings/calendar"]) form textarea:focus,
+.main:has(a[href="/room-folios"]) form input:focus,
+.main:has(a[href="/room-folios"]) form select:focus,
+.main:has(a[href="/room-folios"]) form textarea:focus,
+.main:has(a[href="/guests"]) form input:focus,
+.main:has(a[href="/guests"]) form select:focus,
+.main:has(a[href="/guests"]) form textarea:focus,
+.main:has(a[href="/events"]) form input:focus,
+.main:has(a[href="/events"]) form select:focus,
+.main:has(a[href="/events"]) form textarea:focus {
+  border-color: #77a18f;
+  box-shadow: 0 0 0 3px rgba(47, 107, 87, .12);
+}
+
+/* Existing calendar and room-status components. */
+.calendar-grid,
+.booking-calendar,
+.room-calendar {
+  border: 1px solid #dde4df;
+  border-radius: 16px;
+  overflow: hidden;
+  background: #fff;
+  box-shadow: 0 12px 28px rgba(19, 44, 39, .06);
+}
+
+.calendar-day,
+.calendar-cell,
+.room-calendar-cell {
+  min-height: 104px;
+  background: #fff;
+  border-color: #e7ebe8;
+}
+
+.calendar-day:hover,
+.calendar-cell:hover,
+.room-calendar-cell:hover {
+  background: #f7faf8;
+}
+
+.booking-chip,
+.calendar-booking,
+.stay-chip {
+  border-radius: 8px;
+  border: 1px solid #cfe0d7;
+  background: var(--hotel-accent-soft);
+  color: var(--hotel-ink);
+  font-weight: 620;
+}
+
+/* Folio totals and event commercial summaries. */
+.folio-summary,
+.event-summary,
+.booking-summary {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(180px, 1fr));
+  gap: 12px;
+}
+
+.folio-summary > *,
+.event-summary > *,
+.booking-summary > * {
+  border: 1px solid #e1e6e2;
+  border-radius: 14px;
+  padding: 14px;
+  background: linear-gradient(180deg, #fff, #fafbf9);
+}
+
+@media (max-width: 760px) {
+  .main:has(a[href="/bookings/calendar"]) > .stack > .section:first-child .row,
+  .main:has(a[href="/room-folios"]) > .stack > .section:first-child .row,
+  .main:has(a[href="/guests"]) > .stack > .section:first-child .row,
+  .main:has(a[href="/events"]) > .stack > .section:first-child .row {
+    align-items: flex-start !important;
+  }
+
+  .main:has(a[href="/bookings/calendar"]) > .stack > .section:first-child .button-link,
+  .main:has(a[href="/room-folios"]) > .stack > .section:first-child .button-link,
+  .main:has(a[href="/guests"]) > .stack > .section:first-child .button-link,
+  .main:has(a[href="/events"]) > .stack > .section:first-child .button-link {
+    flex: 1 1 100%;
+    justify-content: center;
+  }
+
+  .calendar-day,
+  .calendar-cell,
+  .room-calendar-cell {
+    min-height: 78px;
+  }
+}
