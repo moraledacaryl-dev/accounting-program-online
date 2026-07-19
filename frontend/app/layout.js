@@ -1,6 +1,7 @@
 import './globals.css';
 import './design-system.css';
 import './app-shell.css';
+import './page-hierarchy.css';
 import Sidebar from '../components/Sidebar';
 import Header from '../components/Header';
 import RouteGuard from '../components/RouteGuard';
