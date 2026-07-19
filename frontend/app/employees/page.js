@@ -1,6 +1,8 @@
 'use client';
-import LegacyExternalModuleNotice from '../../components/LegacyExternalModuleNotice';
+
 import { useEffect, useState } from 'react';
+import LegacyExternalModuleNotice from '../../components/LegacyExternalModuleNotice';
+import Drawer from '../../components/ui/Drawer';
 import { useConfirmAction } from '../../components/ConfirmActionProvider';
 import {
   createAttendance,
@@ -12,38 +14,35 @@ import {
   updateEmployee,
 } from '../../lib/api';
 
+const EMPTY_EMPLOYEE = {
+  full_name: '', department: '', job_title: '', compensation_type: 'Monthly', rate: '', daily_rate: '', hourly_rate: '',
+};
+const EMPTY_ATTENDANCE = {
+  employee_id: '', work_date: '', time_in: '08:00', time_out: '17:00', overtime_hours: '0', night_diff_hours: '0', day_type: 'regular_day',
+};
+
 export default function EmployeesPage() {
   const confirmAction = useConfirmAction();
   const [employees, setEmployees] = useState([]);
   const [attendance, setAttendance] = useState([]);
-  const [form, setForm] = useState({
-    full_name: '',
-    department: '',
-    job_title: '',
-    compensation_type: 'Monthly',
-    rate: '',
-    daily_rate: '',
-    hourly_rate: '',
-  });
-  const [attForm, setAttForm] = useState({
-    employee_id: '',
-    work_date: '',
-    time_in: '08:00',
-    time_out: '17:00',
-    overtime_hours: '0',
-    night_diff_hours: '0',
-    day_type: 'regular_day',
-  });
+  const [form, setForm] = useState(EMPTY_EMPLOYEE);
+  const [attForm, setAttForm] = useState(EMPTY_ATTENDANCE);
   const [editingId, setEditingId] = useState(null);
+  const [employeeDrawerOpen, setEmployeeDrawerOpen] = useState(false);
+  const [attendanceDrawerOpen, setAttendanceDrawerOpen] = useState(false);
 
   async function load() {
     setEmployees(await fetchEmployees());
     setAttendance(await fetchAttendance());
   }
 
-  useEffect(() => {
-    load().catch(console.error);
-  }, []);
+  useEffect(() => { load().catch(console.error); }, []);
+
+  function closeEmployeeDrawer() {
+    setEmployeeDrawerOpen(false);
+    setEditingId(null);
+    setForm(EMPTY_EMPLOYEE);
+  }
 
   async function saveEmployee(e) {
     e.preventDefault();
@@ -55,16 +54,7 @@ export default function EmployeesPage() {
     };
     if (editingId) await updateEmployee(editingId, payload);
     else await createEmployee(payload);
-    setEditingId(null);
-    setForm({
-      full_name: '',
-      department: '',
-      job_title: '',
-      compensation_type: 'Monthly',
-      rate: '',
-      daily_rate: '',
-      hourly_rate: '',
-    });
+    closeEmployeeDrawer();
     await load();
   }
 
@@ -76,103 +66,123 @@ export default function EmployeesPage() {
       overtime_hours: Number(attForm.overtime_hours || 0),
       night_diff_hours: Number(attForm.night_diff_hours || 0),
     });
-    setAttForm({
-      employee_id: '',
-      work_date: '',
-      time_in: '08:00',
-      time_out: '17:00',
-      overtime_hours: '0',
-      night_diff_hours: '0',
-      day_type: 'regular_day',
-    });
+    setAttForm(EMPTY_ATTENDANCE);
+    setAttendanceDrawerOpen(false);
     await load();
+  }
+
+  function startEdit(employee) {
+    setEditingId(employee.id);
+    setForm({
+      full_name: employee.full_name,
+      department: employee.department || '',
+      job_title: employee.job_title || '',
+      compensation_type: employee.compensation_type || 'Monthly',
+      rate: employee.rate || '',
+      daily_rate: employee.daily_rate || '',
+      hourly_rate: employee.hourly_rate || '',
+    });
+    setEmployeeDrawerOpen(true);
   }
 
   return (
     <div>
       <LegacyExternalModuleNotice appName="Staff & Payroll" />
-      <div>
+
       <section className="section">
         <h1>Employees & Attendance</h1>
-        <p className="muted">Manage employee profiles and daily attendance in one place.</p>
-      </section>
-
-      <div className="grid">
-        <section className="section">
-          <h2>{editingId ? 'Edit Employee' : 'Add Employee'}</h2>
-          <form onSubmit={saveEmployee}>
-            <div className="form-grid">
-              <label>Name<input required value={form.full_name} onChange={e => setForm(f => ({ ...f, full_name: e.target.value }))} /></label>
-              <label>Department<input value={form.department} onChange={e => setForm(f => ({ ...f, department: e.target.value }))} /></label>
-              <label>Job Title<input value={form.job_title} onChange={e => setForm(f => ({ ...f, job_title: e.target.value }))} /></label>
-              <label>Comp Type<select value={form.compensation_type} onChange={e => setForm(f => ({ ...f, compensation_type: e.target.value }))}><option>Monthly</option><option>Daily</option><option>Hourly</option></select></label>
-              <label>Monthly / Rate<input type="number" step="0.01" inputMode="decimal" min="0" value={form.rate} onChange={e => setForm(f => ({ ...f, rate: e.target.value }))} /></label>
-              <label>Daily Rate<input type="number" step="0.01" inputMode="decimal" min="0" value={form.daily_rate} onChange={e => setForm(f => ({ ...f, daily_rate: e.target.value }))} /></label>
-              <label>Hourly Rate<input type="number" step="0.01" inputMode="decimal" min="0" value={form.hourly_rate} onChange={e => setForm(f => ({ ...f, hourly_rate: e.target.value }))} /></label>
-            </div>
-            <div className="row wrap">
-              <button type="submit">{editingId ? 'Update' : 'Save'}</button>
-              {editingId && <button type="button" className="secondary" onClick={() => { setEditingId(null); setForm({ full_name: '', department: '', job_title: '', compensation_type: 'Monthly', rate: '', daily_rate: '', hourly_rate: '' }); }}>Cancel</button>}
-            </div>
-          </form>
-        </section>
-
-        <section className="section">
-          <h2>Add Attendance</h2>
-          <form onSubmit={saveAttendance}>
-            <div className="form-grid">
-              <label>Employee<select required value={attForm.employee_id} onChange={e => setAttForm(f => ({ ...f, employee_id: e.target.value }))}><option value="">Select</option>{employees.map(e => <option key={e.id} value={e.id}>{e.full_name}</option>)}</select></label>
-              <label>Date<input required type="date" value={attForm.work_date} onChange={e => setAttForm(f => ({ ...f, work_date: e.target.value }))} /></label>
-              <label>Time In<input type="time" value={attForm.time_in} onChange={e => setAttForm(f => ({ ...f, time_in: e.target.value }))} /></label>
-              <label>Time Out<input type="time" value={attForm.time_out} onChange={e => setAttForm(f => ({ ...f, time_out: e.target.value }))} /></label>
-              <label>OT Hours<input type="number" step="0.01" inputMode="decimal" min="0" value={attForm.overtime_hours} onChange={e => setAttForm(f => ({ ...f, overtime_hours: e.target.value }))} /></label>
-              <label>ND Hours<input type="number" step="0.01" inputMode="decimal" min="0" value={attForm.night_diff_hours} onChange={e => setAttForm(f => ({ ...f, night_diff_hours: e.target.value }))} /></label>
-              <label>Day Type<select value={attForm.day_type} onChange={e => setAttForm(f => ({ ...f, day_type: e.target.value }))}><option value="regular_day">regular_day</option><option value="rest_day">rest_day</option><option value="holiday">holiday</option></select></label>
-            </div>
-            <button type="submit">Save Attendance</button>
-          </form>
-        </section>
-      </div>
-
-      <section className="section">
-        <h2>Employees</h2>
-        <table className="table">
-          <thead><tr><th>Name</th><th>Department</th><th>Rate</th><th></th></tr></thead>
-          <tbody>
-            {employees.map(e => (
-              <tr key={e.id}>
-                <td>{e.full_name}</td>
-                <td>{e.department}</td>
-                <td>{e.rate}</td>
-                <td className="row wrap">
-                  <button className="secondary" onClick={() => { setEditingId(e.id); setForm({ full_name: e.full_name, department: e.department || '', job_title: e.job_title || '', compensation_type: e.compensation_type || 'Monthly', rate: e.rate || '', daily_rate: e.daily_rate || '', hourly_rate: e.hourly_rate || '' }); }}>Edit</button>
-                  <button className="secondary" onClick={async () => { if (await confirmAction({ title: `Delete employee ${e.full_name}?`, description: 'Employee history may be needed for payroll review. Remove only profiles entered in error.' })) { await deleteEmployee(e.id); await load(); } }}>Delete</button>
-                </td>
-              </tr>
-            ))}
-          </tbody>
-        </table>
+        <p className="muted">Manage employee profiles and daily attendance without crowding the workspace.</p>
+        <div className="ho-quick-actions">
+          <button type="button" onClick={() => setEmployeeDrawerOpen(true)}>Add Employee</button>
+          <button type="button" className="secondary" onClick={() => setAttendanceDrawerOpen(true)}>Record Attendance</button>
+        </div>
       </section>
 
       <section className="section">
-        <h2>Recent Attendance</h2>
-        <table className="table">
-          <thead><tr><th>Date</th><th>Employee ID</th><th>In</th><th>Out</th><th>OT</th><th></th></tr></thead>
-          <tbody>
-            {attendance.map(a => (
-              <tr key={a.id}>
-                <td>{a.work_date}</td>
-                <td>{a.employee_id}</td>
-                <td>{a.time_in}</td>
-                <td>{a.time_out}</td>
-                <td>{a.overtime_hours}</td>
-                <td><button className="secondary" onClick={async () => { if (await confirmAction({ title: 'Delete this attendance entry?', description: 'This can change payroll calculations for the affected employee.' })) { await deleteAttendance(a.id); await load(); } }}>Delete</button></td>
-              </tr>
-            ))}
-          </tbody>
-        </table>
+        <div className="row wrap" style={{ justifyContent: 'space-between', alignItems: 'center' }}>
+          <div><h2>Employees</h2><p className="small muted">Current employee registry and compensation basis.</p></div>
+          <button type="button" onClick={() => setEmployeeDrawerOpen(true)}>Add Employee</button>
+        </div>
+        <div className="table-wrap">
+          <table className="table">
+            <thead><tr><th>Name</th><th>Department</th><th>Job Title</th><th>Rate</th><th></th></tr></thead>
+            <tbody>
+              {employees.map((employee) => (
+                <tr key={employee.id}>
+                  <td><strong>{employee.full_name}</strong></td>
+                  <td>{employee.department || '—'}</td>
+                  <td>{employee.job_title || '—'}</td>
+                  <td>{employee.rate}</td>
+                  <td><div className="ho-table-actions">
+                    <button className="secondary" onClick={() => startEdit(employee)}>Edit</button>
+                    <button className="secondary" onClick={async () => {
+                      if (await confirmAction({ title: `Delete employee ${employee.full_name}?`, description: 'Employee history may be needed for payroll review. Remove only profiles entered in error.' })) {
+                        await deleteEmployee(employee.id); await load();
+                      }
+                    }}>Delete</button>
+                  </div></td>
+                </tr>
+              ))}
+              {!employees.length && <tr><td colSpan="5" className="muted">No employee records yet.</td></tr>}
+            </tbody>
+          </table>
+        </div>
       </section>
-      </div>
+
+      <section className="section">
+        <div className="row wrap" style={{ justifyContent: 'space-between', alignItems: 'center' }}>
+          <div><h2>Recent Attendance</h2><p className="small muted">Latest daily attendance entries used by payroll.</p></div>
+          <button type="button" className="secondary" onClick={() => setAttendanceDrawerOpen(true)}>Record Attendance</button>
+        </div>
+        <div className="table-wrap">
+          <table className="table">
+            <thead><tr><th>Date</th><th>Employee</th><th>In</th><th>Out</th><th>OT</th><th></th></tr></thead>
+            <tbody>
+              {attendance.map((row) => (
+                <tr key={row.id}>
+                  <td>{row.work_date}</td><td>{employees.find((employee) => employee.id === row.employee_id)?.full_name || row.employee_id}</td><td>{row.time_in}</td><td>{row.time_out}</td><td>{row.overtime_hours}</td>
+                  <td><div className="ho-table-actions"><button className="secondary" onClick={async () => {
+                    if (await confirmAction({ title: 'Delete this attendance entry?', description: 'This can change payroll calculations for the affected employee.' })) {
+                      await deleteAttendance(row.id); await load();
+                    }
+                  }}>Delete</button></div></td>
+                </tr>
+              ))}
+              {!attendance.length && <tr><td colSpan="6" className="muted">No attendance records yet.</td></tr>}
+            </tbody>
+          </table>
+        </div>
+      </section>
+
+      <Drawer open={employeeDrawerOpen} onClose={closeEmployeeDrawer} title={editingId ? 'Edit employee' : 'Add employee'} description="Maintain operational identity, department, role, and compensation basis.">
+        <form id="employee-form" onSubmit={saveEmployee}>
+          <div className="form-grid">
+            <label>Name<input required value={form.full_name} onChange={(e) => setForm((value) => ({ ...value, full_name: e.target.value }))} /></label>
+            <label>Department<input value={form.department} onChange={(e) => setForm((value) => ({ ...value, department: e.target.value }))} /></label>
+            <label>Job Title<input value={form.job_title} onChange={(e) => setForm((value) => ({ ...value, job_title: e.target.value }))} /></label>
+            <label>Compensation Type<select value={form.compensation_type} onChange={(e) => setForm((value) => ({ ...value, compensation_type: e.target.value }))}><option>Monthly</option><option>Daily</option><option>Hourly</option></select></label>
+            <label>Monthly / Rate<input type="number" step="0.01" min="0" value={form.rate} onChange={(e) => setForm((value) => ({ ...value, rate: e.target.value }))} /></label>
+            <label>Daily Rate<input type="number" step="0.01" min="0" value={form.daily_rate} onChange={(e) => setForm((value) => ({ ...value, daily_rate: e.target.value }))} /></label>
+            <label>Hourly Rate<input type="number" step="0.01" min="0" value={form.hourly_rate} onChange={(e) => setForm((value) => ({ ...value, hourly_rate: e.target.value }))} /></label>
+          </div>
+          <div className="row wrap"><button type="submit">{editingId ? 'Update Employee' : 'Save Employee'}</button><button type="button" className="secondary" onClick={closeEmployeeDrawer}>Cancel</button></div>
+        </form>
+      </Drawer>
+
+      <Drawer open={attendanceDrawerOpen} onClose={() => setAttendanceDrawerOpen(false)} title="Record attendance" description="Add a daily time record and payroll-relevant hours.">
+        <form onSubmit={saveAttendance}>
+          <div className="form-grid">
+            <label>Employee<select required value={attForm.employee_id} onChange={(e) => setAttForm((value) => ({ ...value, employee_id: e.target.value }))}><option value="">Select employee</option>{employees.map((employee) => <option key={employee.id} value={employee.id}>{employee.full_name}</option>)}</select></label>
+            <label>Date<input required type="date" value={attForm.work_date} onChange={(e) => setAttForm((value) => ({ ...value, work_date: e.target.value }))} /></label>
+            <label>Time In<input type="time" value={attForm.time_in} onChange={(e) => setAttForm((value) => ({ ...value, time_in: e.target.value }))} /></label>
+            <label>Time Out<input type="time" value={attForm.time_out} onChange={(e) => setAttForm((value) => ({ ...value, time_out: e.target.value }))} /></label>
+            <label>OT Hours<input type="number" step="0.01" min="0" value={attForm.overtime_hours} onChange={(e) => setAttForm((value) => ({ ...value, overtime_hours: e.target.value }))} /></label>
+            <label>Night Differential Hours<input type="number" step="0.01" min="0" value={attForm.night_diff_hours} onChange={(e) => setAttForm((value) => ({ ...value, night_diff_hours: e.target.value }))} /></label>
+            <label>Day Type<select value={attForm.day_type} onChange={(e) => setAttForm((value) => ({ ...value, day_type: e.target.value }))}><option value="regular_day">Regular day</option><option value="rest_day">Rest day</option><option value="holiday">Holiday</option></select></label>
+          </div>
+          <div className="row wrap"><button type="submit">Save Attendance</button><button type="button" className="secondary" onClick={() => setAttendanceDrawerOpen(false)}>Cancel</button></div>
+        </form>
+      </Drawer>
     </div>
   );
 }
