@@ -1,0 +1,23 @@
+/* Pass 9: settings and administration workspace refinement. */
+.main:has(h1){--admin-ink:#17352f;--admin-accent:#315f52;--admin-soft:#eaf2ee;--admin-gold:#c99545;--admin-line:#dde5e0}
+.main:has(h1)>.stack>.section:first-child:has(h1){position:relative;overflow:hidden}
+.main:has(h1)>.stack>.section:first-child:has(h1)::before{content:'';position:absolute;inset:0 auto 0 0;width:4px;background:linear-gradient(180deg,var(--admin-gold),var(--admin-accent))}
+.main:has(h1)>.stack>.section:first-child:has(h1) h1{color:var(--admin-ink)}
+.main:has(h1) .tabs{display:flex;gap:6px;overflow-x:auto;padding:5px;border:1px solid var(--admin-line);border-radius:12px;background:#f4f7f5;scrollbar-width:thin}
+.main:has(h1) .tabs .tab{flex:0 0 auto;min-height:38px;border:0;border-radius:9px;background:transparent;color:#657069;box-shadow:none}
+.main:has(h1) .tabs .tab.active{color:var(--admin-ink);background:#fff;box-shadow:0 4px 14px rgba(23,53,47,.09)}
+.main:has(h1) .toggle-field{display:flex;align-items:center;justify-content:space-between;gap:16px;min-height:66px;padding:12px 14px;border:1px solid var(--admin-line);border-radius:12px;background:#fff;transition:.16s ease}
+.main:has(h1) .toggle-field:hover{border-color:#bfcfc6;background:#fbfdfc;transform:translateY(-1px)}
+.main:has(h1) .toggle-label{color:var(--admin-ink);font-weight:650}
+.main:has(h1) .toggle-hint{margin-top:3px;color:#79827c;font-size:12px;line-height:1.45}
+.main:has(h1) .permission-grid,.main:has(h1) .settings-grid,.main:has(h1) .admin-grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(260px,1fr));gap:14px}
+.main:has(h1) .permission-group,.main:has(h1) .settings-card,.main:has(h1) .admin-card{border:1px solid var(--admin-line);border-radius:14px;padding:15px;background:linear-gradient(180deg,#fff,#fbfcfb)}
+.main:has(h1) .table th{white-space:nowrap}
+.main:has(h1) .table input,.main:has(h1) .table select{min-width:92px;min-height:36px;padding-block:6px}
+.main:has(h1) .table tbody tr:hover{background:#f8fbf9}
+.main:has(h1) .table td:first-child{color:var(--admin-ink);font-weight:620}
+.main:has(h1) .section>.row:first-child:has(h1){gap:20px}
+.main:has(h1) .section>.row:first-child:has(h1)>button{flex:0 0 auto}
+.main:has(h1) input[type='checkbox']{width:18px;height:18px;accent-color:var(--admin-accent)}
+.main:has(h1) .code-block{max-height:420px;border:1px solid #d8e1dc;border-radius:12px;background:#152822;color:#dbe8e2;box-shadow:inset 0 1px 0 rgba(255,255,255,.05)}
+@media(max-width:760px){.main:has(h1)>.stack>.section:first-child:has(h1) .row{align-items:stretch!important}.main:has(h1)>.stack>.section:first-child:has(h1) .row>button{width:100%}.main:has(h1) .tabs{margin-inline:-4px}.main:has(h1) .toggle-field{align-items:flex-start}}
