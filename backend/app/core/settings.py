@@ -49,6 +49,7 @@ def looks_like_placeholder_secret(value: str | None) -> bool:
         return True
     return compact.startswith(('changeme', 'replacewith', 'replace', 'todo'))
 
+
 class Settings(BaseSettings):
     app_name: str = 'Resort Accounting ERP'
     environment: str = 'development'
@@ -74,6 +75,12 @@ class Settings(BaseSettings):
     csrf_header_name: str = 'x-csrf-token'
     trust_proxy_headers: bool = False
     startup_require_migrations: bool = True
+    operations_integration_enabled: bool = False
+    operations_api_base: str = 'https://operations.hiddenoasis.app/api'
+    operations_integration_key: str = ''
+    operations_source_app: str = 'accounting_program'
+    operations_integration_timeout_seconds: int = 5
+    operations_reconciliation_variance_threshold: float = 1.0
     model_config = SettingsConfigDict(env_file=str(BACKEND_ROOT / '.env'), extra='ignore')
 
     @property
@@ -142,5 +149,6 @@ class Settings(BaseSettings):
         if self.is_production and self.allow_default_admin_bootstrap:
             warnings.append('ALLOW_DEFAULT_ADMIN_BOOTSTRAP should be false in production.')
         return warnings
+
 
 settings = Settings()
