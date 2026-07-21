@@ -1,0 +1,182 @@
+/* Pass 3: hotel operations workflow and responsive refinement. */
+
+.hotel-context-nav {
+  position: sticky;
+  top: 76px;
+  z-index: 9;
+  display: grid;
+  grid-template-columns: auto minmax(0, 1fr);
+  align-items: center;
+  gap: 14px;
+  min-width: 0;
+  padding: 9px 26px;
+  border-bottom: 1px solid var(--line);
+  background: rgba(247, 249, 247, .94);
+  backdrop-filter: blur(14px);
+}
+
+.hotel-context-nav__label {
+  color: var(--ho-gold-strong);
+  font-size: 10px;
+  font-weight: 850;
+  letter-spacing: .12em;
+  text-transform: uppercase;
+  white-space: nowrap;
+}
+
+.hotel-context-nav__links {
+  display: flex;
+  gap: 5px;
+  min-width: 0;
+  overflow-x: auto;
+  scrollbar-width: none;
+}
+.hotel-context-nav__links::-webkit-scrollbar { display: none; }
+
+.hotel-context-link {
+  flex: 0 0 auto;
+  min-height: 34px;
+  display: inline-flex;
+  align-items: center;
+  padding: 7px 11px;
+  border: 1px solid transparent;
+  border-radius: 999px;
+  color: var(--ho-muted-strong);
+  font-size: 12px;
+  font-weight: 720;
+  white-space: nowrap;
+}
+.hotel-context-link:hover { background: #fff; border-color: var(--line); }
+.hotel-context-link.is-active {
+  border-color: #d2e1da;
+  background: #fff;
+  color: var(--ho-brand-strong);
+  box-shadow: 0 5px 14px rgba(25, 54, 44, .06);
+}
+
+/* Hotel route hierarchy: compact headers, operational lists first, forms second. */
+.main:has(.hotel-route-anchor) { padding-top: 18px; }
+
+.main:has(a[href="/bookings/calendar"]) > .stack,
+.main:has(a[href="/room-folios"]) > .stack,
+.main:has(a[href="/guests"]) > .stack,
+.main:has(a[href="/events"]) > .stack,
+.main:has(a[href="/channel-payouts"]) > .stack {
+  gap: 16px;
+}
+
+.main:has(a[href="/bookings/calendar"]) > .stack > .section:first-child,
+.main:has(a[href="/room-folios"]) > .stack > .section:first-child,
+.main:has(a[href="/guests"]) > .stack > .section:first-child,
+.main:has(a[href="/events"]) > .stack > .section:first-child,
+.main:has(a[href="/channel-payouts"]) > .stack > .section:first-child {
+  min-height: 0;
+  padding: clamp(18px, 2.2vw, 28px);
+}
+
+.main:has(a[href="/bookings/calendar"]) > .stack > .section:first-child h1,
+.main:has(a[href="/room-folios"]) > .stack > .section:first-child h1,
+.main:has(a[href="/guests"]) > .stack > .section:first-child h1,
+.main:has(a[href="/events"]) > .stack > .section:first-child h1,
+.main:has(a[href="/channel-payouts"]) > .stack > .section:first-child h1 {
+  font-size: clamp(1.65rem, 2.5vw, 2.35rem);
+}
+
+/* Create/edit sections read as secondary workflows rather than page heroes. */
+.main:has(a[href="/bookings/calendar"]) .section:has(form),
+.main:has(a[href="/room-folios"]) .section:has(form),
+.main:has(a[href="/guests"]) .section:has(form),
+.main:has(a[href="/events"]) .section:has(form),
+.main:has(a[href="/channel-payouts"]) .section:has(form) {
+  border-left: 4px solid #d7e5de;
+  box-shadow: none;
+}
+
+.main:has(a[href="/bookings/calendar"]) form .form-grid,
+.main:has(a[href="/room-folios"]) form .form-grid,
+.main:has(a[href="/guests"]) form .form-grid,
+.main:has(a[href="/events"]) form .form-grid {
+  grid-template-columns: repeat(auto-fit, minmax(210px, 1fr));
+}
+
+/* Operational tables receive sticky headers and clearer financial alignment. */
+.main:has(a[href="/bookings/calendar"]) .table-wrap,
+.main:has(a[href="/room-folios"]) .table-wrap,
+.main:has(a[href="/guests"]) .table-wrap,
+.main:has(a[href="/events"]) .table-wrap,
+.main:has(a[href="/channel-payouts"]) .table-wrap {
+  border: 1px solid var(--line);
+  background: #fff;
+}
+
+.main:has(a[href="/bookings/calendar"]) .table thead,
+.main:has(a[href="/room-folios"]) .table thead,
+.main:has(a[href="/guests"]) .table thead,
+.main:has(a[href="/events"]) .table thead,
+.main:has(a[href="/channel-payouts"]) .table thead {
+  position: sticky;
+  top: 0;
+  z-index: 2;
+}
+
+.main:has(a[href="/bookings/calendar"]) td,
+.main:has(a[href="/room-folios"]) td,
+.main:has(a[href="/guests"]) td,
+.main:has(a[href="/events"]) td,
+.main:has(a[href="/channel-payouts"]) td {
+  line-height: 1.42;
+}
+
+.main:has(a[href="/room-folios"]) td:nth-last-child(-n+2),
+.main:has(a[href="/channel-payouts"]) td:nth-last-child(-n+3) {
+  font-variant-numeric: tabular-nums;
+}
+
+/* Calendar becomes an overview on small screens; agenda navigation remains primary. */
+@media (max-width: 760px) {
+  .hotel-context-nav {
+    top: 66px;
+    grid-template-columns: 1fr;
+    gap: 5px;
+    padding: 7px 14px 8px;
+  }
+  .hotel-context-nav__label { display: none; }
+  .hotel-context-nav__links {
+    margin-inline: -2px;
+    padding: 1px 2px 3px;
+    scroll-snap-type: x proximity;
+  }
+  .hotel-context-link { scroll-snap-align: start; min-height: 32px; padding: 6px 10px; }
+
+  .main:has(a[href="/bookings/calendar"]) > .stack > .section:first-child,
+  .main:has(a[href="/room-folios"]) > .stack > .section:first-child,
+  .main:has(a[href="/guests"]) > .stack > .section:first-child,
+  .main:has(a[href="/events"]) > .stack > .section:first-child,
+  .main:has(a[href="/channel-payouts"]) > .stack > .section:first-child {
+    padding: 18px;
+  }
+
+  .main:has(a[href="/bookings/calendar"]) .section:has(form),
+  .main:has(a[href="/room-folios"]) .section:has(form),
+  .main:has(a[href="/guests"]) .section:has(form),
+  .main:has(a[href="/events"]) .section:has(form) {
+    border-left-width: 1px;
+  }
+
+  .main:has(a[href="/bookings/calendar"]) .table-wrap,
+  .main:has(a[href="/room-folios"]) .table-wrap,
+  .main:has(a[href="/guests"]) .table-wrap,
+  .main:has(a[href="/events"]) .table-wrap,
+  .main:has(a[href="/channel-payouts"]) .table-wrap {
+    margin-inline: -16px;
+    width: calc(100% + 32px);
+    border-inline: 0;
+    border-radius: 0;
+  }
+
+  .calendar-grid,
+  .booking-calendar,
+  .room-calendar {
+    min-width: 720px;
+  }
+}
