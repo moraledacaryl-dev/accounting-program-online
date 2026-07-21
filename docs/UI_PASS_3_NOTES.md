@@ -1,0 +1,1 @@
+Pass 3 intentionally keeps backend hotel workflows unchanged while improving operational hierarchy and navigation. Route-specific lifecycle expansion remains compatible with the existing API contracts.
