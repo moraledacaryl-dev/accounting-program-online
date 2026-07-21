@@ -1,0 +1,38 @@
+/* Pass 4: finance workflow hierarchy, navigation, risk controls, and responsive density. */
+.finance-context-nav{position:sticky;top:64px;z-index:52;display:grid;grid-template-columns:auto minmax(0,1fr) auto;align-items:center;gap:14px;padding:10px 22px;border-bottom:1px solid #d9e1dc;background:rgba(249,251,249,.96);backdrop-filter:blur(14px)}
+.finance-context-nav__label{font-size:11px;font-weight:760;letter-spacing:.08em;text-transform:uppercase;color:#36594d;white-space:nowrap}
+.finance-context-nav__links{display:flex;gap:6px;min-width:0;overflow-x:auto;scrollbar-width:none}.finance-context-nav__links::-webkit-scrollbar{display:none}
+.finance-context-link{display:inline-flex;align-items:center;min-height:34px;padding:7px 10px;border-radius:9px;color:#5f6963;font-size:12px;font-weight:650;white-space:nowrap;text-decoration:none}
+.finance-context-link:hover{background:#eef4f0;color:#1e4437}.finance-context-link.is-active{background:#173f34;color:#fff;box-shadow:0 5px 14px rgba(23,63,52,.15)}
+.finance-context-nav__actions{display:flex;gap:7px}.finance-action{display:inline-flex;align-items:center;justify-content:center;min-height:34px;padding:7px 11px;border:1px solid #cfd9d3;border-radius:9px;background:#fff;color:#24483b;font-size:12px;font-weight:700;text-decoration:none;white-space:nowrap}.finance-action:hover{border-color:#83a393;background:#f4f8f5}.finance-action--in{border-color:#2e6b56;background:#2e6b56;color:#fff}
+
+/* Finance pages lead with decisions, balances, variances, and controlled actions. */
+.main:has(.cash-workspace),.main:has(a[href="/journals"]),.main:has(a[href="/bir"]),.main:has(a[href="/assets"]),.main:has(a[href="/reports"]){--finance-ink:#18352c;--finance-green:#2f6b57;--finance-soft:#edf5f0;--finance-warn:#9a5d13;--finance-danger:#9c2f26}
+.cash-workspace .workspace-hero{padding:22px 24px;background:linear-gradient(135deg,#17352d,#245747);box-shadow:0 16px 34px rgba(23,53,45,.14)}
+.cash-workspace .workspace-hero h1{font-size:clamp(1.9rem,3vw,2.65rem)}
+.cash-workspace .workspace-hero .row{align-self:center}.cash-workspace .workspace-hero button{min-width:112px}
+.cash-workspace>.metric-grid{grid-template-columns:repeat(4,minmax(0,1fr));gap:10px}.cash-workspace>.metric-grid .metric-card{padding:15px 16px;border-top:3px solid #2f6b57}.cash-workspace>.metric-grid .metric-card strong{font-variant-numeric:tabular-nums}
+.cash-workspace .unified-tabs{gap:5px}.cash-workspace .unified-tabs .tab{min-height:38px;padding-inline:13px}
+.cash-workspace .cash-account-grid{grid-template-columns:repeat(auto-fit,minmax(190px,1fr));gap:10px}.cash-workspace .cash-account-card{min-height:112px;text-align:left}.cash-workspace .cash-account-card strong{font-variant-numeric:tabular-nums}
+.cash-workspace .section-title-row{gap:14px;align-items:flex-start}.cash-workspace .section-title-row h2{margin-bottom:4px}
+.cash-workspace .filter-bar{position:sticky;top:118px;z-index:6;padding:10px;border:1px solid #dfe6e1;border-radius:12px;background:rgba(255,255,255,.97);box-shadow:0 8px 20px rgba(20,46,38,.06)}
+.cash-workspace .table-wrap,.cash-workspace .table-container,.cash-workspace section>.table{border:1px solid #e0e6e2;border-radius:12px;overflow:auto}
+.cash-workspace .table thead th,.main:has(a[href="/journals"]) .table thead th,.main:has(a[href="/bir"]) .table thead th,.main:has(a[href="/assets"]) .table thead th{position:sticky;top:0;z-index:2;background:#f3f6f4;color:#526059;font-size:11px;letter-spacing:.055em;text-transform:uppercase}
+.cash-workspace .table td:nth-last-child(-n+3),.main:has(a[href="/journals"]) .table td:nth-last-child(-n+3){font-variant-numeric:tabular-nums}
+.cash-workspace .clickable-row{cursor:pointer}.cash-workspace .clickable-row:hover{background:#f6faf7;box-shadow:inset 3px 0 0 #2f6b57}
+.cash-workspace .status-draft{background:#fff6df;color:#7d5512}.cash-workspace .status-posted,.cash-workspace .status-approved{background:#e9f5ee;color:#236043}.cash-workspace .status-reversed,.cash-workspace .status-cancelled{background:#f8eae8;color:#87372f}
+.cash-workspace button:has(+ button),.cash-workspace td .row button{white-space:nowrap}
+
+/* High-risk lifecycle actions receive visible separation. */
+.main:has(a[href="/journals"]) button,.main:has(a[href="/bir"]) button,.main:has(a[href="/assets"]) button{min-height:40px}
+.main:has(a[href="/bir"]) .section:first-child,.main:has(a[href="/assets"]) .section:first-child,.main:has(a[href="/journals"]) .section:first-child{padding-block:20px}
+.main:has(a[href="/bir"]) .tabs,.main:has(a[href="/assets"]) .tabs{overflow-x:auto;flex-wrap:nowrap;scrollbar-width:none}
+.main:has(a[href="/bir"]) .notice,.main:has(a[href="/assets"]) .notice{border-left-width:4px}
+.main:has(a[href="/reports"]) .filter-bar{display:grid;grid-template-columns:repeat(auto-fit,minmax(150px,1fr));align-items:end}
+
+/* Drawers and local overlays remain usable even before all finance forms migrate to the shared component. */
+.workspace-drawer-backdrop{background:rgba(8,25,20,.58)!important;backdrop-filter:blur(3px)}.workspace-drawer{width:min(680px,100vw)!important;display:grid;grid-template-rows:auto minmax(0,1fr);box-shadow:-24px 0 65px rgba(9,31,24,.24)}.workspace-drawer-head{position:sticky;top:0;z-index:3;background:#fff}.workspace-drawer-body{overflow:auto;padding-bottom:max(24px,env(safe-area-inset-bottom))}.workspace-drawer-body form>.row:last-child{position:sticky;bottom:-1px;z-index:4;margin:18px -1px -1px;padding:14px 1px;background:linear-gradient(180deg,rgba(255,255,255,.75),#fff 22%);border-top:1px solid #dfe5e1}
+
+@media(max-width:1100px){.finance-context-nav{grid-template-columns:auto minmax(0,1fr)}.finance-context-nav__actions{grid-column:1/-1;justify-content:flex-end}.cash-workspace>.metric-grid{grid-template-columns:repeat(2,minmax(0,1fr))}}
+@media(max-width:760px){.finance-context-nav{top:56px;display:block;padding:8px 12px}.finance-context-nav__label{display:none}.finance-context-nav__links{padding-bottom:7px}.finance-context-nav__actions{display:grid;grid-template-columns:repeat(3,1fr);gap:6px}.finance-action{min-height:38px;padding-inline:7px}.cash-workspace .workspace-hero{padding:18px}.cash-workspace .workspace-hero .row{display:grid;grid-template-columns:1fr 1fr;width:100%}.cash-workspace .workspace-hero .row button:last-child{grid-column:1/-1}.cash-workspace>.metric-grid{grid-template-columns:1fr 1fr}.cash-workspace .filter-bar{position:static;grid-template-columns:1fr}.cash-workspace .cash-account-grid{grid-template-columns:1fr}.cash-workspace .table{min-width:720px}.workspace-drawer{width:100vw!important}}
+@media(max-width:430px){.cash-workspace>.metric-grid{grid-template-columns:1fr}.finance-context-link{padding-inline:9px}.finance-action{font-size:11px}}
