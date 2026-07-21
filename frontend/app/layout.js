@@ -12,6 +12,7 @@ import './pass-1-foundation.css';
 import './pass-1-auth.css';
 import './pass-3-hotel-operations.css';
 import './pass-3-dashboard.css';
+import './pass-4-finance.css';
 import ConfirmActionProvider from '../components/ConfirmActionProvider';
 import AppFrame from '../components/app-shell/AppFrame';
 import { AppShellProvider } from '../components/app-shell/AppShellContext';
