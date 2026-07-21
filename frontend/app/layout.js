@@ -9,6 +9,7 @@ import './review-inbox.css';
 import './admin-settings.css';
 import './final-qa.css';
 import './pass-1-foundation.css';
+import './pass-1-auth.css';
 import ConfirmActionProvider from '../components/ConfirmActionProvider';
 import AppFrame from '../components/app-shell/AppFrame';
 import { AppShellProvider } from '../components/app-shell/AppShellContext';
