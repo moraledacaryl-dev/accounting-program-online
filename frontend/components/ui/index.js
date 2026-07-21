@@ -113,32 +113,93 @@ export function Notice({ children, tone = 'warning', className = '' }) {
   return <div className={`ho-notice${toneClass} ${className}`.trim()}>{children}</div>;
 }
 
-export function EmptyState({ title, description, action, className = '' }) {
+export function EmptyState({ title, description, action, icon, className = '' }) {
   return (
     <div className={`ho-empty-state ${className}`.trim()}>
       <div>
+        {icon ? <div className="ho-empty-state__icon" aria-hidden="true">{icon}</div> : null}
         {title ? <div className="ho-empty-state__title">{title}</div> : null}
         {description ? <p>{description}</p> : null}
-        {action ? <div className="ho-page-actions" style={{ justifyContent: 'center', marginTop: '1rem' }}>{action}</div> : null}
+        {action ? <div className="ho-empty-state__actions">{action}</div> : null}
       </div>
     </div>
   );
 }
 
-export function Field({ label, help, error, required = false, children, className = '' }) {
+export function Field({ label, help, error, required = false, optional = false, children, className = '' }) {
   return (
     <label className={`ho-field ${className}`.trim()}>
       <span className="ho-field-label">
-        {label}
-        {required ? ' *' : ''}
+        <span>{label}{required ? <span className="ho-required" aria-hidden="true"> *</span> : null}</span>
+        {optional ? <span className="ho-optional">Optional</span> : null}
       </span>
       {children}
-      {error ? <span className="ho-field-error">{error}</span> : null}
+      {error ? <span className="ho-field-error" role="alert">{error}</span> : null}
       {!error && help ? <span className="ho-field-help">{help}</span> : null}
     </label>
   );
 }
 
-export function TableWrap({ children, className = '' }) {
-  return <div className={`ho-table-wrap ${className}`.trim()}>{children}</div>;
+export function SwitchField({ label, description, checked, className = '', ...props }) {
+  return (
+    <label className={`ho-switch-field ${className}`.trim()}>
+      <span className="ho-switch-copy">
+        <strong>{label}</strong>
+        {description ? <span>{description}</span> : null}
+      </span>
+      <span className="ho-switch-control">
+        <input type="checkbox" checked={checked} {...props} />
+        <span className="ho-switch-track" aria-hidden="true"><span /></span>
+      </span>
+    </label>
+  );
+}
+
+export function FileUpload({ label = 'Choose file', help, className = '', ...props }) {
+  return (
+    <label className={`ho-file-upload ${className}`.trim()}>
+      <span className="ho-file-upload__label">{label}</span>
+      <input type="file" {...props} />
+      {help ? <span className="ho-field-help">{help}</span> : null}
+    </label>
+  );
+}
+
+export function FormActions({ children, sticky = false, className = '' }) {
+  return <div className={`ho-form-actions ${sticky ? 'is-sticky' : ''} ${className}`.trim()}>{children}</div>;
+}
+
+export function ValidationSummary({ title = 'Check the highlighted fields', errors = [], className = '' }) {
+  if (!errors.length) return null;
+  return (
+    <div className={`ho-validation-summary ${className}`.trim()} role="alert" tabIndex="-1">
+      <strong>{title}</strong>
+      <ul>{errors.map((error, index) => <li key={`${error}-${index}`}>{error}</li>)}</ul>
+    </div>
+  );
+}
+
+export function TableWrap({ children, className = '', label = 'Data table' }) {
+  return <div className={`ho-table-wrap ${className}`.trim()} role="region" aria-label={label} tabIndex="0">{children}</div>;
+}
+
+export function RecordList({ children, className = '', label = 'Records' }) {
+  return <div className={`ho-record-list ${className}`.trim()} role="list" aria-label={label}>{children}</div>;
+}
+
+export function RecordCard({ title, subtitle, meta, status, actions, children, className = '' }) {
+  return (
+    <article className={`ho-record-card ${className}`.trim()} role="listitem">
+      <div className="ho-record-card__header">
+        <div className="ho-record-card__identity">
+          <strong>{title}</strong>
+          {subtitle ? <span>{subtitle}</span> : null}
+        </div>
+        {status ? <div className="ho-record-card__status">{status}</div> : null}
+      </div>
+      {meta ? <div className="ho-record-card__meta">{meta}</div> : null}
+      {children ? <div className="ho-record-card__body">{children}</div> : null}
+      {actions ? <div className="ho-record-card__actions">{actions}</div> : null}
+    </article>
+  );
 }

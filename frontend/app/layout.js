@@ -8,10 +8,10 @@ import './finance-treasury.css';
 import './review-inbox.css';
 import './admin-settings.css';
 import './final-qa.css';
-import Sidebar from '../components/Sidebar';
-import Header from '../components/Header';
-import RouteGuard from '../components/RouteGuard';
+import './pass-1-foundation.css';
+import './pass-1-auth.css';
 import ConfirmActionProvider from '../components/ConfirmActionProvider';
+import AppFrame from '../components/app-shell/AppFrame';
 import { AppShellProvider } from '../components/app-shell/AppShellContext';
 import { CurrentUserProvider } from '../lib/useCurrentUser';
 
@@ -24,15 +24,7 @@ export default function RootLayout({ children }) {
         <CurrentUserProvider>
           <AppShellProvider>
             <ConfirmActionProvider>
-              <div className="app-shell">
-                <Sidebar />
-                <div className="main-shell">
-                  <Header />
-                  <main className="main">
-                    <RouteGuard>{children}</RouteGuard>
-                  </main>
-                </div>
-              </div>
+              <AppFrame>{children}</AppFrame>
             </ConfirmActionProvider>
           </AppShellProvider>
         </CurrentUserProvider>
