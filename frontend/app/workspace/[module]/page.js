@@ -1,5 +1,10 @@
-import ModuleWorkspace from '../../../components/ModuleWorkspace';
+import { notFound, permanentRedirect } from 'next/navigation';
+import { workspaceRedirects } from '../../../lib/information-architecture';
 
-export default function Page({ params }) {
-  return <ModuleWorkspace moduleSlug={params.module} />;
+export default async function WorkspaceRedirectPage({ params }) {
+  const resolvedParams = await params;
+  const target = workspaceRedirects[resolvedParams?.module];
+
+  if (!target) notFound();
+  permanentRedirect(target);
 }
