@@ -13,9 +13,9 @@ export default function AppFrame({ children }) {
     return (
       <div className="auth-frame">
         <a className="skip-link" href="#main-content">Skip to sign in</a>
-        <main id="main-content" className="auth-main" tabIndex="-1">
+        <div id="main-content" className="auth-main" role="main" tabIndex="-1">
           <RouteGuard>{children}</RouteGuard>
-        </main>
+        </div>
       </div>
     );
   }
