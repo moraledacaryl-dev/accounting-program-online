@@ -4,6 +4,7 @@ import { usePathname } from 'next/navigation';
 import Header from '../Header';
 import FinanceOperationsNav from '../finance/FinanceOperationsNav';
 import HotelOperationsNav from '../hotel/HotelOperationsNav';
+import InventoryRestaurantNav from '../operations/InventoryRestaurantNav';
 import PeoplePayrollNav from '../people/PeoplePayrollNav';
 import RouteGuard from '../RouteGuard';
 import Sidebar from '../Sidebar';
@@ -33,6 +34,7 @@ export default function AppFrame({ children }) {
           <HotelOperationsNav />
           <FinanceOperationsNav />
           <PeoplePayrollNav />
+          <InventoryRestaurantNav />
           <main id="main-content" className="main" tabIndex="-1">
             <RouteGuard>{children}</RouteGuard>
           </main>

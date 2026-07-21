@@ -1,0 +1,149 @@
+.operations-context-nav {
+  position: sticky;
+  top: var(--header-height, 64px);
+  z-index: 24;
+  display: grid;
+  grid-template-columns: auto minmax(0, 1fr) auto;
+  align-items: center;
+  gap: 14px;
+  min-height: 52px;
+  padding: 8px 20px;
+  border-bottom: 1px solid #dfe6e1;
+  background: rgba(250, 252, 250, .96);
+  backdrop-filter: blur(12px);
+}
+
+.operations-context-nav__label {
+  color: #315147;
+  font-size: 11px;
+  font-weight: 750;
+  letter-spacing: .08em;
+  text-transform: uppercase;
+  white-space: nowrap;
+}
+
+.operations-context-nav__links {
+  display: flex;
+  gap: 4px;
+  min-width: 0;
+  overflow-x: auto;
+  scrollbar-width: thin;
+}
+
+.operations-context-link,
+.operations-action {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  min-height: 36px;
+  padding: 7px 11px;
+  border: 1px solid transparent;
+  border-radius: 9px;
+  color: #53635d;
+  font-size: 12px;
+  font-weight: 650;
+  line-height: 1;
+  text-decoration: none;
+  white-space: nowrap;
+}
+
+.operations-context-link:hover {
+  background: #edf4f0;
+  color: #24483d;
+}
+
+.operations-context-link.is-active {
+  border-color: #bdd4c8;
+  background: #e4f0e9;
+  color: #173d32;
+  box-shadow: inset 0 -2px 0 #3d765f;
+}
+
+.operations-context-nav__actions {
+  display: flex;
+  gap: 6px;
+}
+
+.operations-action {
+  border-color: #cfdad4;
+  background: #fff;
+  color: #315147;
+}
+
+.operations-action--primary {
+  border-color: #2f6b57;
+  background: #2f6b57;
+  color: #fff;
+}
+
+.main:has(a[href="/inventory-items"]) .table thead th,
+.main:has(a[href="/purchase-requests"]) .table thead th,
+.main:has(a[href="/purchase-orders"]) .table thead th,
+.main:has(a[href="/receiving"]) .table thead th,
+.main:has(a[href="/restaurant-ops"]) .table thead th,
+.main:has(a[href="/menu-items"]) .table thead th {
+  position: sticky;
+  top: 0;
+  z-index: 3;
+  background: #f5f8f6;
+  color: #5f6d67;
+  font-size: 10px;
+  letter-spacing: .07em;
+  text-transform: uppercase;
+}
+
+.main:has(a[href="/inventory-items"]) .table td,
+.main:has(a[href="/purchase-requests"]) .table td,
+.main:has(a[href="/purchase-orders"]) .table td,
+.main:has(a[href="/receiving"]) .table td,
+.main:has(a[href="/restaurant-ops"]) .table td {
+  vertical-align: middle;
+}
+
+.main:has(a[href="/inventory-items"]) .section:first-child,
+.main:has(a[href="/purchase-requests"]) .section:first-child,
+.main:has(a[href="/purchase-orders"]) .section:first-child,
+.main:has(a[href="/receiving"]) .section:first-child,
+.main:has(a[href="/restaurant-ops"]) .section:first-child,
+.main:has(a[href="/menu-items"]) .section:first-child {
+  border-top: 3px solid #487c68;
+}
+
+.main:has(a[href="/receiving"]) form,
+.main:has(a[href="/purchase-orders"]) form,
+.main:has(a[href="/purchase-requests"]) form,
+.main:has(a[href="/restaurant-ops"]) form {
+  scroll-margin-top: 132px;
+}
+
+@media (max-width: 980px) {
+  .operations-context-nav {
+    grid-template-columns: 1fr auto;
+  }
+  .operations-context-nav__label {
+    display: none;
+  }
+}
+
+@media (max-width: 720px) {
+  .operations-context-nav {
+    position: sticky;
+    top: var(--header-height-mobile, 56px);
+    grid-template-columns: 1fr;
+    gap: 6px;
+    padding: 7px 12px 8px;
+  }
+  .operations-context-nav__actions {
+    display: none;
+  }
+  .operations-context-link {
+    min-height: 38px;
+  }
+  .main:has(a[href="/inventory-items"]) .table,
+  .main:has(a[href="/purchase-requests"]) .table,
+  .main:has(a[href="/purchase-orders"]) .table,
+  .main:has(a[href="/receiving"]) .table,
+  .main:has(a[href="/restaurant-ops"]) .table {
+    min-width: 720px;
+  }
+}
