@@ -1,7 +1,7 @@
 'use client';
 
 import Link from 'next/link';
-import { usePathname } from 'next/navigation';
+import { usePathname, useSearchParams } from 'next/navigation';
 
 const links = [
   { href: '/cashflow', label: 'Overview' },
@@ -18,15 +18,17 @@ const links = [
 
 const prefixes = ['/cashflow', '/journals', '/bir', '/assets', '/reports', '/attachments'];
 
-function activeFor(pathname, href) {
+function activeFor(pathname, tab, href) {
   const base = href.split('?')[0];
-  if (href === '/cashflow') return pathname === '/cashflow';
-  if (href.startsWith('/cashflow?tab=ledger')) return pathname === '/cashflow';
+  if (href === '/cashflow') return pathname === '/cashflow' && (!tab || tab === 'overview');
+  if (href.startsWith('/cashflow?tab=ledger')) return pathname === '/cashflow' && tab === 'ledger';
   return pathname === base || pathname.startsWith(`${base}/`);
 }
 
 export default function FinanceOperationsNav() {
   const pathname = usePathname();
+  const searchParams = useSearchParams();
+  const tab = searchParams.get('tab');
   if (!prefixes.some((prefix) => pathname === prefix || pathname.startsWith(`${prefix}/`))) return null;
 
   return (
@@ -34,7 +36,7 @@ export default function FinanceOperationsNav() {
       <div className="finance-context-nav__label">Finance & accounting</div>
       <div className="finance-context-nav__links">
         {links.map((item) => {
-          const active = activeFor(pathname, item.href);
+          const active = activeFor(pathname, tab, item.href);
           return (
             <Link key={item.href} href={item.href} className={active ? 'finance-context-link is-active' : 'finance-context-link'} aria-current={active ? 'page' : undefined}>
               {item.label}
