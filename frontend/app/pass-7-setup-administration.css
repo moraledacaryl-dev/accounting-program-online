@@ -1,0 +1,168 @@
+.setup-context-nav {
+  position: sticky;
+  top: var(--header-height, 64px);
+  z-index: 24;
+  display: grid;
+  grid-template-columns: auto minmax(0, 1fr) auto;
+  align-items: center;
+  gap: 14px;
+  min-height: 52px;
+  padding: 8px 20px;
+  border-bottom: 1px solid #dde4e0;
+  background: rgba(250, 251, 250, .97);
+  backdrop-filter: blur(12px);
+}
+
+.setup-context-nav__label {
+  color: #3e5149;
+  font-size: 11px;
+  font-weight: 750;
+  letter-spacing: .08em;
+  text-transform: uppercase;
+  white-space: nowrap;
+}
+
+.setup-context-nav__links {
+  display: flex;
+  gap: 4px;
+  min-width: 0;
+  overflow-x: auto;
+  scrollbar-width: thin;
+}
+
+.setup-context-link,
+.setup-action {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  min-height: 36px;
+  padding: 7px 11px;
+  border: 1px solid transparent;
+  border-radius: 9px;
+  color: #5a6560;
+  font-size: 12px;
+  font-weight: 650;
+  line-height: 1;
+  text-decoration: none;
+  white-space: nowrap;
+}
+
+.setup-context-link:hover {
+  background: #eef2ef;
+  color: #30453d;
+}
+
+.setup-context-link.is-active {
+  border-color: #c5d0ca;
+  background: #e8eeea;
+  color: #263d35;
+  box-shadow: inset 0 -2px 0 #536f63;
+}
+
+.setup-context-nav__actions {
+  display: flex;
+  gap: 6px;
+}
+
+.setup-action {
+  border-color: #cfd7d2;
+  background: #fff;
+  color: #3e5149;
+}
+
+.setup-action:hover {
+  border-color: #aebcb5;
+  background: #f7f9f8;
+}
+
+.setup-action--primary {
+  border-color: #445f54;
+  background: #445f54;
+  color: #fff;
+}
+
+.main:has(a[href="/room-types"]) .section:first-child,
+.main:has(a[href="/rooms"]) .section:first-child,
+.main:has(a[href="/rate-plans"]) .section:first-child,
+.main:has(a[href="/chart-of-accounts"]) .section:first-child,
+.main:has(a[href="/account-mapping"]) .section:first-child,
+.main:has(a[href="/master-data"]) .section:first-child,
+.main:has(a[href="/roles-permissions"]) .section:first-child,
+.main:has(a[href="/system-settings"]) .section:first-child {
+  border-top: 3px solid #607b70;
+}
+
+.main:has(a[href="/room-types"]) .table thead th,
+.main:has(a[href="/rooms"]) .table thead th,
+.main:has(a[href="/rate-plans"]) .table thead th,
+.main:has(a[href="/chart-of-accounts"]) .table thead th,
+.main:has(a[href="/account-mapping"]) .table thead th,
+.main:has(a[href="/master-data"]) .table thead th,
+.main:has(a[href="/taxonomy-admin"]) .table thead th,
+.main:has(a[href="/users"]) .table thead th,
+.main:has(a[href="/roles-permissions"]) .table thead th {
+  position: sticky;
+  top: 0;
+  z-index: 3;
+  background: #f5f7f6;
+  color: #5f6965;
+  font-size: 10px;
+  letter-spacing: .07em;
+  text-transform: uppercase;
+}
+
+.main:has(a[href="/room-types"]) form,
+.main:has(a[href="/rooms"]) form,
+.main:has(a[href="/rate-plans"]) form,
+.main:has(a[href="/chart-of-accounts"]) form,
+.main:has(a[href="/account-mapping"]) form,
+.main:has(a[href="/master-data"]) form,
+.main:has(a[href="/roles-permissions"]) form,
+.main:has(a[href="/system-settings"]) form {
+  scroll-margin-top: 132px;
+}
+
+.main:has(a[href="/roles-permissions"]) .section,
+.main:has(a[href="/system-settings"]) .section,
+.main:has(a[href="/account-mapping"]) .section {
+  overflow: clip;
+}
+
+@media (max-width: 1100px) {
+  .setup-context-nav {
+    grid-template-columns: minmax(0, 1fr) auto;
+  }
+
+  .setup-context-nav__label {
+    display: none;
+  }
+}
+
+@media (max-width: 720px) {
+  .setup-context-nav {
+    top: var(--header-height-mobile, 56px);
+    grid-template-columns: 1fr;
+    gap: 6px;
+    padding: 7px 12px 8px;
+  }
+
+  .setup-context-nav__actions {
+    display: none;
+  }
+
+  .setup-context-link {
+    min-height: 38px;
+  }
+
+  .main:has(a[href="/room-types"]) .table,
+  .main:has(a[href="/rooms"]) .table,
+  .main:has(a[href="/rate-plans"]) .table,
+  .main:has(a[href="/chart-of-accounts"]) .table,
+  .main:has(a[href="/account-mapping"]) .table,
+  .main:has(a[href="/master-data"]) .table,
+  .main:has(a[href="/taxonomy-admin"]) .table,
+  .main:has(a[href="/users"]) .table,
+  .main:has(a[href="/roles-permissions"]) .table {
+    min-width: 720px;
+  }
+}
