@@ -15,6 +15,7 @@ import './pass-3-dashboard.css';
 import './pass-4-finance.css';
 import './pass-5-people-payroll.css';
 import './pass-6-inventory-operations.css';
+import './pass-7-setup-administration.css';
 import ConfirmActionProvider from '../components/ConfirmActionProvider';
 import AppFrame from '../components/app-shell/AppFrame';
 import { AppShellProvider } from '../components/app-shell/AppShellContext';
