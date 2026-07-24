@@ -1,0 +1,146 @@
+/* Pass 8: final QA, accessibility, responsive containment, and production polish. */
+
+:root {
+  --pass-8-focus-ring: 0 0 0 3px rgba(47, 107, 87, .24);
+}
+
+.main :where(button, .button-link, input, select, textarea, [role="button"]) {
+  min-height: 40px;
+}
+
+.main :where(button, .button-link, [role="button"]):focus-visible,
+.main :where(input, select, textarea):focus-visible {
+  outline: 2px solid #2f6b57;
+  outline-offset: 2px;
+  box-shadow: var(--pass-8-focus-ring);
+}
+
+.main :where(input, select, textarea)[aria-invalid="true"] {
+  border-color: #b54234;
+  box-shadow: 0 0 0 2px rgba(181, 66, 52, .12);
+}
+
+.main :where(.error-text, .success-text, [role="alert"], [role="status"]) {
+  max-width: 100%;
+  overflow-wrap: anywhere;
+}
+
+.main .section:has(> h1:first-child) {
+  scroll-margin-top: 140px;
+}
+
+.main .table-wrap,
+.main .table-container,
+.main .section:has(> .table) {
+  max-width: 100%;
+  overflow-x: auto;
+  overscroll-behavior-inline: contain;
+  -webkit-overflow-scrolling: touch;
+}
+
+.main .table th {
+  white-space: nowrap;
+}
+
+.main .table td {
+  overflow-wrap: anywhere;
+}
+
+.main .table td:last-child :where(button, .button-link) {
+  white-space: nowrap;
+}
+
+.main .row.wrap {
+  row-gap: 8px;
+}
+
+.main form :where(label, fieldset) {
+  min-width: 0;
+}
+
+.main form fieldset {
+  max-width: 100%;
+}
+
+.main .muted:empty,
+.main .small:empty {
+  display: none;
+}
+
+@media (hover: none) and (pointer: coarse) {
+  .main :where(button, .button-link, input, select, textarea, [role="button"]) {
+    min-height: 44px;
+  }
+
+  .main :where(button, .button-link, [role="button"]) {
+    touch-action: manipulation;
+  }
+}
+
+@media (max-width: 900px) {
+  .main .section:has(> .table) {
+    padding-inline: 0;
+  }
+
+  .main .section:has(> .table) > :not(.table) {
+    margin-inline: 16px;
+  }
+
+  .main .section:has(> .table) > .table {
+    border-inline: 0;
+  }
+}
+
+@media (max-width: 640px) {
+  .main :where(h1, h2, h3) {
+    text-wrap: balance;
+  }
+
+  .main .row.wrap > :where(button, .button-link) {
+    flex: 1 1 auto;
+  }
+
+  .main form .row.wrap > :where(button, .button-link) {
+    min-width: min(100%, 150px);
+  }
+
+  .main .table {
+    font-size: 13px;
+  }
+
+  .main .table th,
+  .main .table td {
+    padding: 10px 12px;
+  }
+}
+
+@media (prefers-contrast: more) {
+  .main :where(button, .button-link, input, select, textarea) {
+    border-width: 2px;
+  }
+
+  .main .muted {
+    color: #3f4c47;
+  }
+}
+
+@media print {
+  .hotel-context-nav,
+  .finance-context-nav,
+  .people-context-nav,
+  .operations-context-nav,
+  .setup-context-nav,
+  .filter-bar,
+  .tabs {
+    display: none !important;
+  }
+
+  .main .table {
+    min-width: 0 !important;
+    font-size: 10pt;
+  }
+
+  .main a[href]::after {
+    content: none;
+  }
+}
