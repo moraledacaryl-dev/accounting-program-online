@@ -32,14 +32,18 @@ export default function AppFrame({ children }) {
         <Sidebar />
         <div className="main-shell">
           <Header />
-          <HotelOperationsNav />
-          <FinanceOperationsNav />
-          <PeoplePayrollNav />
-          <InventoryRestaurantNav />
-          <SetupAdministrationNav />
-          <main id="main-content" className="main" tabIndex="-1">
-            <RouteGuard>{children}</RouteGuard>
-          </main>
+          <div className="context-nav-stack" aria-label="Section navigation">
+            <HotelOperationsNav />
+            <FinanceOperationsNav />
+            <PeoplePayrollNav />
+            <InventoryRestaurantNav />
+            <SetupAdministrationNav />
+          </div>
+          <div className="shell-content">
+            <main id="main-content" className="main" tabIndex="-1">
+              <RouteGuard>{children}</RouteGuard>
+            </main>
+          </div>
         </div>
       </div>
     </>
