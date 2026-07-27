@@ -15,8 +15,8 @@ const connectedApps = [
   { label: 'Inventory', href: process.env.NEXT_PUBLIC_INVENTORY_APP_URL },
 ].filter((item) => item.href);
 
-const SIDEBAR_KEY = 'accounting_sidebar_collapsed_v4';
-const GROUPS_KEY = 'accounting_sidebar_groups_v1';
+const SIDEBAR_KEY = 'accounting_sidebar_collapsed_v5';
+const GROUPS_KEY = 'accounting_sidebar_groups_v2';
 
 function hasAnyPermission(user, keys = []) {
   if (!keys.length) return true;
@@ -28,8 +28,12 @@ function roleName(user) {
   return raw.replaceAll('_', ' ').replace(/\b\w/g, (letter) => letter.toUpperCase());
 }
 
+function isItemActive(pathname, href) {
+  return pathname === href || pathname.startsWith(`${href}/`);
+}
+
 function defaultGroupState() {
-  return Object.fromEntries(navigationGroups.map((group) => [group.id, true]));
+  return Object.fromEntries(navigationGroups.map((group) => [group.id, group.id === 'overview']));
 }
 
 export default function Sidebar() {
@@ -37,6 +41,7 @@ export default function Sidebar() {
   const { user, loaded, mobileNavOpen, closeMobileNav } = useAppShell();
   const [collapsed, setCollapsed] = useState(false);
   const [openGroups, setOpenGroups] = useState(defaultGroupState);
+  const [filter, setFilter] = useState('');
 
   useEffect(() => {
     try {
@@ -44,12 +49,12 @@ export default function Sidebar() {
       const storedGroups = JSON.parse(window.localStorage.getItem(GROUPS_KEY) || '{}');
       setOpenGroups((current) => ({ ...current, ...storedGroups }));
     } catch {
-      // Storage can be unavailable in private browsing; the defaults remain usable.
+      // Storage can be unavailable in private browsing; defaults remain usable.
     }
   }, []);
 
   useEffect(() => {
-    document.documentElement.style.setProperty('--sidebar-width', collapsed ? '88px' : '282px');
+    document.documentElement.style.setProperty('--sidebar-width', collapsed ? '76px' : '292px');
     try {
       window.localStorage.setItem(SIDEBAR_KEY, collapsed ? '1' : '0');
     } catch {
@@ -59,7 +64,8 @@ export default function Sidebar() {
 
   useEffect(() => {
     closeMobileNav();
-    const activeGroup = navigationGroups.find((group) => group.items.some((item) => pathname === item.href || pathname.startsWith(`${item.href}/`)));
+    setFilter('');
+    const activeGroup = navigationGroups.find((group) => group.items.some((item) => isItemActive(pathname, item.href)));
     if (activeGroup) setOpenGroups((current) => ({ ...current, [activeGroup.id]: true }));
   }, [pathname, closeMobileNav]);
 
@@ -69,6 +75,17 @@ export default function Sidebar() {
       items: group.items.filter((item) => hasAnyPermission(user, item.permissionsAny)),
     }))
     .filter((group) => group.items.length), [user]);
+
+  const filteredGroups = useMemo(() => {
+    const term = filter.trim().toLowerCase();
+    if (!term) return visibleGroups;
+    return visibleGroups
+      .map((group) => ({
+        ...group,
+        items: group.items.filter((item) => `${group.label} ${item.label}`.toLowerCase().includes(term)),
+      }))
+      .filter((group) => group.items.length);
+  }, [filter, visibleGroups]);
 
   function toggleGroup(groupId) {
     setOpenGroups((current) => {
@@ -96,16 +113,18 @@ export default function Sidebar() {
       />
       <aside
         className={`${collapsed ? 'sidebar collapsed' : 'sidebar'} ${mobileNavOpen ? 'mobile-open' : ''}`}
-        aria-label="Application navigation"
+        aria-label="Accounting navigation"
       >
         <div className="brand">
-          <div className="brand-badge" aria-hidden="true">HO</div>
-          {!collapsed && (
-            <div className="brand-copy">
-              <h2>Accounting & Hotel</h2>
-              <div className="small muted-on-dark">Hidden Oasis finance system</div>
-            </div>
-          )}
+          <Link href="/dashboard" className="brand-home" aria-label="Hidden Oasis Accounting dashboard">
+            <div className="brand-badge" aria-hidden="true">HO</div>
+            {!collapsed && (
+              <div className="brand-copy">
+                <h2>Accounting</h2>
+                <div className="small muted-on-dark">Hidden Oasis</div>
+              </div>
+            )}
+          </Link>
           <button
             type="button"
             className="sidebar-toggle desktop-only"
@@ -120,13 +139,28 @@ export default function Sidebar() {
           </button>
         </div>
 
+        {!collapsed && (
+          <div className="sidebar-filter" role="search">
+            <NavIcon name="search" size={15} />
+            <input
+              value={filter}
+              onChange={(event) => setFilter(event.target.value)}
+              placeholder="Find a page"
+              aria-label="Filter navigation"
+            />
+            {filter && <button type="button" onClick={() => setFilter('')} aria-label="Clear navigation filter"><NavIcon name="close" size={14} /></button>}
+          </div>
+        )}
+
         <div className="sidebar-scroll">
+          {!collapsed && <div className="sidebar-eyebrow">Workspace</div>}
           <nav aria-label="Primary navigation">
-            {visibleGroups.map((group) => {
-              const expanded = collapsed || openGroups[group.id] !== false;
+            {filteredGroups.map((group) => {
+              const groupActive = group.items.some((item) => isItemActive(pathname, item.href));
+              const expanded = Boolean(filter) || openGroups[group.id] !== false;
               const regionId = `sidebar-group-${group.id}`;
               return (
-                <section key={group.id} className="nav-group" aria-label={group.label}>
+                <section key={group.id} className={`nav-group ${groupActive ? 'active-group' : ''}`} aria-label={group.label}>
                   {!collapsed && (
                     <button
                       type="button"
@@ -135,13 +169,16 @@ export default function Sidebar() {
                       aria-controls={regionId}
                       onClick={() => toggleGroup(group.id)}
                     >
-                      <span>{group.label}</span>
+                      <span className="nav-group-heading">
+                        <span className="nav-group-icon"><NavIcon name={group.icon} size={15} /></span>
+                        <span><strong>{group.label}</strong><small>{group.description}</small></span>
+                      </span>
                       <NavIcon name="down" size={14} className={expanded ? '' : 'rotate-negative-90'} />
                     </button>
                   )}
-                  <div id={regionId} className="nav-group-items" hidden={!expanded}>
+                  <div id={regionId} className="nav-group-items" hidden={!expanded && !collapsed}>
                     {group.items.map((item) => {
-                      const active = pathname === item.href || pathname.startsWith(`${item.href}/`);
+                      const active = isItemActive(pathname, item.href);
                       return (
                         <Link
                           key={item.href}
@@ -160,28 +197,22 @@ export default function Sidebar() {
                 </section>
               );
             })}
+            {!collapsed && filter && !filteredGroups.length && <div className="sidebar-no-results">No navigation matches “{filter}”.</div>}
 
-            {connectedApps.length > 0 && (
-              <section className="nav-group" aria-label="Connected Apps">
+            {connectedApps.length > 0 && !filter && (
+              <section className="nav-group connected-apps" aria-label="Connected Apps">
                 {!collapsed && <div className="nav-group-static-label">Connected Apps</div>}
                 <div className="nav-group-items">
                   {connectedApps.map((item) => (
                     <a key={item.label} href={item.href} rel="noreferrer" title={collapsed ? item.label : undefined} aria-label={collapsed ? item.label : undefined}>
                       <span className="nav-symbol"><NavIcon name="app" size={17} /></span>
-                      {!collapsed && <span className="nav-text">{item.label}</span>}
+                      {!collapsed && <><span className="nav-text">{item.label}</span><span className="external-mark" aria-hidden="true">↗</span></>}
                     </a>
                   ))}
                 </div>
               </section>
             )}
           </nav>
-
-          {!collapsed && (
-            <div className="sidebar-status" role="status">
-              <strong><span className="sidebar-status-dot" />System status</strong>
-              Core services operational. Connected-app events remain subject to Accounting review.
-            </div>
-          )}
           {!loaded && <div className="sidebar-loading" role="status">Loading access…</div>}
         </div>
 
