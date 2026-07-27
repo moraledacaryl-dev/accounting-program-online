@@ -20,6 +20,7 @@ import './pass-8-final-qa.css';
 import './pass-2-global-design-system.css';
 import './pass-3-list-first-workflows.css';
 import './pass-4-tables-search-filter.css';
+import './pass-5-forms-validation-feedback.css';
 import ConfirmActionProvider from '../components/ConfirmActionProvider';
 import AppFrame from '../components/app-shell/AppFrame';
 import { AppShellProvider } from '../components/app-shell/AppShellContext';
