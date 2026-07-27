@@ -1,0 +1,250 @@
+/* Pass 4: tables, search, filters, and list actions */
+
+:where(.table-wrap, .responsive-table, .data-table-wrap) {
+  width: 100%;
+  max-width: 100%;
+  overflow: auto;
+  border: 1px solid var(--ho-line);
+  border-radius: var(--ho-radius-md);
+  background: var(--ho-surface);
+  scrollbar-gutter: stable;
+}
+
+:where(.table-wrap, .responsive-table, .data-table-wrap) table,
+table.table {
+  width: 100%;
+  min-width: 720px;
+  border-collapse: separate;
+  border-spacing: 0;
+  font-variant-numeric: tabular-nums;
+}
+
+:where(.table-wrap, .responsive-table, .data-table-wrap) thead th,
+table.table thead th {
+  position: sticky;
+  top: 0;
+  z-index: 2;
+  padding: .72rem .8rem;
+  border-bottom: 1px solid var(--ho-line-strong);
+  background: color-mix(in srgb, var(--ho-surface) 94%, var(--ho-bg));
+  color: var(--ho-muted-strong);
+  font-size: var(--ho-text-xs);
+  font-weight: 800;
+  letter-spacing: .055em;
+  text-align: left;
+  text-transform: uppercase;
+  white-space: nowrap;
+}
+
+:where(.table-wrap, .responsive-table, .data-table-wrap) tbody td,
+table.table tbody td {
+  padding: .72rem .8rem;
+  border-bottom: 1px solid var(--ho-line);
+  color: var(--ho-ink-soft);
+  font-size: var(--ho-text-base);
+  line-height: 1.42;
+  vertical-align: middle;
+}
+
+:where(.table-wrap, .responsive-table, .data-table-wrap) tbody tr:last-child td,
+table.table tbody tr:last-child td {
+  border-bottom: 0;
+}
+
+:where(.table-wrap, .responsive-table, .data-table-wrap) tbody tr,
+table.table tbody tr {
+  transition: background 120ms ease;
+}
+
+:where(.table-wrap, .responsive-table, .data-table-wrap) tbody tr:hover,
+table.table tbody tr:hover {
+  background: var(--ho-surface-muted);
+}
+
+:where(.table-wrap, .responsive-table, .data-table-wrap) tbody tr:focus-within,
+table.table tbody tr:focus-within {
+  background: var(--ho-brand-soft);
+}
+
+:where(.table-wrap, .responsive-table, .data-table-wrap) td.numeric,
+:where(.table-wrap, .responsive-table, .data-table-wrap) th.numeric,
+table.table td.numeric,
+table.table th.numeric {
+  text-align: right;
+  white-space: nowrap;
+}
+
+:where(.table-wrap, .responsive-table, .data-table-wrap) td:first-child,
+table.table td:first-child {
+  color: var(--ho-ink);
+  font-weight: 650;
+}
+
+:where(.table-wrap, .responsive-table, .data-table-wrap) td .row.wrap,
+table.table td.row.wrap,
+table.table td .row.wrap {
+  justify-content: flex-end;
+  gap: .4rem;
+  flex-wrap: nowrap;
+}
+
+:where(.table-wrap, .responsive-table, .data-table-wrap) td button,
+table.table td button,
+.table-action {
+  min-height: 30px;
+  padding: .35rem .55rem;
+  font-size: var(--ho-text-sm);
+  white-space: nowrap;
+}
+
+:where(input[type='search']) {
+  min-height: 40px;
+  padding-left: 2.35rem;
+  background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='16' height='16' viewBox='0 0 24 24' fill='none' stroke='%2368736d' stroke-width='2' stroke-linecap='round' stroke-linejoin='round'%3E%3Ccircle cx='11' cy='11' r='8'/%3E%3Cpath d='m21 21-4.35-4.35'/%3E%3C/svg%3E");
+  background-repeat: no-repeat;
+  background-position: .75rem center;
+  background-size: 1rem;
+}
+
+:where(input[type='search'])::-webkit-search-cancel-button {
+  cursor: pointer;
+}
+
+.filter-bar,
+.table-toolbar,
+.list-toolbar,
+.workflow-page__toolbar {
+  display: flex;
+  align-items: flex-end;
+  gap: .625rem;
+  flex-wrap: wrap;
+}
+
+.filter-bar,
+.table-toolbar,
+.list-toolbar {
+  padding: .75rem;
+  border: 1px solid var(--ho-line);
+  border-radius: var(--ho-radius-md);
+  background: var(--ho-surface-muted);
+}
+
+.filter-bar > label,
+.table-toolbar > label,
+.list-toolbar > label {
+  min-width: 150px;
+  margin: 0;
+}
+
+.filter-bar .filter-grow,
+.table-toolbar .filter-grow,
+.list-toolbar .filter-grow {
+  flex: 1 1 240px;
+}
+
+.filter-bar__actions,
+.table-toolbar__actions,
+.list-toolbar__actions {
+  display: flex;
+  align-items: center;
+  gap: .5rem;
+  margin-left: auto;
+}
+
+.result-summary,
+.workflow-result-count,
+.table-result-count {
+  color: var(--ho-muted);
+  font-size: var(--ho-text-sm);
+  font-variant-numeric: tabular-nums;
+}
+
+.empty-table-cell {
+  padding: 2rem 1rem !important;
+  color: var(--ho-muted) !important;
+  text-align: center;
+  font-weight: 500 !important;
+}
+
+.status-pill {
+  display: inline-flex;
+  align-items: center;
+  min-height: 24px;
+  padding: .2rem .5rem;
+  border: 1px solid var(--ho-line-strong);
+  border-radius: var(--ho-radius-pill);
+  background: var(--ho-surface-muted);
+  color: var(--ho-muted-strong);
+  font-size: var(--ho-text-xs);
+  font-weight: 750;
+  line-height: 1;
+  white-space: nowrap;
+}
+
+.status-pill::before {
+  width: .42rem;
+  height: .42rem;
+  margin-right: .35rem;
+  border-radius: 50%;
+  background: currentColor;
+  content: '';
+  opacity: .72;
+}
+
+.status-success { border-color: #b9dcc9; background: var(--ho-success-soft); color: var(--ho-success); }
+.status-warning { border-color: #e5cfaa; background: var(--ho-warning-soft); color: var(--ho-warning); }
+.status-danger { border-color: #e4b8b4; background: var(--ho-danger-soft); color: var(--ho-danger); }
+.status-info { border-color: #bdccdc; background: var(--ho-info-soft); color: var(--ho-info); }
+
+@media (max-width: 760px) {
+  .filter-bar,
+  .table-toolbar,
+  .list-toolbar,
+  .workflow-page__toolbar {
+    align-items: stretch;
+    flex-direction: column;
+  }
+
+  .filter-bar > *,
+  .table-toolbar > *,
+  .list-toolbar > *,
+  .workflow-page__toolbar > * {
+    width: 100% !important;
+    min-width: 0 !important;
+  }
+
+  .filter-bar__actions,
+  .table-toolbar__actions,
+  .list-toolbar__actions {
+    margin-left: 0;
+  }
+
+  :where(.table-wrap, .responsive-table, .data-table-wrap) {
+    margin-inline: -1px;
+    border-radius: var(--ho-radius-sm);
+  }
+
+  :where(.table-wrap, .responsive-table, .data-table-wrap) thead th,
+  table.table thead th,
+  :where(.table-wrap, .responsive-table, .data-table-wrap) tbody td,
+  table.table tbody td {
+    padding: .65rem .7rem;
+  }
+}
+
+@media print {
+  :where(.table-wrap, .responsive-table, .data-table-wrap) {
+    overflow: visible;
+    border: 0;
+  }
+
+  :where(.table-wrap, .responsive-table, .data-table-wrap) table,
+  table.table {
+    min-width: 0;
+  }
+
+  :where(.table-wrap, .responsive-table, .data-table-wrap) thead th,
+  table.table thead th {
+    position: static;
+  }
+}
