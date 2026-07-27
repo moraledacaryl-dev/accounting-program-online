@@ -10,6 +10,7 @@ import {
 } from '../../lib/api';
 import { shouldPreventEnterSubmit } from '../../lib/formBehavior';
 import { useConfirmAction } from '../../components/ConfirmActionProvider';
+import RecordDrawer from '../../components/RecordDrawer';
 
 const EMPTY_FORM = {
   code: '',
@@ -25,6 +26,7 @@ export default function ChartOfAccountsPage() {
   const confirmAction = useConfirmAction();
   const [rows, setRows] = useState([]);
   const [editingId, setEditingId] = useState(null);
+  const [drawerOpen, setDrawerOpen] = useState(false);
   const [form, setForm] = useState({ ...EMPTY_FORM });
   const [search, setSearch] = useState('');
   const [error, setError] = useState('');
@@ -59,6 +61,13 @@ export default function ChartOfAccountsPage() {
     );
   }, [rows, search]);
 
+  function closeDrawer() {
+    setDrawerOpen(false);
+    setEditingId(null);
+    setForm({ ...EMPTY_FORM });
+    hydrateNewCode();
+  }
+
   async function submit(e) {
     e.preventDefault();
     setError('');
@@ -80,6 +89,7 @@ export default function ChartOfAccountsPage() {
         await createChartAccount(payload);
         setNotice('Chart account created.');
       }
+      setDrawerOpen(false);
       setEditingId(null);
       setForm({ ...EMPTY_FORM });
       await hydrateNewCode();
@@ -87,6 +97,13 @@ export default function ChartOfAccountsPage() {
     } catch (err) {
       setError(err.message || 'Failed to save chart account.');
     }
+  }
+
+  function startNew() {
+    setEditingId(null);
+    setForm({ ...EMPTY_FORM });
+    setDrawerOpen(true);
+    hydrateNewCode();
   }
 
   function editRow(row) {
@@ -100,6 +117,7 @@ export default function ChartOfAccountsPage() {
       is_active: !!row.is_active,
       notes: row.notes || '',
     });
+    setDrawerOpen(true);
   }
 
   async function removeRow(row) {
@@ -108,10 +126,7 @@ export default function ChartOfAccountsPage() {
     try {
       await deleteChartAccount(row.id);
       setNotice('Chart account deleted.');
-      if (editingId === row.id) {
-        setEditingId(null);
-        setForm({ ...EMPTY_FORM });
-      }
+      if (editingId === row.id) closeDrawer();
       await load();
     } catch (err) {
       setError(err.message || 'Failed to delete chart account.');
@@ -123,63 +138,31 @@ export default function ChartOfAccountsPage() {
   }
 
   return (
-    <div className="stack">
-      <section className="section">
-        <div className="row" style={{ justifyContent: 'space-between' }}>
-          <div>
-            <h1>Chart of Accounts</h1>
-            <p className="muted">Create and maintain account codes used by journals and mapping rules.</p>
-          </div>
-          <input data-enter-context="search" type="search" placeholder="Search code/name/type" value={search} onChange={(e) => setSearch(e.target.value)} />
+    <div className="workflow-page">
+      <section className="section workflow-page__header">
+        <div className="workflow-page__header-copy">
+          <h1>Chart of Accounts</h1>
+          <p className="muted">Maintain the account structure used by journals, mapping rules, reports, and period close.</p>
         </div>
-        {!!notice && <p className="success-text">{notice}</p>}
-        {!!error && <p className="error-text">{error}</p>}
+        <div className="workflow-page__toolbar">
+          <input data-enter-context="search" type="search" placeholder="Search code, name, or type" value={search} onChange={(e) => setSearch(e.target.value)} />
+          <button type="button" onClick={startNew}>New account</button>
+        </div>
       </section>
 
-      <div className="grid">
-        <section className="section">
-          <h2>{editingId ? `Edit Account #${editingId}` : 'New Account'}</h2>
-          <form onSubmit={submit} className="stack" onKeyDown={(event) => shouldPreventEnterSubmit(event, isSubmittable)}>
-            <div className="form-grid">
-              <label>Code<input value={form.code} onChange={(e) => setForm((prev) => ({ ...prev, code: e.target.value }))} placeholder="Auto-generated if blank" /></label>
-              <label>Name<input required value={form.name} onChange={(e) => setForm((prev) => ({ ...prev, name: e.target.value }))} /></label>
-              <label>Type
-                <select value={form.account_type} onChange={(e) => setForm((prev) => ({ ...prev, account_type: e.target.value }))}>
-                  <option value="asset">asset</option>
-                  <option value="liability">liability</option>
-                  <option value="equity">equity</option>
-                  <option value="revenue">revenue</option>
-                  <option value="expense">expense</option>
-                </select>
-              </label>
-              <label>Subtype<input value={form.subtype} onChange={(e) => setForm((prev) => ({ ...prev, subtype: e.target.value }))} /></label>
-              <label>Parent Account
-                <select value={form.parent_id} onChange={(e) => setForm((prev) => ({ ...prev, parent_id: e.target.value }))}>
-                  <option value="">No parent</option>
-                  {rows.filter((row) => row.id !== editingId).map((row) => (
-                    <option key={row.id} value={row.id}>{row.code} · {row.name}</option>
-                  ))}
-                </select>
-              </label>
-              <label>Active
-                <select value={String(form.is_active)} onChange={(e) => setForm((prev) => ({ ...prev, is_active: e.target.value === 'true' }))}>
-                  <option value="true">Active</option>
-                  <option value="false">Inactive</option>
-                </select>
-              </label>
-            </div>
-            <label>Notes<textarea value={form.notes} onChange={(e) => setForm((prev) => ({ ...prev, notes: e.target.value }))} /></label>
-            <div className="row wrap">
-              <button type="submit">{editingId ? 'Update Account' : 'Create Account'}</button>
-              {editingId && <button type="button" className="secondary" onClick={() => { setEditingId(null); setForm({ ...EMPTY_FORM }); hydrateNewCode(); }}>Cancel</button>}
-            </div>
-          </form>
-        </section>
+      {!!notice && <div className="success-text" role="status">{notice}</div>}
+      {!!error && <div className="error-text" role="alert">{error}</div>}
 
-        <section className="section">
-          <h2>Account List</h2>
+      <section className="section workflow-list-card">
+        <div className="workflow-list-card__header">
+          <div>
+            <h2>Accounts</h2>
+            <div className="workflow-result-count">{filteredRows.length} of {rows.length} accounts</div>
+          </div>
+        </div>
+        <div className="table-wrap">
           <table className="table">
-            <thead><tr><th>Code</th><th>Name</th><th>Type</th><th>Parent</th><th>Status</th><th></th></tr></thead>
+            <thead><tr><th>Code</th><th>Name</th><th>Type</th><th>Parent</th><th>Status</th><th aria-label="Actions" /></tr></thead>
             <tbody>
               {filteredRows.map((row) => (
                 <tr key={row.id}>
@@ -187,18 +170,61 @@ export default function ChartOfAccountsPage() {
                   <td>{row.name}<br /><span className="small muted">{row.subtype || '-'}</span></td>
                   <td>{row.account_type}</td>
                   <td>{row.parent_code ? `${row.parent_code} · ${row.parent_name}` : '-'}</td>
-                  <td>{row.is_active ? 'Active' : 'Inactive'}</td>
+                  <td><span className={row.is_active ? 'status-pill status-success' : 'status-pill'}>{row.is_active ? 'Active' : 'Inactive'}</span></td>
                   <td className="row wrap">
                     <button type="button" className="secondary" onClick={() => editRow(row)}>Edit</button>
                     <button type="button" className="secondary" onClick={() => removeRow(row)}>Delete</button>
                   </td>
                 </tr>
               ))}
-              {!filteredRows.length && <tr><td colSpan="6" className="muted">No chart accounts found.</td></tr>}
+              {!filteredRows.length && <tr><td colSpan="6" className="muted">No chart accounts match the current search.</td></tr>}
             </tbody>
           </table>
-        </section>
-      </div>
+        </div>
+      </section>
+
+      <RecordDrawer
+        open={drawerOpen}
+        title={editingId ? 'Edit account' : 'New account'}
+        description={editingId ? 'Update this account without losing your place in the list.' : 'Create an account, then return directly to the account list.'}
+        onClose={closeDrawer}
+      >
+        <form onSubmit={submit} className="stack" onKeyDown={(event) => shouldPreventEnterSubmit(event, isSubmittable)}>
+          <div className="form-grid">
+            <label>Code<input value={form.code} onChange={(e) => setForm((prev) => ({ ...prev, code: e.target.value }))} placeholder="Auto-generated if blank" /></label>
+            <label>Name<input required value={form.name} onChange={(e) => setForm((prev) => ({ ...prev, name: e.target.value }))} /></label>
+            <label>Type
+              <select value={form.account_type} onChange={(e) => setForm((prev) => ({ ...prev, account_type: e.target.value }))}>
+                <option value="asset">Asset</option>
+                <option value="liability">Liability</option>
+                <option value="equity">Equity</option>
+                <option value="revenue">Revenue</option>
+                <option value="expense">Expense</option>
+              </select>
+            </label>
+            <label>Subtype<input value={form.subtype} onChange={(e) => setForm((prev) => ({ ...prev, subtype: e.target.value }))} /></label>
+            <label>Parent account
+              <select value={form.parent_id} onChange={(e) => setForm((prev) => ({ ...prev, parent_id: e.target.value }))}>
+                <option value="">No parent</option>
+                {rows.filter((row) => row.id !== editingId).map((row) => (
+                  <option key={row.id} value={row.id}>{row.code} · {row.name}</option>
+                ))}
+              </select>
+            </label>
+            <label>Status
+              <select value={String(form.is_active)} onChange={(e) => setForm((prev) => ({ ...prev, is_active: e.target.value === 'true' }))}>
+                <option value="true">Active</option>
+                <option value="false">Inactive</option>
+              </select>
+            </label>
+          </div>
+          <label>Notes<textarea value={form.notes} onChange={(e) => setForm((prev) => ({ ...prev, notes: e.target.value }))} /></label>
+          <div className="record-drawer__footer">
+            <button type="button" className="secondary" onClick={closeDrawer}>Cancel</button>
+            <button type="submit">{editingId ? 'Update account' : 'Create account'}</button>
+          </div>
+        </form>
+      </RecordDrawer>
     </div>
   );
 }
