@@ -27,6 +27,7 @@ import './pass-8-empty-loading-states.css';
 import './pass-9-bulk-actions-selection.css';
 import './pass-10-dialogs-drawers-overlays.css';
 import './pass-11-notifications-toasts-feedback.css';
+import './pass-12-accessibility-keyboard-focus.css';
 import ConfirmActionProvider from '../components/ConfirmActionProvider';
 import AppFrame from '../components/app-shell/AppFrame';
 import { AppShellProvider } from '../components/app-shell/AppShellContext';
