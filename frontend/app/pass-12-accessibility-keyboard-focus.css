@@ -1,0 +1,120 @@
+/* Pass 12 — accessibility, keyboard navigation, and focus refinement */
+
+:root {
+  --a11y-focus-ring: 0 0 0 3px rgba(13, 95, 92, 0.24);
+  --a11y-focus-outline: 2px solid var(--color-primary, #0d5f5c);
+}
+
+:where(a, button, input, select, textarea, summary, [role='button'], [role='tab'], [role='menuitem'], [tabindex]):focus-visible {
+  outline: var(--a11y-focus-outline);
+  outline-offset: 2px;
+  box-shadow: var(--a11y-focus-ring);
+}
+
+:where(button, [role='button'], a, input, select, textarea):focus:not(:focus-visible) {
+  outline: none;
+}
+
+.skip-link {
+  position: fixed;
+  inset-block-start: 0.75rem;
+  inset-inline-start: 0.75rem;
+  z-index: 10000;
+  transform: translateY(-200%);
+  padding: 0.7rem 1rem;
+  border-radius: 0.55rem;
+  background: var(--color-surface, #fff);
+  color: var(--color-text, #172322);
+  border: 1px solid var(--color-border, #d7e0df);
+  box-shadow: 0 10px 30px rgba(23, 35, 34, 0.18);
+  font-weight: 700;
+  transition: transform 140ms ease;
+}
+
+.skip-link:focus {
+  transform: translateY(0);
+}
+
+:where([aria-current='page'], [aria-current='step'], [aria-selected='true']) {
+  font-weight: 700;
+}
+
+:where([aria-disabled='true'], :disabled) {
+  cursor: not-allowed;
+}
+
+:where([aria-invalid='true']) {
+  border-color: var(--color-danger, #b42318) !important;
+}
+
+:where([aria-describedby]) {
+  scroll-margin-block: 6rem;
+}
+
+:where(table) th[scope='col'],
+:where(table) th[scope='row'] {
+  font-weight: 700;
+}
+
+:where([role='status'], [role='alert'], [aria-live]) {
+  overflow-wrap: anywhere;
+}
+
+:where([role='dialog'], [role='menu'], [role='listbox'], [role='tooltip']) {
+  scroll-margin: 1rem;
+}
+
+:where([role='tablist']) {
+  scrollbar-width: thin;
+}
+
+:where([role='tab']) {
+  min-block-size: 2.75rem;
+}
+
+:where(input[type='checkbox'], input[type='radio']) {
+  min-inline-size: 1rem;
+  min-block-size: 1rem;
+}
+
+:where(button, .button, [role='button']) {
+  min-block-size: 2.5rem;
+}
+
+:where(a, button, [role='button'], [role='menuitem']) {
+  -webkit-tap-highlight-color: rgba(13, 95, 92, 0.16);
+}
+
+@media (pointer: coarse) {
+  :where(button, .button, [role='button'], input, select, textarea, [role='tab'], [role='menuitem']) {
+    min-block-size: 2.75rem;
+  }
+}
+
+@media (prefers-contrast: more) {
+  :where(a, button, input, select, textarea, summary, [role='button'], [role='tab'], [role='menuitem'], [tabindex]):focus-visible {
+    outline-width: 3px;
+    box-shadow: none;
+  }
+
+  :where(.card, .panel, table, input, select, textarea, button) {
+    border-color: currentColor;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .skip-link,
+  :where(a, button, input, select, textarea, summary, [role='button'], [role='tab'], [role='menuitem']) {
+    transition-duration: 0.01ms !important;
+    animation-duration: 0.01ms !important;
+    animation-iteration-count: 1 !important;
+    scroll-behavior: auto !important;
+  }
+}
+
+@media print {
+  .skip-link,
+  [role='tooltip'] {
+    display: none !important;
+  }
+}
