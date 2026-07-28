@@ -1,0 +1,208 @@
+/* Pass 9: bulk actions and selection-state refinement */
+
+.bulk-action-bar,
+.selection-toolbar,
+[data-bulk-actions] {
+  position: sticky;
+  bottom: 16px;
+  z-index: 24;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 14px;
+  width: min(100%, 980px);
+  margin: 14px auto 0;
+  padding: 12px 14px;
+  border: 1px solid color-mix(in srgb, var(--brand) 26%, var(--line));
+  border-radius: 16px;
+  background: color-mix(in srgb, var(--surface) 94%, var(--brand-soft));
+  box-shadow: 0 16px 40px rgba(15, 23, 42, .16);
+  backdrop-filter: blur(14px);
+}
+
+.bulk-action-summary,
+.selection-summary {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  min-width: 0;
+  font-size: 13px;
+  font-weight: 700;
+}
+
+.bulk-action-summary .badge,
+.selection-summary .badge {
+  flex: 0 0 auto;
+  min-width: 28px;
+  justify-content: center;
+  font-variant-numeric: tabular-nums;
+}
+
+.bulk-action-buttons,
+.selection-actions {
+  display: flex;
+  align-items: center;
+  justify-content: flex-end;
+  gap: 8px;
+  flex-wrap: wrap;
+}
+
+.bulk-action-buttons button,
+.bulk-action-buttons .button-link,
+.selection-actions button,
+.selection-actions .button-link {
+  min-height: 38px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.bulk-action-buttons .danger,
+.selection-actions .danger {
+  margin-left: 2px;
+}
+
+.table-select-column,
+th.select-column,
+td.select-column {
+  width: 44px;
+  min-width: 44px;
+  max-width: 44px;
+  padding-inline: 10px !important;
+  text-align: center;
+}
+
+.table input[type='checkbox'],
+.record-list input[type='checkbox'],
+.selection-checkbox {
+  width: 17px;
+  height: 17px;
+  margin: 0;
+  accent-color: var(--brand);
+  cursor: pointer;
+}
+
+.table input[type='checkbox']:focus-visible,
+.record-list input[type='checkbox']:focus-visible,
+.selection-checkbox:focus-visible {
+  outline: 3px solid color-mix(in srgb, var(--brand) 28%, transparent);
+  outline-offset: 2px;
+}
+
+.table tr:has(input[type='checkbox']:checked),
+.record-row:has(input[type='checkbox']:checked),
+.list-row:has(input[type='checkbox']:checked) {
+  background: color-mix(in srgb, var(--brand-soft) 68%, var(--surface));
+}
+
+.table tr:has(input[type='checkbox']:checked) td:first-child,
+.record-row:has(input[type='checkbox']:checked),
+.list-row:has(input[type='checkbox']:checked) {
+  box-shadow: inset 3px 0 0 var(--brand);
+}
+
+.table tbody tr:has(input[type='checkbox']):hover {
+  background: color-mix(in srgb, var(--brand-soft) 42%, var(--surface));
+}
+
+.select-all-control,
+.selection-control {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  color: var(--muted);
+  font-size: 12px;
+  font-weight: 700;
+  cursor: pointer;
+}
+
+.select-all-control:hover,
+.selection-control:hover {
+  color: var(--text);
+}
+
+.bulk-menu,
+.selection-menu {
+  min-width: 220px;
+  padding: 8px;
+  border: 1px solid var(--line);
+  border-radius: 14px;
+  background: var(--surface);
+  box-shadow: var(--shadow-md, 0 14px 36px rgba(15, 23, 42, .14));
+}
+
+.bulk-menu button,
+.selection-menu button {
+  width: 100%;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  min-height: 40px;
+  padding: 9px 10px;
+  border: 0;
+  border-radius: 10px;
+  background: transparent;
+  text-align: left;
+  cursor: pointer;
+}
+
+.bulk-menu button:hover,
+.selection-menu button:hover {
+  background: var(--surface-muted);
+}
+
+.bulk-menu button:focus-visible,
+.selection-menu button:focus-visible {
+  outline: 2px solid var(--brand);
+  outline-offset: -2px;
+}
+
+.bulk-menu .danger,
+.selection-menu .danger {
+  color: var(--danger);
+}
+
+@media (max-width: 760px) {
+  .bulk-action-bar,
+  .selection-toolbar,
+  [data-bulk-actions] {
+    bottom: 8px;
+    width: calc(100% - 12px);
+    flex-direction: column;
+    align-items: stretch;
+    gap: 10px;
+    padding: 12px;
+  }
+
+  .bulk-action-buttons,
+  .selection-actions {
+    display: grid;
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+
+  .bulk-action-buttons button,
+  .bulk-action-buttons .button-link,
+  .selection-actions button,
+  .selection-actions .button-link {
+    width: 100%;
+  }
+}
+
+@media (max-width: 480px) {
+  .bulk-action-buttons,
+  .selection-actions {
+    grid-template-columns: 1fr;
+  }
+}
+
+@media print {
+  .bulk-action-bar,
+  .selection-toolbar,
+  [data-bulk-actions],
+  .table-select-column,
+  th.select-column,
+  td.select-column {
+    display: none !important;
+  }
+}
