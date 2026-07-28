@@ -1,0 +1,290 @@
+/* Pass 15: final consistency and visual polish */
+
+:root {
+  --pass15-transition-fast: 120ms ease;
+  --pass15-transition-base: 180ms ease;
+  --pass15-control-radius: 10px;
+  --pass15-panel-radius: 14px;
+}
+
+html {
+  scroll-behavior: smooth;
+}
+
+body {
+  text-rendering: optimizeLegibility;
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
+}
+
+button,
+a,
+input,
+select,
+textarea,
+[role='button'],
+[role='tab'],
+[role='menuitem'] {
+  transition:
+    color var(--pass15-transition-fast),
+    background-color var(--pass15-transition-fast),
+    border-color var(--pass15-transition-fast),
+    box-shadow var(--pass15-transition-fast),
+    opacity var(--pass15-transition-fast),
+    transform var(--pass15-transition-fast);
+}
+
+button:active:not(:disabled),
+[role='button']:active:not([aria-disabled='true']) {
+  transform: translateY(1px);
+}
+
+button:disabled,
+input:disabled,
+select:disabled,
+textarea:disabled,
+[aria-disabled='true'] {
+  cursor: not-allowed;
+}
+
+button,
+input,
+select,
+textarea {
+  font: inherit;
+}
+
+input,
+select,
+textarea,
+.btn,
+.button,
+[role='button'] {
+  border-radius: var(--pass15-control-radius);
+}
+
+.card,
+.panel,
+.section-card,
+.summary-card,
+.metric-card,
+.detail-card,
+.document-sheet,
+.empty-state,
+.system-state {
+  border-radius: var(--pass15-panel-radius);
+}
+
+h1,
+h2,
+h3,
+h4,
+p,
+label,
+th,
+td,
+button,
+a,
+span {
+  overflow-wrap: anywhere;
+}
+
+h1,
+h2,
+h3,
+h4 {
+  text-wrap: balance;
+}
+
+p,
+.helper-text,
+.field-help,
+.empty-state-copy,
+.system-message {
+  text-wrap: pretty;
+}
+
+[data-currency],
+.currency,
+.amount,
+.money,
+.total,
+.balance,
+.numeric,
+.tabular-nums,
+td[data-type='number'],
+th[data-type='number'] {
+  font-variant-numeric: tabular-nums lining-nums;
+}
+
+.table-wrap,
+.table-container,
+.data-table-wrap {
+  scrollbar-gutter: stable;
+}
+
+.table-wrap::-webkit-scrollbar,
+.table-container::-webkit-scrollbar,
+.data-table-wrap::-webkit-scrollbar {
+  height: 10px;
+  width: 10px;
+}
+
+.table-wrap::-webkit-scrollbar-thumb,
+.table-container::-webkit-scrollbar-thumb,
+.data-table-wrap::-webkit-scrollbar-thumb {
+  border: 2px solid transparent;
+  border-radius: 999px;
+  background: color-mix(in srgb, currentColor 25%, transparent);
+  background-clip: padding-box;
+}
+
+img,
+svg,
+canvas,
+video {
+  max-width: 100%;
+}
+
+img {
+  height: auto;
+}
+
+svg {
+  flex: 0 0 auto;
+}
+
+hr,
+.divider,
+.separator {
+  border: 0;
+  border-top: 1px solid var(--border-color, rgba(15, 23, 42, 0.12));
+}
+
+.badge,
+.status-badge,
+.pill,
+.chip,
+.tag {
+  line-height: 1.15;
+  vertical-align: middle;
+}
+
+.toolbar,
+.page-actions,
+.record-actions,
+.form-actions,
+.bulk-actions,
+.dialog-actions,
+.export-actions {
+  align-items: center;
+}
+
+.toolbar > *,
+.page-actions > *,
+.record-actions > *,
+.form-actions > *,
+.bulk-actions > *,
+.dialog-actions > *,
+.export-actions > * {
+  min-width: 0;
+}
+
+:is(.page-header, .record-header, .section-header, .panel-header) > :first-child {
+  min-width: 0;
+}
+
+:is(.page-header, .record-header, .section-header, .panel-header) h1,
+:is(.page-header, .record-header, .section-header, .panel-header) h2,
+:is(.page-header, .record-header, .section-header, .panel-header) h3 {
+  margin-block-start: 0;
+}
+
+:is(.page-header, .record-header, .section-header, .panel-header) p:last-child {
+  margin-block-end: 0;
+}
+
+input::placeholder,
+textarea::placeholder {
+  opacity: 0.72;
+}
+
+::selection {
+  background: color-mix(in srgb, var(--primary, #0f766e) 24%, transparent);
+}
+
+[hidden] {
+  display: none !important;
+}
+
+[aria-busy='true'] {
+  cursor: progress;
+}
+
+[aria-busy='true'] button,
+button[aria-busy='true'] {
+  pointer-events: none;
+}
+
+@media (max-width: 720px) {
+  .page-header,
+  .record-header,
+  .section-header,
+  .panel-header {
+    gap: 12px;
+  }
+
+  .page-actions,
+  .record-actions,
+  .form-actions,
+  .dialog-actions,
+  .export-actions {
+    width: 100%;
+  }
+
+  .page-actions > button,
+  .page-actions > a,
+  .record-actions > button,
+  .record-actions > a,
+  .form-actions > button,
+  .dialog-actions > button,
+  .export-actions > button,
+  .export-actions > a {
+    min-height: 44px;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  html {
+    scroll-behavior: auto;
+  }
+
+  *,
+  *::before,
+  *::after {
+    animation-duration: 0.01ms !important;
+    animation-iteration-count: 1 !important;
+    scroll-behavior: auto !important;
+    transition-duration: 0.01ms !important;
+  }
+}
+
+@media print {
+  *,
+  *::before,
+  *::after {
+    animation: none !important;
+    box-shadow: none !important;
+    text-shadow: none !important;
+    transition: none !important;
+  }
+
+  html,
+  body {
+    background: #fff !important;
+  }
+
+  a {
+    text-decoration: none;
+  }
+}
