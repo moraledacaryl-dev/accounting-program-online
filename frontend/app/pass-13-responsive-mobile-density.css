@@ -1,0 +1,246 @@
+/* Pass 13: responsive, mobile, and density refinement */
+
+:root {
+  --responsive-page-gutter: clamp(1rem, 2.4vw, 2rem);
+  --responsive-section-gap: clamp(1rem, 2vw, 1.5rem);
+}
+
+main,
+.app-main,
+.page-shell,
+.page-content {
+  min-width: 0;
+}
+
+.page-shell,
+.page-content,
+.dashboard-content,
+.workspace-content {
+  padding-inline: var(--responsive-page-gutter);
+}
+
+.responsive-stack,
+.page-actions,
+.section-actions,
+.toolbar-actions,
+.filter-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: .625rem;
+  align-items: center;
+}
+
+.responsive-grid,
+.card-grid,
+.summary-grid,
+.kpi-grid {
+  grid-template-columns: repeat(auto-fit, minmax(min(100%, 15rem), 1fr));
+}
+
+.table-scroll,
+.table-wrap,
+.data-table-wrap,
+[role='region'][aria-label*='table' i] {
+  max-width: 100%;
+  overflow-x: auto;
+  overscroll-behavior-inline: contain;
+  scrollbar-gutter: stable;
+  -webkit-overflow-scrolling: touch;
+}
+
+.table-scroll table,
+.table-wrap table,
+.data-table-wrap table {
+  min-width: 42rem;
+}
+
+.compact-density table th,
+.compact-density table td,
+table[data-density='compact'] th,
+table[data-density='compact'] td {
+  padding-block: .5rem;
+}
+
+.comfortable-density table th,
+.comfortable-density table td,
+table[data-density='comfortable'] th,
+table[data-density='comfortable'] td {
+  padding-block: .75rem;
+}
+
+@media (max-width: 900px) {
+  .page-header,
+  .record-header,
+  .section-header,
+  .toolbar,
+  .filter-bar {
+    align-items: flex-start;
+    flex-wrap: wrap;
+  }
+
+  .page-header > :first-child,
+  .record-header > :first-child,
+  .section-header > :first-child {
+    min-width: min(100%, 18rem);
+    flex: 1 1 18rem;
+  }
+
+  .page-actions,
+  .section-actions,
+  .toolbar-actions {
+    width: 100%;
+  }
+
+  .detail-layout,
+  .split-layout,
+  .two-column-layout,
+  .dashboard-layout {
+    grid-template-columns: minmax(0, 1fr);
+  }
+
+  .detail-sidebar,
+  .dashboard-sidebar,
+  .sticky-sidebar {
+    position: static;
+    max-height: none;
+  }
+}
+
+@media (max-width: 640px) {
+  :root {
+    --responsive-page-gutter: .875rem;
+    --responsive-section-gap: .875rem;
+  }
+
+  .page-shell,
+  .page-content,
+  .dashboard-content,
+  .workspace-content {
+    padding-inline: var(--responsive-page-gutter);
+  }
+
+  h1,
+  .page-title,
+  .record-title {
+    overflow-wrap: anywhere;
+  }
+
+  .page-actions,
+  .section-actions,
+  .toolbar-actions,
+  .filter-actions,
+  .form-actions,
+  .dialog-actions {
+    align-items: stretch;
+    flex-direction: column;
+  }
+
+  .page-actions > *,
+  .section-actions > *,
+  .toolbar-actions > *,
+  .filter-actions > *,
+  .form-actions > *,
+  .dialog-actions > * {
+    width: 100%;
+  }
+
+  .filters-grid,
+  .form-grid,
+  .field-grid,
+  .summary-grid,
+  .kpi-grid,
+  .card-grid {
+    grid-template-columns: minmax(0, 1fr);
+  }
+
+  .tabs,
+  .tab-list,
+  [role='tablist'] {
+    max-width: 100%;
+    overflow-x: auto;
+    overscroll-behavior-inline: contain;
+    scrollbar-width: thin;
+  }
+
+  .tabs > *,
+  .tab-list > *,
+  [role='tablist'] > * {
+    flex: 0 0 auto;
+  }
+
+  .mobile-card-list table,
+  table[data-mobile='cards'] {
+    min-width: 0;
+  }
+
+  .mobile-card-list thead,
+  table[data-mobile='cards'] thead {
+    display: none;
+  }
+
+  .mobile-card-list tbody,
+  .mobile-card-list tr,
+  .mobile-card-list td,
+  table[data-mobile='cards'] tbody,
+  table[data-mobile='cards'] tr,
+  table[data-mobile='cards'] td {
+    display: block;
+    width: 100%;
+  }
+
+  .mobile-card-list tr,
+  table[data-mobile='cards'] tr {
+    border: 1px solid var(--border, #d9dee7);
+    border-radius: .75rem;
+    padding: .75rem;
+    margin-block: .75rem;
+    background: var(--surface, #fff);
+  }
+
+  .mobile-card-list td,
+  table[data-mobile='cards'] td {
+    border: 0;
+    padding: .35rem 0;
+    overflow-wrap: anywhere;
+  }
+
+  .mobile-card-list td[data-label]::before,
+  table[data-mobile='cards'] td[data-label]::before {
+    content: attr(data-label);
+    display: block;
+    margin-bottom: .125rem;
+    font-size: .75rem;
+    font-weight: 650;
+    color: var(--text-muted, #667085);
+  }
+}
+
+@media (max-width: 380px) {
+  .page-shell,
+  .page-content,
+  .dashboard-content,
+  .workspace-content {
+    padding-inline: .75rem;
+  }
+
+  .button,
+  button,
+  [role='button'] {
+    max-width: 100%;
+  }
+}
+
+@media print {
+  .table-scroll,
+  .table-wrap,
+  .data-table-wrap {
+    overflow: visible;
+  }
+
+  .table-scroll table,
+  .table-wrap table,
+  .data-table-wrap table {
+    min-width: 0;
+    width: 100%;
+  }
+}
