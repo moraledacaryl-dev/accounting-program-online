@@ -30,6 +30,7 @@ import './pass-11-notifications-toasts-feedback.css';
 import './pass-12-accessibility-keyboard-focus.css';
 import './pass-13-responsive-mobile-density.css';
 import './pass-14-print-export-documents.css';
+import './pass-15-final-consistency-polish.css';
 import ConfirmActionProvider from '../components/ConfirmActionProvider';
 import AppFrame from '../components/app-shell/AppFrame';
 import { AppShellProvider } from '../components/app-shell/AppShellContext';
