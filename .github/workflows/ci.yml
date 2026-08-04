@@ -94,3 +94,6 @@ jobs:
         run: |
           rm -rf .next
           npm run build
+
+      - name: Smoke-test production frontend
+        run: bash scripts/smoke-test.sh
