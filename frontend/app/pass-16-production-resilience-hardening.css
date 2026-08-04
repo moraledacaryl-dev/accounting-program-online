@@ -1,0 +1,119 @@
+/* Pass 16 — production resilience and degraded-state hardening */
+
+:root {
+  --resilience-border: color-mix(in srgb, var(--color-border, #d9dee7) 82%, transparent);
+  --resilience-surface: color-mix(in srgb, var(--color-surface, #fff) 96%, var(--color-primary, #0f766e) 4%);
+}
+
+/* Keep long operational identifiers, references, and imported values from breaking layouts. */
+:is(.record-id, .reference, .external-id, .integration-id, .transaction-id, .audit-value, code, pre) {
+  overflow-wrap: anywhere;
+  word-break: break-word;
+}
+
+/* Stable degraded-state containers for partial API or integration failures. */
+:is(.degraded-state, .partial-data, .stale-data, .offline-state, .integration-warning) {
+  min-width: 0;
+  border: 1px solid var(--resilience-border);
+  border-radius: var(--radius-lg, 12px);
+  background: var(--resilience-surface);
+  padding: clamp(0.875rem, 2vw, 1.25rem);
+}
+
+:is(.degraded-state, .partial-data, .stale-data, .offline-state, .integration-warning) > :first-child {
+  margin-top: 0;
+}
+
+:is(.degraded-state, .partial-data, .stale-data, .offline-state, .integration-warning) > :last-child {
+  margin-bottom: 0;
+}
+
+/* Prevent busy controls and asynchronous actions from visually shifting. */
+:is(button, .button, [role='button'])[aria-busy='true'],
+:is(button, .button, [role='button']).is-loading {
+  position: relative;
+  min-inline-size: max-content;
+  cursor: progress;
+}
+
+:is(button, .button, [role='button'])[aria-busy='true'] > *,
+:is(button, .button, [role='button']).is-loading > * {
+  opacity: 0.78;
+}
+
+/* Preserve usable empty space when panels load incrementally. */
+:is(.panel, .card, .table-card, .detail-panel)[aria-busy='true'] {
+  min-block-size: 8rem;
+  contain: layout paint;
+}
+
+/* Defensive table behavior for imported or unexpectedly wide values. */
+:is(.data-table, .table-wrap, .responsive-table) {
+  min-width: 0;
+  max-width: 100%;
+}
+
+:is(.data-table, table) td,
+:is(.data-table, table) th {
+  max-inline-size: 32rem;
+}
+
+:is(.data-table, table) td:not(.numeric):not(.amount),
+:is(.data-table, table) th:not(.numeric):not(.amount) {
+  overflow-wrap: anywhere;
+}
+
+/* Keep media, charts, and embedded previews inside their owning panels. */
+:is(img, svg, canvas, video, iframe) {
+  max-inline-size: 100%;
+}
+
+:is(.chart-container, .preview-frame, .attachment-preview, .document-preview) {
+  min-width: 0;
+  overflow: hidden;
+}
+
+/* Avoid accidental interaction with disabled or inert application regions. */
+[inert],
+[aria-disabled='true'] {
+  cursor: not-allowed;
+}
+
+[inert] {
+  user-select: none;
+}
+
+/* Improve behavior in forced-colors and reduced-transparency environments. */
+@media (forced-colors: active) {
+  :is(.degraded-state, .partial-data, .stale-data, .offline-state, .integration-warning) {
+    border: 1px solid CanvasText;
+    background: Canvas;
+  }
+}
+
+@media (prefers-reduced-transparency: reduce) {
+  :is(.modal, .drawer, .popover, .menu, .toast, .app-header, .sidebar) {
+    backdrop-filter: none !important;
+    -webkit-backdrop-filter: none !important;
+  }
+}
+
+/* Narrow-screen resilience for operational actions and status text. */
+@media (max-width: 640px) {
+  :is(.status-line, .sync-status, .integration-status, .export-status) {
+    max-width: 100%;
+    white-space: normal;
+    overflow-wrap: anywhere;
+  }
+
+  :is(.action-bar, .page-actions, .record-actions) > :is(button, .button, a[role='button']) {
+    min-height: 44px;
+  }
+}
+
+@media print {
+  :is(.degraded-state, .partial-data, .stale-data, .offline-state, .integration-warning) {
+    background: transparent !important;
+    box-shadow: none !important;
+  }
+}
