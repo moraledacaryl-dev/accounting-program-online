@@ -17,7 +17,7 @@ permissions:
 jobs:
   backend-tests:
     name: Backend tests
-    runs-on: ubuntu-24.04
+    runs-on: ubuntu-latest
     env:
       ENVIRONMENT: test
       DATABASE_URL: sqlite:///./ci-accounting.db
@@ -78,7 +78,7 @@ jobs:
 
   frontend-build:
     name: Frontend build
-    runs-on: ubuntu-24.04
+    runs-on: ubuntu-latest
     steps:
       - name: Check out repository without marketplace actions
         shell: bash
