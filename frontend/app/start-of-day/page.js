@@ -1,88 +1,105 @@
 import Link from 'next/link';
+import './start-of-day.css';
 
 const START_STEPS = [
   {
-    title: 'Check Today',
+    title: 'Check today',
     detail: 'Review arrivals, departures, pending approvals, low stock, cash movement, and anything already overdue.',
     href: '/dashboard',
-    action: 'Open Dashboard',
+    action: 'Open dashboard',
   },
   {
-    title: 'Confirm Booking Sync',
-    detail: 'For front desk or manager: make sure Beds24 sync is healthy before staff rely on arrivals and folios.',
+    title: 'Confirm booking sync',
+    detail: 'Verify Beds24 sync health before staff rely on arrivals, room assignments, and folios.',
     href: '/integrations/beds24',
     action: 'Check Beds24',
   },
   {
-    title: 'Review Payments to Receive',
-    detail: 'Look for guest, OTA, event, company, or group balances that need collection today.',
+    title: 'Review payments to receive',
+    detail: 'Check guest, OTA, event, company, and group balances that need collection today.',
     href: '/cashflow/receivables',
-    action: 'Open Payments',
+    action: 'Open receivables',
   },
   {
-    title: 'Review Bills to Pay',
-    detail: 'Check supplier, utility, payroll/government, tax, and service provider bills due soon.',
+    title: 'Review bills to pay',
+    detail: 'Check supplier, utility, payroll, government, tax, and service-provider obligations due soon.',
     href: '/cashflow/payables',
-    action: 'Open Bills',
+    action: 'Open payables',
   },
   {
-    title: 'Check Deliveries',
-    detail: 'Post received deliveries so stock updates and supplier bills are created when needed.',
+    title: 'Check deliveries',
+    detail: 'Post received deliveries so stock and supplier obligations remain current.',
     href: '/receiving',
-    action: 'Receive Delivery',
+    action: 'Open receiving',
   },
   {
-    title: 'Count Cash Drawers',
-    detail: 'Count active drawers, petty cash, and safes at shift start or handover. Banks can be checked periodically.',
+    title: 'Count cash drawers',
+    detail: 'Count active drawers, petty cash, and safes at shift start or handover.',
     href: '/cashflow/daily-cash',
-    action: 'Count Cash',
+    action: 'Count cash',
   },
+];
+
+const OPERATING_NOTES = [
+  ['Bank checks', 'Check bank balances when needed or during period close rather than forcing a daily ritual.'],
+  ['Booking source', 'Beds24 remains the operational booking source; Accounting verifies the synchronized financial result.'],
+  ['Product source', 'Menu and inventory setup remain authoritative in Accounting for connected POS and operations workflows.'],
 ];
 
 export default function StartOfDayPage() {
   return (
-    <div className="stack">
-      <section className="section">
-        <h1>Start of Day</h1>
-        <p className="muted">
-          Use this as the morning or shift-opening checklist. It points staff to the actual pages that create records,
-          collect balances, receive deliveries, and count cash.
-        </p>
-      </section>
+    <div className="start-day-page">
+      <header className="start-day-header">
+        <div>
+          <div className="start-day-eyebrow">Shift opening</div>
+          <h1>Start of Day</h1>
+          <p>Move through the checks that can affect guest service, settlement, stock, and cash before the day gets busy.</p>
+        </div>
+        <Link href="/dashboard" className="button-link secondary-link">Back to dashboard</Link>
+      </header>
 
-      <section className="section">
-        <h2>Opening Checklist</h2>
-        <div className="process-list">
-          {START_STEPS.map((step, index) => (
-            <div key={step.title} className="process-step">
-              <div className="process-step-number">{index + 1}</div>
-              <div>
-                <strong>{step.title}</strong>
-                <p className="small muted">{step.detail}</p>
-              </div>
-              <Link href={step.href} className="secondary">{step.action}</Link>
+      <div className="start-day-layout">
+        <section className="start-day-checklist" aria-labelledby="opening-checklist-title">
+          <div className="start-day-section-head">
+            <div>
+              <h2 id="opening-checklist-title">Opening checklist</h2>
+              <p>Six operational checks, ordered by daily impact.</p>
             </div>
-          ))}
-        </div>
-      </section>
+            <span className="start-day-count">6 checks</span>
+          </div>
 
-      <section className="section">
-        <h2>Manager Notes</h2>
-        <div className="card-grid" style={{ marginTop: 10 }}>
-          <div className="card">
-            <strong>Bank checks</strong>
-            <p className="small muted">Check banks periodically or when closing a reporting period, not necessarily every day.</p>
+          <div className="start-day-steps">
+            {START_STEPS.map((step, index) => (
+              <article key={step.title} className="start-day-step">
+                <div className="start-day-step-number" aria-hidden="true">{index + 1}</div>
+                <div className="start-day-step-copy">
+                  <strong>{step.title}</strong>
+                  <p>{step.detail}</p>
+                </div>
+                <Link href={step.href} className="start-day-step-action">{step.action}</Link>
+              </article>
+            ))}
           </div>
-          <div className="card">
-            <strong>Bookings</strong>
-            <p className="small muted">Use Beds24 as the booking source when that is the operational plan, then verify sync here.</p>
+        </section>
+
+        <aside className="start-day-notes" aria-labelledby="operating-notes-title">
+          <div className="start-day-section-head">
+            <div>
+              <h2 id="operating-notes-title">Operating notes</h2>
+              <p>Context that prevents unnecessary daily work.</p>
+            </div>
           </div>
-          <div className="card">
-            <strong>Products</strong>
-            <p className="small muted">Menu and inventory setup should stay in accounting as the source for POS and operations.</p>
+
+          <div className="start-day-note-list">
+            {OPERATING_NOTES.map(([title, detail]) => (
+              <div className="start-day-note" key={title}>
+                <strong>{title}</strong>
+                <p>{detail}</p>
+              </div>
+            ))}
           </div>
-        </div>
-      </section>
+        </aside>
+      </div>
     </div>
   );
 }
