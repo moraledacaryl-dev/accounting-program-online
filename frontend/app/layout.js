@@ -6,6 +6,7 @@ import './drawers.css';
 import './hotel-operations.css';
 import './finance-treasury.css';
 import './accounting-reports.css';
+import './procurement-inventory-restaurant.css';
 import './review-inbox.css';
 import './admin-settings.css';
 import './final-qa.css';
