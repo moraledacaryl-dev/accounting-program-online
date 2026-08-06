@@ -35,6 +35,43 @@
   color: #214a36;
 }
 
+/* The sidebar is a three-part column: fixed header/search, top-aligned scrolling navigation, fixed profile footer. */
+.sidebar {
+  display: flex !important;
+  flex-direction: column !important;
+  justify-content: flex-start !important;
+  overflow: hidden !important;
+}
+
+.sidebar > .brand,
+.sidebar > .sidebar-filter,
+.sidebar > .sidebar-user {
+  flex: 0 0 auto;
+}
+
+.sidebar > .sidebar-scroll {
+  position: static;
+  flex: 1 1 auto !important;
+  min-height: 0 !important;
+  align-self: stretch;
+  display: block !important;
+  align-content: start !important;
+  justify-content: flex-start !important;
+  place-content: start !important;
+  margin: 0 !important;
+  padding: 0 1px !important;
+  overflow-x: hidden;
+  overflow-y: auto;
+}
+
+.sidebar > .sidebar-scroll > :first-child {
+  margin-top: 0 !important;
+}
+
+.sidebar > .sidebar-user {
+  margin-top: 10px !important;
+}
+
 .sidebar.search-active {
   position: sticky;
   overflow: hidden;
