@@ -1,0 +1,330 @@
+/* Pass 27 — Roles, taxonomy, and master-data administration */
+
+.main:has(a[href="/roles-permissions"]),
+.main:has(a[href="/taxonomy-admin"]),
+.main:has(a[href="/master-data"]) {
+  --admin-accent: #315f50;
+  --admin-accent-strong: #244b3f;
+  --admin-soft: #edf4f0;
+  --admin-border: #d9e3dd;
+  --admin-ink: #1f302a;
+  --admin-muted: #64716c;
+}
+
+.main:has(a[href="/roles-permissions"]) > .stack > .section:first-child,
+.main:has(a[href="/taxonomy-admin"]) > div > .section:first-child,
+.main:has(a[href="/master-data"]) > div > .section:first-child {
+  padding: 18px 22px;
+  border: 1px solid var(--admin-border);
+  border-left: 4px solid var(--admin-accent);
+  background: #fff;
+  box-shadow: 0 1px 2px rgba(28, 51, 43, .04);
+}
+
+.main:has(a[href="/roles-permissions"]) h1,
+.main:has(a[href="/taxonomy-admin"]) h1,
+.main:has(a[href="/master-data"]) h1 {
+  margin-bottom: 4px;
+  color: var(--admin-ink);
+}
+
+.main:has(a[href="/roles-permissions"]) .grid-30-70,
+.main:has(a[href="/master-data"]) .grid-30-70 {
+  grid-template-columns: minmax(220px, 280px) minmax(0, 1fr);
+  align-items: start;
+  gap: 18px;
+}
+
+.main:has(a[href="/roles-permissions"]) .role-list-panel,
+.main:has(a[href="/master-data"]) .grid-30-70 > .section:first-child {
+  position: sticky;
+  top: calc(var(--header-height, 64px) + 16px);
+  max-height: calc(100vh - var(--header-height, 64px) - 32px);
+  overflow: auto;
+  padding: 16px;
+  border-color: var(--admin-border);
+  background: #f9fbfa;
+}
+
+.main:has(a[href="/roles-permissions"]) .role-list-panel h2,
+.main:has(a[href="/master-data"]) .grid-30-70 > .section:first-child h2 {
+  margin-bottom: 10px;
+  font-size: 13px;
+  letter-spacing: .06em;
+  text-transform: uppercase;
+  color: var(--admin-muted);
+}
+
+.main:has(a[href="/roles-permissions"]) .role-list,
+.main:has(a[href="/master-data"]) .grid-30-70 > .section:first-child .stack {
+  gap: 4px;
+}
+
+.main:has(a[href="/roles-permissions"]) .role-chip,
+.main:has(a[href="/master-data"]) .tab.full-width {
+  justify-content: space-between;
+  min-height: 40px;
+  padding: 8px 10px;
+  border: 1px solid transparent;
+  border-radius: 8px;
+  background: transparent;
+  color: #46534e;
+  text-align: left;
+  box-shadow: none;
+}
+
+.main:has(a[href="/roles-permissions"]) .role-chip:hover,
+.main:has(a[href="/master-data"]) .tab.full-width:hover {
+  border-color: #dbe5df;
+  background: #f1f5f3;
+  color: #223c33;
+}
+
+.main:has(a[href="/roles-permissions"]) .role-chip.active,
+.main:has(a[href="/master-data"]) .tab.full-width.active {
+  border-color: #bdd2c7;
+  background: #e7f0eb;
+  color: #183c30;
+  box-shadow: inset 3px 0 0 var(--admin-accent);
+}
+
+.main:has(a[href="/roles-permissions"]) .grid-30-70 > .section:last-child {
+  padding: 20px;
+}
+
+.main:has(a[href="/roles-permissions"]) .grid-30-70 > .section:last-child > .row:first-child {
+  position: sticky;
+  top: calc(var(--header-height, 64px) + 8px);
+  z-index: 8;
+  margin: -20px -20px 16px;
+  padding: 14px 20px;
+  border-bottom: 1px solid var(--admin-border);
+  background: rgba(255,255,255,.96);
+  backdrop-filter: blur(10px);
+}
+
+.main:has(a[href="/roles-permissions"]) .grid-30-70 > .section:last-child > .stack > .stack .section {
+  padding: 14px 16px;
+  border-color: #e0e7e3;
+  border-radius: 10px;
+  box-shadow: none;
+}
+
+.main:has(a[href="/roles-permissions"]) .grid-30-70 > .section:last-child > .stack > .stack .section h3 {
+  margin: 0;
+  font-size: 14px;
+  color: #29483e;
+}
+
+.main:has(a[href="/roles-permissions"]) .toggle-field {
+  min-height: 58px;
+  padding: 10px 12px;
+  border: 1px solid #e0e7e3;
+  border-radius: 8px;
+  background: #fbfcfb;
+}
+
+.main:has(a[href="/roles-permissions"]) .toggle-field:hover {
+  border-color: #cbdad2;
+  background: #f6f9f7;
+}
+
+.main:has(a[href="/roles-permissions"]) .toggle-label {
+  font-weight: 650;
+  color: #293b35;
+}
+
+.main:has(a[href="/roles-permissions"]) .toggle-hint {
+  margin-top: 3px;
+  color: #7b8782;
+  font-size: 11px;
+  font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
+}
+
+.main:has(a[href="/roles-permissions"]) .grid-30-70 > .section:last-child > .stack > .stack > button:last-child {
+  position: sticky;
+  bottom: 12px;
+  z-index: 7;
+  width: fit-content;
+  margin-left: auto;
+  box-shadow: 0 8px 24px rgba(35, 75, 61, .16);
+}
+
+.main:has(a[href="/roles-permissions"]) > .stack > .section:last-child {
+  overflow: hidden;
+}
+
+.main:has(a[href="/roles-permissions"]) > .stack > .section:last-child .table {
+  font-size: 13px;
+}
+
+.main:has(a[href="/roles-permissions"]) > .stack > .section:last-child .table thead th,
+.main:has(a[href="/master-data"]) .table thead th,
+.main:has(a[href="/taxonomy-admin"]) .table thead th {
+  position: sticky;
+  top: 0;
+  z-index: 3;
+  background: #f5f8f6;
+  color: #64716c;
+  font-size: 10px;
+  letter-spacing: .07em;
+  text-transform: uppercase;
+}
+
+.main:has(a[href="/roles-permissions"]) > .stack > .section:last-child .table tbody tr:hover,
+.main:has(a[href="/master-data"]) .table tbody tr:hover,
+.main:has(a[href="/taxonomy-admin"]) .table tbody tr:hover {
+  background: #f7faf8;
+}
+
+.main:has(a[href="/taxonomy-admin"]) .grid {
+  grid-template-columns: minmax(280px, 360px) minmax(0, 1fr);
+  gap: 18px;
+  align-items: start;
+}
+
+.main:has(a[href="/taxonomy-admin"]) .grid > .section:first-child {
+  position: sticky;
+  top: calc(var(--header-height, 64px) + 16px);
+  padding: 18px;
+  border-color: var(--admin-border);
+  background: #f9fbfa;
+}
+
+.main:has(a[href="/taxonomy-admin"]) .grid > .section:first-child .form-grid {
+  grid-template-columns: 1fr;
+  gap: 10px;
+}
+
+.main:has(a[href="/taxonomy-admin"]) .grid > .section:first-child button[type="submit"] {
+  width: 100%;
+  margin-top: 12px;
+}
+
+.main:has(a[href="/taxonomy-admin"]) .grid > .section:last-child {
+  min-width: 0;
+  padding: 0;
+  overflow: hidden;
+}
+
+.main:has(a[href="/taxonomy-admin"]) .grid > .section:last-child .table {
+  margin: 0;
+}
+
+.main:has(a[href="/taxonomy-admin"]) .table td:first-child,
+.main:has(a[href="/master-data"]) .table td:first-child {
+  font-weight: 650;
+  color: #263a33;
+}
+
+.main:has(a[href="/taxonomy-admin"]) .table td:last-child,
+.main:has(a[href="/master-data"]) .table td:last-child {
+  white-space: nowrap;
+}
+
+.main:has(a[href="/master-data"]) .grid-30-70 > .stack {
+  min-width: 0;
+  gap: 18px;
+}
+
+.main:has(a[href="/master-data"]) .grid-30-70 > .stack > .section:first-child {
+  padding: 18px 20px;
+}
+
+.main:has(a[href="/master-data"]) .grid-30-70 > .stack > .section:first-child > .row:first-child {
+  margin-bottom: 12px;
+  padding-bottom: 12px;
+  border-bottom: 1px solid var(--admin-border);
+}
+
+.main:has(a[href="/master-data"]) .grid-30-70 > .stack > .section:first-child form .form-grid {
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  gap: 12px;
+}
+
+.main:has(a[href="/master-data"]) .grid-30-70 > .stack > .section:last-child {
+  padding: 0;
+  overflow: hidden;
+}
+
+.main:has(a[href="/master-data"]) .badge {
+  background: #e9f1ed;
+  color: #315f50;
+}
+
+.main:has(a[href="/roles-permissions"]) input:focus,
+.main:has(a[href="/roles-permissions"]) select:focus,
+.main:has(a[href="/roles-permissions"]) textarea:focus,
+.main:has(a[href="/taxonomy-admin"]) input:focus,
+.main:has(a[href="/taxonomy-admin"]) select:focus,
+.main:has(a[href="/master-data"]) input:focus,
+.main:has(a[href="/master-data"]) select:focus {
+  border-color: #7aa18f;
+  box-shadow: 0 0 0 3px rgba(62, 111, 91, .12);
+}
+
+@media (min-width: 1600px) {
+  .main:has(a[href="/roles-permissions"]) .grid-30-70,
+  .main:has(a[href="/master-data"]) .grid-30-70 {
+    grid-template-columns: 300px minmax(0, 1fr);
+  }
+
+  .main:has(a[href="/taxonomy-admin"]) .grid {
+    grid-template-columns: 380px minmax(0, 1fr);
+  }
+}
+
+@media (max-width: 1050px) {
+  .main:has(a[href="/master-data"]) .grid-30-70 > .stack > .section:first-child form .form-grid {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+}
+
+@media (max-width: 860px) {
+  .main:has(a[href="/roles-permissions"]) .grid-30-70,
+  .main:has(a[href="/master-data"]) .grid-30-70,
+  .main:has(a[href="/taxonomy-admin"]) .grid {
+    grid-template-columns: 1fr;
+  }
+
+  .main:has(a[href="/roles-permissions"]) .role-list-panel,
+  .main:has(a[href="/master-data"]) .grid-30-70 > .section:first-child,
+  .main:has(a[href="/taxonomy-admin"]) .grid > .section:first-child {
+    position: static;
+    max-height: none;
+  }
+
+  .main:has(a[href="/roles-permissions"]) .role-list,
+  .main:has(a[href="/master-data"]) .grid-30-70 > .section:first-child .stack {
+    display: grid;
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+
+  .main:has(a[href="/roles-permissions"]) .grid-30-70 > .section:last-child > .row:first-child {
+    position: static;
+  }
+}
+
+@media (max-width: 620px) {
+  .main:has(a[href="/roles-permissions"]) .role-list,
+  .main:has(a[href="/master-data"]) .grid-30-70 > .section:first-child .stack,
+  .main:has(a[href="/master-data"]) .grid-30-70 > .stack > .section:first-child form .form-grid {
+    grid-template-columns: 1fr;
+  }
+
+  .main:has(a[href="/roles-permissions"]) .grid-30-70 > .section:last-child > .stack > .stack .form-grid {
+    grid-template-columns: 1fr !important;
+  }
+
+  .main:has(a[href="/roles-permissions"]) > .stack > .section:last-child,
+  .main:has(a[href="/taxonomy-admin"]) .grid > .section:last-child,
+  .main:has(a[href="/master-data"]) .grid-30-70 > .stack > .section:last-child {
+    overflow-x: auto;
+  }
+
+  .main:has(a[href="/roles-permissions"]) > .stack > .section:last-child .table,
+  .main:has(a[href="/taxonomy-admin"]) .table,
+  .main:has(a[href="/master-data"]) .table {
+    min-width: 720px;
+  }
+}
