@@ -1,4 +1,4 @@
-from fastapi import APIRouter, BackgroundTasks, Depends, HTTPException
+from fastapi import APIRouter, BackgroundTasks, Depends, HTTPException, status
 from sqlalchemy.orm import Session
 
 from app.api.deps import require_permissions
@@ -27,7 +27,7 @@ def get_purchase_requests(
     return list_purchase_requests(db, status=status, supplier_id=supplier_id)
 
 
-@router.post('/')
+@router.post('/', status_code=status.HTTP_201_CREATED)
 def add_purchase_request(
     payload: PurchaseRequestCreate,
     background_tasks: BackgroundTasks,
@@ -36,23 +36,24 @@ def add_purchase_request(
 ):
     try:
         item = create_purchase_request(db, payload, username=getattr(user, 'username', None))
-        estimated_total = sum((line.quantity or 0) * (line.estimated_unit_cost or 0) for line in item.lines)
+        lines = item.get('lines') or []
+        estimated_total = float(item.get('estimated_total') or 0)
         background_tasks.add_task(
             publish_operations_event,
-            event_id=f'purchase-request:{item.id}:created',
+            event_id=f"purchase-request:{item['id']}:created",
             event_type='purchase_request.pending',
-            title=f'Purchase request {item.request_no} pending review',
-            summary=f'{item.department or "General"} requested an estimated {estimated_total:,.2f}.',
+            title=f"Purchase request {item['request_no']} pending review",
+            summary=f"{item.get('department') or 'General'} requested an estimated {estimated_total:,.2f}.",
             priority='High' if estimated_total >= 50000 else 'Normal',
             subject_type='purchase_request',
-            subject_id=item.id,
+            subject_id=item['id'],
             payload={
-                'request_no': item.request_no,
-                'department': item.department,
-                'needed_by_date': item.needed_by_date,
-                'status': item.status,
+                'request_no': item['request_no'],
+                'department': item.get('department'),
+                'needed_by_date': item.get('needed_by_date'),
+                'status': item.get('status'),
                 'estimated_total': estimated_total,
-                'line_count': len(item.lines),
+                'line_count': len(lines),
             },
         )
         return item
