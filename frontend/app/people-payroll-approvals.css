@@ -1,0 +1,310 @@
+/* Pass 26: people, payroll, attendance, approvals, and users. */
+
+.main:has(a[href="/employees"]),
+.main:has(a[href="/attendance"]),
+.main:has(a[href="/payroll-periods"]),
+.main:has(a[href="/integrations/payroll"]),
+.main:has(a[href="/approvals"]),
+.main:has(a[href="/users"]) {
+  --people-ink: #17332d;
+  --people-accent: #356b59;
+  --people-accent-soft: #eaf2ed;
+  --people-line: #dfe7e2;
+  --people-muted: #68746e;
+}
+
+.main:has(a[href="/employees"]) > .stack > .section:first-child,
+.main:has(a[href="/attendance"]) > .stack > .section:first-child,
+.main:has(a[href="/payroll-periods"]) > .stack > .section:first-child,
+.main:has(a[href="/integrations/payroll"]) > .stack > .section:first-child,
+.main:has(a[href="/approvals"]) > .stack > .section:first-child,
+.main:has(a[href="/users"]) > .stack > .section:first-child {
+  position: relative;
+  overflow: hidden;
+  padding: 20px 22px;
+  border: 1px solid var(--people-line);
+  border-left: 4px solid var(--people-accent);
+  border-radius: 14px;
+  background: #fff;
+  color: var(--people-ink);
+  box-shadow: 0 8px 22px rgba(22, 49, 42, .05);
+}
+
+.main:has(a[href="/employees"]) > .stack > .section:first-child h1,
+.main:has(a[href="/attendance"]) > .stack > .section:first-child h1,
+.main:has(a[href="/payroll-periods"]) > .stack > .section:first-child h1,
+.main:has(a[href="/integrations/payroll"]) > .stack > .section:first-child h1,
+.main:has(a[href="/approvals"]) > .stack > .section:first-child h1,
+.main:has(a[href="/users"]) > .stack > .section:first-child h1 {
+  color: var(--people-ink);
+  font-size: clamp(1.55rem, 2.1vw, 2.1rem);
+  line-height: 1.12;
+}
+
+.main:has(a[href="/employees"]) > .stack > .section:first-child .muted,
+.main:has(a[href="/attendance"]) > .stack > .section:first-child .muted,
+.main:has(a[href="/payroll-periods"]) > .stack > .section:first-child .muted,
+.main:has(a[href="/integrations/payroll"]) > .stack > .section:first-child .muted,
+.main:has(a[href="/approvals"]) > .stack > .section:first-child .muted,
+.main:has(a[href="/users"]) > .stack > .section:first-child .muted {
+  max-width: 780px;
+  color: var(--people-muted);
+  line-height: 1.55;
+}
+
+.people-context-nav {
+  min-height: 48px;
+  padding: 7px 18px;
+  border-bottom-color: var(--people-line);
+  background: rgba(250, 252, 250, .97);
+  box-shadow: 0 4px 14px rgba(22, 49, 42, .035);
+}
+
+.people-context-link {
+  min-height: 34px;
+  border: 1px solid transparent;
+  border-radius: 8px;
+  color: #56635d;
+  font-size: 12px;
+  font-weight: 660;
+}
+
+.people-context-link:hover {
+  border-color: #d7e4dd;
+  background: #f1f6f3;
+  color: #21483c;
+}
+
+.people-context-link.is-active {
+  border-color: #bfd5ca;
+  background: var(--people-accent-soft);
+  color: #1f4a3d;
+  box-shadow: inset 0 -2px 0 var(--people-accent);
+}
+
+.main:has(a[href="/employees"]) .metric-grid,
+.main:has(a[href="/attendance"]) .metric-grid,
+.main:has(a[href="/payroll-periods"]) .metric-grid,
+.main:has(a[href="/integrations/payroll"]) .metric-grid,
+.main:has(a[href="/approvals"]) .metric-grid {
+  gap: 10px;
+}
+
+.main:has(a[href="/employees"]) .metric-card,
+.main:has(a[href="/attendance"]) .metric-card,
+.main:has(a[href="/payroll-periods"]) .metric-card,
+.main:has(a[href="/integrations/payroll"]) .metric-card,
+.main:has(a[href="/approvals"]) .metric-card {
+  min-height: 92px;
+  padding: 14px 16px;
+  border-color: var(--people-line);
+  border-radius: 12px;
+  background: #fff;
+  box-shadow: none;
+}
+
+.main:has(a[href="/employees"]) .metric-card strong,
+.main:has(a[href="/attendance"]) .metric-card strong,
+.main:has(a[href="/payroll-periods"]) .metric-card strong,
+.main:has(a[href="/integrations/payroll"]) .metric-card strong,
+.main:has(a[href="/approvals"]) .metric-card strong {
+  color: var(--people-ink);
+  font-size: 1.45rem;
+  font-variant-numeric: tabular-nums;
+}
+
+.main:has(a[href="/employees"]) .table-wrap,
+.main:has(a[href="/attendance"]) .table-wrap,
+.main:has(a[href="/payroll-periods"]) .table-wrap,
+.main:has(a[href="/integrations/payroll"]) .table-wrap,
+.main:has(a[href="/approvals"]) .table-wrap,
+.main:has(a[href="/users"]) .table-wrap {
+  border: 1px solid var(--people-line);
+  border-radius: 13px;
+  overflow: auto;
+  background: #fff;
+}
+
+.main:has(a[href="/employees"]) .table,
+.main:has(a[href="/attendance"]) .table,
+.main:has(a[href="/payroll-periods"]) .table,
+.main:has(a[href="/integrations/payroll"]) .table,
+.main:has(a[href="/approvals"]) .table,
+.main:has(a[href="/users"]) .table {
+  border-collapse: separate;
+  border-spacing: 0;
+}
+
+.main:has(a[href="/employees"]) .table thead th,
+.main:has(a[href="/attendance"]) .table thead th,
+.main:has(a[href="/payroll-periods"]) .table thead th,
+.main:has(a[href="/integrations/payroll"]) .table thead th,
+.main:has(a[href="/approvals"]) .table thead th,
+.main:has(a[href="/users"]) .table thead th {
+  position: sticky;
+  top: 0;
+  z-index: 4;
+  padding-top: 10px;
+  padding-bottom: 10px;
+  border-bottom: 1px solid #dce5e0;
+  background: #f4f7f5;
+  color: #65716b;
+  font-size: 10px;
+  letter-spacing: .075em;
+  text-transform: uppercase;
+}
+
+.main:has(a[href="/employees"]) .table td,
+.main:has(a[href="/attendance"]) .table td,
+.main:has(a[href="/payroll-periods"]) .table td,
+.main:has(a[href="/integrations/payroll"]) .table td,
+.main:has(a[href="/approvals"]) .table td,
+.main:has(a[href="/users"]) .table td {
+  padding-top: 11px;
+  padding-bottom: 11px;
+  vertical-align: middle;
+}
+
+.main:has(a[href="/employees"]) .table tbody tr:hover,
+.main:has(a[href="/attendance"]) .table tbody tr:hover,
+.main:has(a[href="/payroll-periods"]) .table tbody tr:hover,
+.main:has(a[href="/integrations/payroll"]) .table tbody tr:hover,
+.main:has(a[href="/approvals"]) .table tbody tr:hover,
+.main:has(a[href="/users"]) .table tbody tr:hover {
+  background: #f8fbf9;
+  box-shadow: inset 3px 0 0 var(--people-accent);
+}
+
+.main:has(a[href="/payroll-periods"]) .table td,
+.main:has(a[href="/integrations/payroll"]) .table td,
+.main:has(a[href="/attendance"]) .table td {
+  font-variant-numeric: tabular-nums;
+}
+
+.main:has(a[href="/integrations/payroll"]) > .stack {
+  gap: 14px;
+}
+
+.main:has(a[href="/integrations/payroll"]) .section {
+  padding: 16px 18px;
+}
+
+.main:has(a[href="/integrations/payroll"]) .section:has(.table-wrap) {
+  padding-top: 14px;
+}
+
+.main:has(a[href="/integrations/payroll"]) .empty-state {
+  min-height: 180px;
+}
+
+.main:has(a[href="/employees"]) form .grid,
+.main:has(a[href="/attendance"]) form .grid,
+.main:has(a[href="/payroll-periods"]) form .grid,
+.main:has(a[href="/users"]) form .grid {
+  gap: 14px 16px;
+}
+
+.main:has(a[href="/employees"]) form,
+.main:has(a[href="/attendance"]) form,
+.main:has(a[href="/payroll-periods"]) form,
+.main:has(a[href="/users"]) form {
+  max-width: none;
+}
+
+.main:has(a[href="/employees"]) .drawer,
+.main:has(a[href="/attendance"]) .drawer,
+.main:has(a[href="/payroll-periods"]) .drawer,
+.main:has(a[href="/approvals"]) .drawer,
+.main:has(a[href="/users"]) .drawer {
+  border-left: 1px solid var(--people-line);
+  box-shadow: -20px 0 48px rgba(19, 43, 36, .15);
+}
+
+.main:has(a[href="/employees"]) .drawer-header,
+.main:has(a[href="/attendance"]) .drawer-header,
+.main:has(a[href="/payroll-periods"]) .drawer-header,
+.main:has(a[href="/approvals"]) .drawer-header,
+.main:has(a[href="/users"]) .drawer-header {
+  border-bottom: 1px solid var(--people-line);
+  background: #fff;
+  color: var(--people-ink);
+}
+
+.main:has(a[href="/employees"]) .drawer-footer,
+.main:has(a[href="/attendance"]) .drawer-footer,
+.main:has(a[href="/payroll-periods"]) .drawer-footer,
+.main:has(a[href="/approvals"]) .drawer-footer,
+.main:has(a[href="/users"]) .drawer-footer {
+  position: sticky;
+  bottom: 0;
+  z-index: 4;
+  border-top: 1px solid var(--people-line);
+  background: rgba(255, 255, 255, .97);
+  backdrop-filter: blur(10px);
+}
+
+.main:has(a[href="/approvals"]) .badge,
+.main:has(a[href="/payroll-periods"]) .badge,
+.main:has(a[href="/integrations/payroll"]) .badge {
+  min-height: 24px;
+  padding: 4px 8px;
+  border-radius: 999px;
+  font-size: 10px;
+  font-weight: 750;
+  letter-spacing: .035em;
+}
+
+@media (min-width: 1100px) {
+  .main:has(a[href="/employees"]) form .grid,
+  .main:has(a[href="/attendance"]) form .grid,
+  .main:has(a[href="/payroll-periods"]) form .grid,
+  .main:has(a[href="/users"]) form .grid {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+
+  .main:has(a[href="/payroll-periods"]) .section:has(.metric-grid),
+  .main:has(a[href="/integrations/payroll"]) .section:has(.metric-grid) {
+    position: sticky;
+    top: calc(var(--header-height, 64px) + 58px);
+    z-index: 8;
+  }
+}
+
+@media (max-width: 760px) {
+  .main:has(a[href="/employees"]) > .stack > .section:first-child,
+  .main:has(a[href="/attendance"]) > .stack > .section:first-child,
+  .main:has(a[href="/payroll-periods"]) > .stack > .section:first-child,
+  .main:has(a[href="/integrations/payroll"]) > .stack > .section:first-child,
+  .main:has(a[href="/approvals"]) > .stack > .section:first-child,
+  .main:has(a[href="/users"]) > .stack > .section:first-child {
+    padding: 16px;
+    border-left-width: 3px;
+  }
+
+  .main:has(a[href="/employees"]) .metric-grid,
+  .main:has(a[href="/attendance"]) .metric-grid,
+  .main:has(a[href="/payroll-periods"]) .metric-grid,
+  .main:has(a[href="/integrations/payroll"]) .metric-grid,
+  .main:has(a[href="/approvals"]) .metric-grid {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+
+  .main:has(a[href="/employees"]) .table,
+  .main:has(a[href="/attendance"]) .table,
+  .main:has(a[href="/payroll-periods"]) .table,
+  .main:has(a[href="/integrations/payroll"]) .table,
+  .main:has(a[href="/approvals"]) .table,
+  .main:has(a[href="/users"]) .table {
+    min-width: 720px;
+  }
+}
+
+@media (max-width: 460px) {
+  .main:has(a[href="/employees"]) .metric-grid,
+  .main:has(a[href="/attendance"]) .metric-grid,
+  .main:has(a[href="/payroll-periods"]) .metric-grid,
+  .main:has(a[href="/integrations/payroll"]) .metric-grid,
+  .main:has(a[href="/approvals"]) .metric-grid {
+    grid-template-columns: 1fr;
+  }
+}
