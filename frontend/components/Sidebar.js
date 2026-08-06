@@ -62,6 +62,7 @@ export default function Sidebar() {
   const { user, loaded, mobileNavOpen, closeMobileNav } = useAppShell();
   const scrollRef = useRef(null);
   const activeItemRef = useRef(null);
+  const searchInputRef = useRef(null);
   const [collapsed, setCollapsed] = useState(false);
   const [openGroupId, setOpenGroupId] = useState(() => activeGroupForPath(pathname));
   const [filter, setFilter] = useState('');
@@ -102,6 +103,16 @@ export default function Sidebar() {
     window.requestAnimationFrame(() => activeItemRef.current?.scrollIntoView({ block: 'nearest' }));
   }, [pathname, closeMobileNav]);
 
+  useEffect(() => {
+    if (!filter) return;
+    if (scrollRef.current) scrollRef.current.scrollTop = 0;
+    try {
+      window.sessionStorage.setItem(SCROLL_KEY, '0');
+    } catch {
+      // Search still starts at the top when storage is unavailable.
+    }
+  }, [filter]);
+
   const visibleGroups = useMemo(() => navigationGroups
     .map((group) => ({
       ...group,
@@ -109,15 +120,12 @@ export default function Sidebar() {
     }))
     .filter((group) => group.items.length), [user]);
 
-  const filteredGroups = useMemo(() => {
+  const searchResults = useMemo(() => {
     const term = filter.trim().toLowerCase();
-    if (!term) return visibleGroups;
-    return visibleGroups
-      .map((group) => ({
-        ...group,
-        items: group.items.filter((item) => `${group.label} ${item.label}`.toLowerCase().includes(term)),
-      }))
-      .filter((group) => group.items.length);
+    if (!term) return [];
+    return visibleGroups.flatMap((group) => group.items
+      .filter((item) => item.label.toLowerCase().includes(term) || group.label.toLowerCase().includes(term))
+      .map((item) => ({ ...item, groupId: group.id, groupLabel: group.label })));
   }, [filter, visibleGroups]);
 
   function toggleGroup(groupId) {
@@ -134,11 +142,17 @@ export default function Sidebar() {
   }
 
   function rememberScroll(event) {
+    if (filter) return;
     try {
       window.sessionStorage.setItem(SCROLL_KEY, String(event.currentTarget.scrollTop));
     } catch {
       // Scroll remains stable for the current mounted session.
     }
+  }
+
+  function clearFilter() {
+    setFilter('');
+    window.requestAnimationFrame(() => searchInputRef.current?.focus());
   }
 
   if (pathname === '/login') return null;
@@ -154,7 +168,7 @@ export default function Sidebar() {
         onClick={closeMobileNav}
       />
       <aside
-        className={`${collapsed ? 'sidebar collapsed' : 'sidebar'} ${mobileNavOpen ? 'mobile-open' : ''}`}
+        className={`${collapsed ? 'sidebar collapsed' : 'sidebar'} ${mobileNavOpen ? 'mobile-open' : ''} ${filter ? 'search-active' : ''}`}
         aria-label="Accounting navigation"
       >
         <div className="brand">
@@ -185,21 +199,55 @@ export default function Sidebar() {
           <div className="sidebar-filter" role="search">
             <NavIcon name="search" size={15} />
             <input
+              ref={searchInputRef}
               value={filter}
               onChange={(event) => setFilter(event.target.value)}
               placeholder="Find a page"
               aria-label="Filter navigation"
             />
-            {filter && <button type="button" onClick={() => setFilter('')} aria-label="Clear navigation filter"><NavIcon name="close" size={14} /></button>}
+            {filter && <button type="button" onClick={clearFilter} aria-label="Clear navigation filter"><NavIcon name="close" size={14} /></button>}
           </div>
         )}
 
         <div className="sidebar-scroll" ref={scrollRef} onScroll={rememberScroll}>
-          {!loaded ? <SidebarSkeleton collapsed={collapsed} /> : (
+          {!loaded ? <SidebarSkeleton collapsed={collapsed} /> : filter && !collapsed ? (
+            <div className="sidebar-search-results" role="region" aria-live="polite" aria-label="Navigation search results">
+              <div className="sidebar-search-summary">
+                <span>Search results</span>
+                <strong>{searchResults.length}</strong>
+              </div>
+              {searchResults.length ? (
+                <nav className="sidebar-search-list" aria-label="Matching pages">
+                  {searchResults.map((item) => {
+                    const active = isItemActive(pathname, item.href);
+                    return (
+                      <Link
+                        key={`${item.groupId}-${item.href}`}
+                        href={item.href}
+                        className={active ? 'sidebar-search-result active' : 'sidebar-search-result'}
+                        aria-current={active ? 'page' : undefined}
+                      >
+                        <span className="nav-symbol"><NavIcon name={item.icon} size={16} /></span>
+                        <span className="sidebar-search-result-copy">
+                          <strong>{item.label}</strong>
+                          <small>{item.groupLabel}</small>
+                        </span>
+                      </Link>
+                    );
+                  })}
+                </nav>
+              ) : (
+                <div className="sidebar-no-results">
+                  <strong>No pages found</strong>
+                  <span>Try a page name such as bookings, payroll, reports, or suppliers.</span>
+                </div>
+              )}
+            </div>
+          ) : (
             <>
               {!collapsed && <div className="sidebar-eyebrow">Workspace</div>}
               <nav aria-label="Primary navigation">
-                {filteredGroups.map((group) => {
+                {visibleGroups.map((group) => {
                   const groupActive = group.items.some((item) => isItemActive(pathname, item.href));
                   const expanded = openGroupId === group.id;
                   const regionId = `sidebar-group-${group.id}`;
@@ -242,9 +290,8 @@ export default function Sidebar() {
                     </section>
                   );
                 })}
-                {!collapsed && filter && !filteredGroups.length && <div className="sidebar-no-results">No navigation matches “{filter}”.</div>}
 
-                {connectedApps.length > 0 && !filter && (
+                {connectedApps.length > 0 && (
                   <section className="nav-group connected-apps" aria-label="Connected Apps">
                     {!collapsed && <div className="nav-group-static-label">Connected Apps</div>}
                     <div className="nav-group-items">
