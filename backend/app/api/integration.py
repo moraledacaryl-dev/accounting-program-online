@@ -1,5 +1,6 @@
 from fastapi import APIRouter, Depends
 from sqlalchemy.orm import Session
+from app.api.deps import require_roles
 from app.core.settings import settings
 from app.db.database import get_db
 from app.models.entities import MenuItem, MenuSKU, User
@@ -7,8 +8,12 @@ from app.services.cashflow_service import list_financial_accounts
 
 router = APIRouter()
 
+
 @router.get('/status')
-def integration_status(db: Session = Depends(get_db)):
+def integration_status(
+    db: Session = Depends(get_db),
+    user=Depends(require_roles('owner', 'admin')),
+):
     menu_item_count = db.query(MenuItem).count()
     sku_count = db.query(MenuSKU).count()
     default_admin_exists = db.query(User).filter(User.username == 'admin').count() > 0
@@ -27,7 +32,7 @@ def integration_status(db: Session = Depends(get_db)):
         'security': {
             'production_ready': not security_warnings,
             'warning_count': len(security_warnings),
-            'warnings': [] if settings.is_production else security_warnings,
+            'warnings': security_warnings,
         },
         'default_admin_exists': default_admin_exists,
         'integration_user_exists': integration_user_exists,
