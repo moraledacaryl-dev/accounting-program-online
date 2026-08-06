@@ -6,6 +6,7 @@ from pydantic_settings import BaseSettings, SettingsConfigDict
 
 BACKEND_ROOT = Path(__file__).resolve().parents[2]
 DEFAULT_SQLITE_PATH = BACKEND_ROOT / 'accounting.db'
+MINIMUM_SECRET_LENGTH = 32
 
 
 def _default_database_url() -> str:
@@ -48,6 +49,10 @@ def looks_like_placeholder_secret(value: str | None) -> bool:
     if compact in _KNOWN_PLACEHOLDER_SECRETS:
         return True
     return compact.startswith(('changeme', 'replacewith', 'replace', 'todo'))
+
+
+def secret_is_too_short(value: str | None) -> bool:
+    return len((value or '').strip()) < MINIMUM_SECRET_LENGTH
 
 
 class Settings(BaseSettings):
@@ -115,7 +120,7 @@ class Settings(BaseSettings):
     def bootstrap_enabled(self) -> bool:
         if not self.allow_default_admin_bootstrap:
             return False
-        return self.environment.strip().lower() != 'production'
+        return not self.is_production
 
     @property
     def is_production(self) -> bool:
@@ -142,13 +147,35 @@ class Settings(BaseSettings):
         warnings: list[str] = []
         if self.secret_key_is_placeholder:
             warnings.append('SECRET_KEY is unset or still using a placeholder value.')
+        elif secret_is_too_short(self.secret_key):
+            warnings.append(f'SECRET_KEY must be at least {MINIMUM_SECRET_LENGTH} characters.')
         if self.integration_enabled and self.integration_secret_is_placeholder:
             warnings.append('INTEGRATION_SECRET is unset or still using a placeholder value.')
+        elif self.integration_enabled and secret_is_too_short(self.integration_receive_secret):
+            warnings.append(f'INTEGRATION_SECRET must be at least {MINIMUM_SECRET_LENGTH} characters.')
         if self.integration_enabled and self.integration_password_is_placeholder:
             warnings.append('INTEGRATION_PASSWORD is unset or still using a placeholder value.')
+        elif self.integration_enabled and secret_is_too_short(self.integration_password):
+            warnings.append(f'INTEGRATION_PASSWORD must be at least {MINIMUM_SECRET_LENGTH} characters.')
         if self.is_production and self.allow_default_admin_bootstrap:
-            warnings.append('ALLOW_DEFAULT_ADMIN_BOOTSTRAP should be false in production.')
+            warnings.append('ALLOW_DEFAULT_ADMIN_BOOTSTRAP must be false in production.')
+        if self.is_production and not self.auth_cookie_secure_effective:
+            warnings.append('AUTH_COOKIE_SECURE must be true in production.')
+        if self.is_production and not self.cors_origin_list:
+            warnings.append('CORS_ORIGINS must contain at least one explicit production origin.')
+        if self.is_production and '*' in self.cors_origin_list:
+            warnings.append('Wildcard CORS origins are not allowed in production.')
+        if self.auth_cookie_samesite_value == 'none' and not self.auth_cookie_secure_effective:
+            warnings.append('SameSite=None cookies require AUTH_COOKIE_SECURE=true.')
         return warnings
+
+    def validate_production_security(self) -> None:
+        if not self.is_production:
+            return
+        warnings = self.security_warnings
+        if warnings:
+            formatted = '\n - '.join(warnings)
+            raise RuntimeError(f'Unsafe production configuration:\n - {formatted}')
 
 
 settings = Settings()
