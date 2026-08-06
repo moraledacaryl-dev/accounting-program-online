@@ -1,0 +1,72 @@
+.sidebar > .sidebar-filter {
+  flex: 0 0 38px !important;
+  width: auto !important;
+  height: 38px !important;
+  min-height: 38px !important;
+  max-height: 38px !important;
+  align-self: stretch;
+  overflow: hidden;
+}
+
+.sidebar > .sidebar-filter input {
+  height: 36px !important;
+  min-height: 36px !important;
+  max-height: 36px !important;
+  line-height: 36px;
+}
+
+.sidebar > .sidebar-filter button {
+  width: 26px;
+  height: 26px;
+  min-width: 26px;
+  min-height: 26px;
+  max-width: 26px;
+  max-height: 26px;
+  border-radius: 7px;
+}
+
+.sidebar > .sidebar-filter button:hover {
+  background: #e9efeb;
+  color: #214a36;
+}
+
+/* Filtering becomes a compact result mode rather than opening full groups. */
+.sidebar:has(.sidebar-filter input:not(:placeholder-shown)) .sidebar-eyebrow {
+  margin-top: 4px;
+}
+
+.sidebar:has(.sidebar-filter input:not(:placeholder-shown)) .nav-group-toggle {
+  min-height: 31px;
+  padding-block: 4px;
+  pointer-events: none;
+}
+
+.sidebar:has(.sidebar-filter input:not(:placeholder-shown)) .nav-group-heading small,
+.sidebar:has(.sidebar-filter input:not(:placeholder-shown)) .nav-group-toggle > svg {
+  display: none;
+}
+
+.sidebar:has(.sidebar-filter input:not(:placeholder-shown)) .nav-group-items[hidden] {
+  display: grid;
+}
+
+.sidebar:has(.sidebar-filter input:not(:placeholder-shown)) .nav-group-items {
+  padding: 0 0 5px 31px;
+}
+
+.sidebar:has(.sidebar-filter input:not(:placeholder-shown)) .nav-group {
+  margin-bottom: 3px;
+}
+
+.sidebar:has(.sidebar-filter input:not(:placeholder-shown)) .connected-apps {
+  display: none;
+}
+
+@media (max-width: 760px) {
+  .sidebar > .sidebar-filter {
+    flex-basis: 42px !important;
+    height: 42px !important;
+    min-height: 42px !important;
+    max-height: 42px !important;
+  }
+}
