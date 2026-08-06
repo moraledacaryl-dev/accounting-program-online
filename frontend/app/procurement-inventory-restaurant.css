@@ -1,0 +1,309 @@
+/* Pass 25: procurement, inventory, and restaurant operational refinement. */
+
+.main:has(a[href="/suppliers"]),
+.main:has(a[href="/purchase-requests"]),
+.main:has(a[href="/purchase-orders"]),
+.main:has(a[href="/receiving"]),
+.main:has(a[href="/inventory-items"]),
+.main:has(a[href="/inventory-reconciliation"]),
+.main:has(a[href="/stock-movements"]),
+.main:has(a[href="/restaurant-ops"]),
+.main:has(a[href="/menu-categories"]),
+.main:has(a[href="/menu-items"]),
+.main:has(a[href="/recipes"]),
+.main:has(a[href="/staff-meals"]) {
+  --ops-ink: #1d342d;
+  --ops-muted: #66736d;
+  --ops-accent: #3f715e;
+  --ops-accent-soft: #eaf2ed;
+  --ops-border: #dfe6e1;
+  --ops-surface: #ffffff;
+  --ops-subtle: #f6f8f6;
+}
+
+/* Compact, quiet operational headers. */
+.main:has(a[href="/suppliers"]) > .stack > .section:first-child,
+.main:has(a[href="/purchase-requests"]) > .stack > .section:first-child,
+.main:has(a[href="/purchase-orders"]) > .stack > .section:first-child,
+.main:has(a[href="/receiving"]) > .stack > .section:first-child,
+.main:has(a[href="/inventory-items"]) > .stack > .section:first-child,
+.main:has(a[href="/inventory-reconciliation"]) > .stack > .section:first-child,
+.main:has(a[href="/stock-movements"]) > .stack > .section:first-child,
+.main:has(a[href="/restaurant-ops"]) > .stack > .section:first-child,
+.main:has(a[href="/menu-categories"]) > .stack > .section:first-child,
+.main:has(a[href="/menu-items"]) > .stack > .section:first-child,
+.main:has(a[href="/recipes"]) > .stack > .section:first-child,
+.main:has(a[href="/staff-meals"]) > .stack > .section:first-child {
+  border: 1px solid var(--ops-border);
+  border-left: 4px solid var(--ops-accent);
+  background: var(--ops-surface);
+  box-shadow: 0 8px 22px rgba(27, 50, 42, .05);
+}
+
+.main:has(a[href="/suppliers"]) > .stack > .section:first-child h1,
+.main:has(a[href="/purchase-requests"]) > .stack > .section:first-child h1,
+.main:has(a[href="/purchase-orders"]) > .stack > .section:first-child h1,
+.main:has(a[href="/receiving"]) > .stack > .section:first-child h1,
+.main:has(a[href="/inventory-items"]) > .stack > .section:first-child h1,
+.main:has(a[href="/inventory-reconciliation"]) > .stack > .section:first-child h1,
+.main:has(a[href="/stock-movements"]) > .stack > .section:first-child h1,
+.main:has(a[href="/restaurant-ops"]) > .stack > .section:first-child h1,
+.main:has(a[href="/menu-categories"]) > .stack > .section:first-child h1,
+.main:has(a[href="/menu-items"]) > .stack > .section:first-child h1,
+.main:has(a[href="/recipes"]) > .stack > .section:first-child h1,
+.main:has(a[href="/staff-meals"]) > .stack > .section:first-child h1 {
+  color: var(--ops-ink);
+  font-size: clamp(1.55rem, 2vw, 2.05rem);
+}
+
+/* Context navigation stays useful without becoming another oversized highlight rail. */
+.operations-context-nav {
+  min-height: 48px;
+  padding: 7px 18px;
+  border: 1px solid var(--ops-border);
+  border-radius: 12px;
+  background: rgba(255, 255, 255, .97);
+  box-shadow: 0 6px 18px rgba(27, 50, 42, .045);
+}
+
+.operations-context-link {
+  min-height: 34px;
+  color: #596660;
+}
+
+.operations-context-link:hover {
+  background: #f1f5f2;
+  color: var(--ops-ink);
+}
+
+.operations-context-link.is-active {
+  border-color: #c7d8cf;
+  background: var(--ops-accent-soft);
+  color: #24483b;
+  box-shadow: inset 3px 0 0 var(--ops-accent);
+}
+
+.operations-action {
+  background: #fff;
+  color: #315147;
+}
+
+.operations-action--primary {
+  border-color: var(--ops-accent);
+  background: var(--ops-accent);
+  color: #fff;
+}
+
+/* Operational summary strips. */
+.main:has(a[href="/purchase-requests"]) .metric-grid,
+.main:has(a[href="/purchase-orders"]) .metric-grid,
+.main:has(a[href="/receiving"]) .metric-grid,
+.main:has(a[href="/inventory-items"]) .metric-grid,
+.main:has(a[href="/inventory-reconciliation"]) .metric-grid,
+.main:has(a[href="/stock-movements"]) .metric-grid,
+.main:has(a[href="/restaurant-ops"]) .metric-grid {
+  gap: 1px;
+  overflow: hidden;
+  border: 1px solid var(--ops-border);
+  border-radius: 14px;
+  background: var(--ops-border);
+}
+
+.main:has(a[href="/purchase-requests"]) .metric-card,
+.main:has(a[href="/purchase-orders"]) .metric-card,
+.main:has(a[href="/receiving"]) .metric-card,
+.main:has(a[href="/inventory-items"]) .metric-card,
+.main:has(a[href="/inventory-reconciliation"]) .metric-card,
+.main:has(a[href="/stock-movements"]) .metric-card,
+.main:has(a[href="/restaurant-ops"]) .metric-card {
+  border: 0;
+  border-radius: 0;
+  background: #fff;
+  box-shadow: none;
+}
+
+/* Dense tables with clear primary columns and numeric scanning. */
+.main:has(a[href="/suppliers"]) .table,
+.main:has(a[href="/purchase-requests"]) .table,
+.main:has(a[href="/purchase-orders"]) .table,
+.main:has(a[href="/receiving"]) .table,
+.main:has(a[href="/inventory-items"]) .table,
+.main:has(a[href="/inventory-reconciliation"]) .table,
+.main:has(a[href="/stock-movements"]) .table,
+.main:has(a[href="/restaurant-ops"]) .table,
+.main:has(a[href="/menu-categories"]) .table,
+.main:has(a[href="/menu-items"]) .table,
+.main:has(a[href="/recipes"]) .table,
+.main:has(a[href="/staff-meals"]) .table {
+  border-collapse: separate;
+  border-spacing: 0;
+}
+
+.main:has(a[href="/suppliers"]) .table thead th,
+.main:has(a[href="/purchase-requests"]) .table thead th,
+.main:has(a[href="/purchase-orders"]) .table thead th,
+.main:has(a[href="/receiving"]) .table thead th,
+.main:has(a[href="/inventory-items"]) .table thead th,
+.main:has(a[href="/inventory-reconciliation"]) .table thead th,
+.main:has(a[href="/stock-movements"]) .table thead th,
+.main:has(a[href="/restaurant-ops"]) .table thead th,
+.main:has(a[href="/menu-categories"]) .table thead th,
+.main:has(a[href="/menu-items"]) .table thead th,
+.main:has(a[href="/recipes"]) .table thead th,
+.main:has(a[href="/staff-meals"]) .table thead th {
+  position: sticky;
+  top: 0;
+  z-index: 4;
+  padding-top: 10px;
+  padding-bottom: 10px;
+  background: #f3f6f4;
+  color: #68736d;
+  font-size: 10px;
+  letter-spacing: .075em;
+  text-transform: uppercase;
+}
+
+.main:has(a[href="/suppliers"]) .table td,
+.main:has(a[href="/purchase-requests"]) .table td,
+.main:has(a[href="/purchase-orders"]) .table td,
+.main:has(a[href="/receiving"]) .table td,
+.main:has(a[href="/inventory-items"]) .table td,
+.main:has(a[href="/inventory-reconciliation"]) .table td,
+.main:has(a[href="/stock-movements"]) .table td,
+.main:has(a[href="/restaurant-ops"]) .table td,
+.main:has(a[href="/menu-items"]) .table td,
+.main:has(a[href="/recipes"]) .table td,
+.main:has(a[href="/staff-meals"]) .table td {
+  padding-top: 11px;
+  padding-bottom: 11px;
+  vertical-align: middle;
+  font-variant-numeric: tabular-nums;
+}
+
+.main:has(a[href="/suppliers"]) .table tbody tr:hover,
+.main:has(a[href="/purchase-requests"]) .table tbody tr:hover,
+.main:has(a[href="/purchase-orders"]) .table tbody tr:hover,
+.main:has(a[href="/receiving"]) .table tbody tr:hover,
+.main:has(a[href="/inventory-items"]) .table tbody tr:hover,
+.main:has(a[href="/inventory-reconciliation"]) .table tbody tr:hover,
+.main:has(a[href="/stock-movements"]) .table tbody tr:hover,
+.main:has(a[href="/restaurant-ops"]) .table tbody tr:hover,
+.main:has(a[href="/menu-items"]) .table tbody tr:hover,
+.main:has(a[href="/recipes"]) .table tbody tr:hover,
+.main:has(a[href="/staff-meals"]) .table tbody tr:hover {
+  background: #f8faf8;
+  box-shadow: inset 3px 0 0 var(--ops-accent);
+}
+
+/* Forms: reduce vertical drag and keep operational context visible. */
+.main:has(a[href="/suppliers"]) form .form-grid,
+.main:has(a[href="/purchase-requests"]) form .form-grid,
+.main:has(a[href="/purchase-orders"]) form .form-grid,
+.main:has(a[href="/receiving"]) form .form-grid,
+.main:has(a[href="/inventory-items"]) form .form-grid,
+.main:has(a[href="/inventory-reconciliation"]) form .form-grid,
+.main:has(a[href="/restaurant-ops"]) form .form-grid,
+.main:has(a[href="/menu-categories"]) form .form-grid,
+.main:has(a[href="/menu-items"]) form .form-grid,
+.main:has(a[href="/recipes"]) form .form-grid,
+.main:has(a[href="/staff-meals"]) form .form-grid {
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 12px 16px;
+}
+
+.main:has(a[href="/suppliers"]) form label,
+.main:has(a[href="/purchase-requests"]) form label,
+.main:has(a[href="/purchase-orders"]) form label,
+.main:has(a[href="/receiving"]) form label,
+.main:has(a[href="/inventory-items"]) form label,
+.main:has(a[href="/inventory-reconciliation"]) form label,
+.main:has(a[href="/restaurant-ops"]) form label,
+.main:has(a[href="/menu-categories"]) form label,
+.main:has(a[href="/menu-items"]) form label,
+.main:has(a[href="/recipes"]) form label,
+.main:has(a[href="/staff-meals"]) form label {
+  color: #4d5b55;
+  font-size: 12px;
+  font-weight: 650;
+}
+
+/* Document, recipe, and item summaries. */
+.purchase-summary,
+.receiving-summary,
+.inventory-summary,
+.recipe-summary,
+.menu-item-summary,
+.staff-meal-summary {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(170px, 1fr));
+  gap: 1px;
+  overflow: hidden;
+  border: 1px solid var(--ops-border);
+  border-radius: 14px;
+  background: var(--ops-border);
+}
+
+.purchase-summary > *,
+.receiving-summary > *,
+.inventory-summary > *,
+.recipe-summary > *,
+.menu-item-summary > *,
+.staff-meal-summary > * {
+  padding: 14px;
+  background: #fff;
+}
+
+/* Exceptions should be visible without dominating the page. */
+.main:has(a[href="/receiving"]) .alert,
+.main:has(a[href="/inventory-reconciliation"]) .alert,
+.main:has(a[href="/restaurant-ops"]) .alert {
+  border-left: 4px solid #b97932;
+  background: #fffaf3;
+}
+
+@media (min-width: 1440px) {
+  .main:has(a[href="/purchase-orders"]) > .stack,
+  .main:has(a[href="/receiving"]) > .stack,
+  .main:has(a[href="/inventory-items"]) > .stack,
+  .main:has(a[href="/restaurant-ops"]) > .stack,
+  .main:has(a[href="/recipes"]) > .stack {
+    max-width: 1680px;
+  }
+}
+
+@media (max-width: 860px) {
+  .main:has(a[href="/suppliers"]) form .form-grid,
+  .main:has(a[href="/purchase-requests"]) form .form-grid,
+  .main:has(a[href="/purchase-orders"]) form .form-grid,
+  .main:has(a[href="/receiving"]) form .form-grid,
+  .main:has(a[href="/inventory-items"]) form .form-grid,
+  .main:has(a[href="/inventory-reconciliation"]) form .form-grid,
+  .main:has(a[href="/restaurant-ops"]) form .form-grid,
+  .main:has(a[href="/menu-categories"]) form .form-grid,
+  .main:has(a[href="/menu-items"]) form .form-grid,
+  .main:has(a[href="/recipes"]) form .form-grid,
+  .main:has(a[href="/staff-meals"]) form .form-grid {
+    grid-template-columns: 1fr;
+  }
+}
+
+@media (max-width: 720px) {
+  .operations-context-nav {
+    border-radius: 0;
+    border-inline: 0;
+  }
+
+  .main:has(a[href="/suppliers"]) .table,
+  .main:has(a[href="/purchase-requests"]) .table,
+  .main:has(a[href="/purchase-orders"]) .table,
+  .main:has(a[href="/receiving"]) .table,
+  .main:has(a[href="/inventory-items"]) .table,
+  .main:has(a[href="/inventory-reconciliation"]) .table,
+  .main:has(a[href="/stock-movements"]) .table,
+  .main:has(a[href="/restaurant-ops"]) .table,
+  .main:has(a[href="/menu-items"]) .table,
+  .main:has(a[href="/recipes"]) .table,
+  .main:has(a[href="/staff-meals"]) .table {
+    min-width: 760px;
+  }
+}
