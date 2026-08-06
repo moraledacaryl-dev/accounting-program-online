@@ -18,6 +18,7 @@ const connectedApps = [
 const SIDEBAR_KEY = 'accounting_sidebar_collapsed_v5';
 const ACTIVE_GROUP_KEY = 'accounting_sidebar_active_group_v3';
 const SCROLL_KEY = 'accounting_sidebar_scroll_v1';
+const MIN_SEARCH_LENGTH = 2;
 
 function hasAnyPermission(user, keys = []) {
   if (!keys.length) return true;
@@ -67,6 +68,10 @@ export default function Sidebar() {
   const [openGroupId, setOpenGroupId] = useState(() => activeGroupForPath(pathname));
   const [filter, setFilter] = useState('');
 
+  const normalizedFilter = filter.trim().toLowerCase();
+  const searchActive = normalizedFilter.length > 0;
+  const searchReady = normalizedFilter.length >= MIN_SEARCH_LENGTH;
+
   useEffect(() => {
     try {
       setCollapsed(window.localStorage.getItem(SIDEBAR_KEY) === '1');
@@ -77,7 +82,7 @@ export default function Sidebar() {
         if (scrollRef.current && Number.isFinite(storedScroll)) scrollRef.current.scrollTop = storedScroll;
       });
     } catch {
-      // Storage can be unavailable in private browsing; defaults remain usable.
+      // Storage can be unavailable in private browsing.
     }
   }, []);
 
@@ -86,7 +91,7 @@ export default function Sidebar() {
     try {
       window.localStorage.setItem(SIDEBAR_KEY, collapsed ? '1' : '0');
     } catch {
-      // Keep the in-memory preference when storage is unavailable.
+      // Keep in-memory preference when storage is unavailable.
     }
   }, [collapsed]);
 
@@ -98,20 +103,17 @@ export default function Sidebar() {
     try {
       window.localStorage.setItem(ACTIVE_GROUP_KEY, activeGroupId);
     } catch {
-      // Route-aware state still updates when storage is unavailable.
+      // Route-aware state still updates.
     }
     window.requestAnimationFrame(() => activeItemRef.current?.scrollIntoView({ block: 'nearest' }));
   }, [pathname, closeMobileNav]);
 
   useEffect(() => {
-    if (!filter) return;
-    if (scrollRef.current) scrollRef.current.scrollTop = 0;
-    try {
-      window.sessionStorage.setItem(SCROLL_KEY, '0');
-    } catch {
-      // Search still starts at the top when storage is unavailable.
-    }
-  }, [filter]);
+    if (!searchActive) return;
+    window.requestAnimationFrame(() => {
+      if (scrollRef.current) scrollRef.current.scrollTop = 0;
+    });
+  }, [searchActive, normalizedFilter]);
 
   const visibleGroups = useMemo(() => navigationGroups
     .map((group) => ({
@@ -121,12 +123,15 @@ export default function Sidebar() {
     .filter((group) => group.items.length), [user]);
 
   const searchResults = useMemo(() => {
-    const term = filter.trim().toLowerCase();
-    if (!term) return [];
+    if (!searchReady) return [];
     return visibleGroups.flatMap((group) => group.items
-      .filter((item) => item.label.toLowerCase().includes(term) || group.label.toLowerCase().includes(term))
+      .filter((item) => {
+        const pageLabel = item.label.toLowerCase();
+        const hrefTerms = item.href.replaceAll('/', ' ').replaceAll('-', ' ').toLowerCase();
+        return pageLabel.includes(normalizedFilter) || hrefTerms.includes(normalizedFilter);
+      })
       .map((item) => ({ ...item, groupId: group.id, groupLabel: group.label })));
-  }, [filter, visibleGroups]);
+  }, [normalizedFilter, searchReady, visibleGroups]);
 
   function toggleGroup(groupId) {
     setOpenGroupId((current) => {
@@ -135,18 +140,18 @@ export default function Sidebar() {
         if (next) window.localStorage.setItem(ACTIVE_GROUP_KEY, next);
         else window.localStorage.removeItem(ACTIVE_GROUP_KEY);
       } catch {
-        // The visible accordion state still updates when storage is unavailable.
+        // Visible accordion state still updates.
       }
       return next;
     });
   }
 
   function rememberScroll(event) {
-    if (filter) return;
+    if (searchActive) return;
     try {
       window.sessionStorage.setItem(SCROLL_KEY, String(event.currentTarget.scrollTop));
     } catch {
-      // Scroll remains stable for the current mounted session.
+      // Scroll remains stable for this mounted session.
     }
   }
 
@@ -168,7 +173,7 @@ export default function Sidebar() {
         onClick={closeMobileNav}
       />
       <aside
-        className={`${collapsed ? 'sidebar collapsed' : 'sidebar'} ${mobileNavOpen ? 'mobile-open' : ''} ${filter ? 'search-active' : ''}`}
+        className={`${collapsed ? 'sidebar collapsed' : 'sidebar'} ${mobileNavOpen ? 'mobile-open' : ''} ${searchActive ? 'search-active' : ''}`}
         aria-label="Accounting navigation"
       >
         <div className="brand">
@@ -204,19 +209,26 @@ export default function Sidebar() {
               onChange={(event) => setFilter(event.target.value)}
               placeholder="Find a page"
               aria-label="Filter navigation"
+              autoComplete="off"
+              spellCheck="false"
             />
-            {filter && <button type="button" onClick={clearFilter} aria-label="Clear navigation filter"><NavIcon name="close" size={14} /></button>}
+            {searchActive && <button type="button" onClick={clearFilter} aria-label="Clear navigation filter"><NavIcon name="close" size={14} /></button>}
           </div>
         )}
 
         <div className="sidebar-scroll" ref={scrollRef} onScroll={rememberScroll}>
-          {!loaded ? <SidebarSkeleton collapsed={collapsed} /> : filter && !collapsed ? (
+          {!loaded ? <SidebarSkeleton collapsed={collapsed} /> : searchActive && !collapsed ? (
             <div className="sidebar-search-results" role="region" aria-live="polite" aria-label="Navigation search results">
               <div className="sidebar-search-summary">
-                <span>Search results</span>
-                <strong>{searchResults.length}</strong>
+                <span>{searchReady ? 'Search results' : 'Find a page'}</span>
+                {searchReady && <strong>{searchResults.length}</strong>}
               </div>
-              {searchResults.length ? (
+              {!searchReady ? (
+                <div className="sidebar-no-results">
+                  <strong>Keep typing</strong>
+                  <span>Enter at least two letters to search page names.</span>
+                </div>
+              ) : searchResults.length ? (
                 <nav className="sidebar-search-list" aria-label="Matching pages">
                   {searchResults.map((item) => {
                     const active = isItemActive(pathname, item.href);
@@ -309,14 +321,16 @@ export default function Sidebar() {
           )}
         </div>
 
-        <div className={loaded ? 'sidebar-user' : 'sidebar-user sidebar-user-loading'}>
-          <div className="user-avatar" aria-hidden="true">{loaded ? String(user?.full_name || user?.username || 'U').slice(0, 1).toUpperCase() : ''}</div>
-          {!collapsed && (
-            <div className="sidebar-user-copy">
-              {loaded ? <><strong>{user?.full_name || user?.username || 'User'}</strong><span>{roleName(user)}</span></> : <><span className="sidebar-user-skeleton wide" /><span className="sidebar-user-skeleton" /></>}
-            </div>
-          )}
-        </div>
+        {!searchActive && (
+          <div className={loaded ? 'sidebar-user' : 'sidebar-user sidebar-user-loading'}>
+            <div className="user-avatar" aria-hidden="true">{loaded ? String(user?.full_name || user?.username || 'U').slice(0, 1).toUpperCase() : ''}</div>
+            {!collapsed && (
+              <div className="sidebar-user-copy">
+                {loaded ? <><strong>{user?.full_name || user?.username || 'User'}</strong><span>{roleName(user)}</span></> : <><span className="sidebar-user-skeleton wide" /><span className="sidebar-user-skeleton" /></>}
+              </div>
+            )}
+          </div>
+        )}
       </aside>
     </>
   );
