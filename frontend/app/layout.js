@@ -8,6 +8,7 @@ import './finance-treasury.css';
 import './accounting-reports.css';
 import './procurement-inventory-restaurant.css';
 import './people-payroll-approvals.css';
+import './governance-administration.css';
 import './review-inbox.css';
 import './admin-settings.css';
 import './final-qa.css';
