@@ -1,4 +1,4 @@
-from fastapi import APIRouter, Depends, HTTPException
+from fastapi import APIRouter, Depends, HTTPException, status
 from sqlalchemy.orm import Session
 
 from app.api.deps import get_current_user, require_any_permissions, require_permissions
@@ -16,17 +16,47 @@ def items(db: Session = Depends(get_db), user=Depends(require_permissions('inven
     return db.query(InventoryItem).order_by(InventoryItem.name.asc()).all()
 
 
-@router.post('/items')
+@router.post('/items', status_code=status.HTTP_201_CREATED)
 def add_item(
     payload: InventoryItemCreate,
     db: Session = Depends(get_db),
     user=Depends(require_permissions('inventory.manage')),
 ):
-    obj = InventoryItem(**payload.model_dump())
+    values = payload.model_dump()
+    opening_quantity = float(values.pop('quantity_on_hand', 0) or 0)
+    opening_unit_cost = float(values.pop('average_cost', 0) or 0)
+    if opening_quantity < 0:
+        raise HTTPException(status_code=400, detail='Opening quantity cannot be negative.')
+    if opening_unit_cost < 0:
+        raise HTTPException(status_code=400, detail='Opening unit cost cannot be negative.')
+
+    obj = InventoryItem(**values, quantity_on_hand=0, average_cost=0)
     db.add(obj)
-    db.commit()
-    db.refresh(obj)
-    return obj
+    try:
+        db.flush()
+        if opening_quantity > 0:
+            create_inbound_movement(
+                db,
+                obj,
+                opening_quantity,
+                opening_unit_cost,
+                None,
+                0,
+                0,
+                'Opening balance',
+                'inventory',
+                f'OPENING-{obj.id}',
+                'Opening inventory created with the item.',
+                None,
+                None,
+                commit=False,
+            )
+        db.commit()
+        db.refresh(obj)
+        return obj
+    except Exception:
+        db.rollback()
+        raise
 
 
 @router.put('/items/{item_id}')
@@ -76,7 +106,7 @@ def add_movement(
     if not item:
         raise HTTPException(status_code=404, detail='Inventory item not found')
     if payload.movement_type not in {'in', 'out'}:
-        raise HTTPException(status_code=400, detail='movement_type must be \"in\" or \"out\".')
+        raise HTTPException(status_code=400, detail='movement_type must be "in" or "out".')
     if float(payload.quantity or 0) <= 0:
         raise HTTPException(status_code=400, detail='Quantity must be greater than zero.')
     if payload.movement_type == 'in' and float(payload.unit_cost or 0) < 0:
