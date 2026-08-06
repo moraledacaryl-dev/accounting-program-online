@@ -4,6 +4,7 @@ import { useEffect } from 'react';
 import { usePathname } from 'next/navigation';
 import { clearToken } from '../lib/api';
 import { useCurrentUser } from '../lib/useCurrentUser';
+import ExternalOwnershipBoundary from './ExternalOwnershipBoundary';
 import Header from './Header';
 import RouteGuard from './RouteGuard';
 import Sidebar from './Sidebar';
@@ -52,7 +53,9 @@ export default function AppShell({ children }) {
       <div className="main-shell">
         {!isLogin && <Header />}
         <main className={isLogin ? 'main auth-main' : 'main'}>
-          <RouteGuard>{children}</RouteGuard>
+          <RouteGuard>
+            <ExternalOwnershipBoundary>{children}</ExternalOwnershipBoundary>
+          </RouteGuard>
         </main>
       </div>
     </div>

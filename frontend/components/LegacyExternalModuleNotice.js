@@ -1,2 +1,5 @@
-import Link from 'next/link';
-export default function LegacyExternalModuleNotice({ appName, appUrl='#', children }) { return <div className="section legacy-notice"><div><span className="badge">Historical / transition view</span><h2>Operational workflow moved to {appName}</h2><p className="muted">This Accounting page remains available for historical records and migration verification. New operational entries should be created in the authoritative application.</p>{children}</div><Link className="button-link" href={appUrl}>Open {appName}</Link></div>; }
+export default function LegacyExternalModuleNotice() {
+  // Authoritative application messaging and read-only enforcement now live in
+  // ExternalOwnershipBoundary so every migrated route behaves consistently.
+  return null;
+}
