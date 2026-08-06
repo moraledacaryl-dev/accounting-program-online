@@ -34,6 +34,7 @@ import './pass-15-final-consistency-polish.css';
 import './pass-16-production-resilience-hardening.css';
 import './pass-17-route-failure-recovery.css';
 import './pass-19-sidebar-refinement.css';
+import './pass-20-page-template-system.css';
 import ConfirmActionProvider from '../components/ConfirmActionProvider';
 import AppFrame from '../components/app-shell/AppFrame';
 import { AppShellProvider } from '../components/app-shell/AppShellContext';
