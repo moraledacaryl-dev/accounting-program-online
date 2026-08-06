@@ -201,7 +201,7 @@ export default function Sidebar() {
               <nav aria-label="Primary navigation">
                 {filteredGroups.map((group) => {
                   const groupActive = group.items.some((item) => isItemActive(pathname, item.href));
-                  const expanded = Boolean(filter) || openGroupId === group.id;
+                  const expanded = openGroupId === group.id;
                   const regionId = `sidebar-group-${group.id}`;
                   return (
                     <section key={group.id} className={`nav-group ${groupActive ? 'active-group' : ''}`} aria-label={group.label}>
