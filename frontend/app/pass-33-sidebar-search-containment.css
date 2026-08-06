@@ -35,8 +35,25 @@
   color: #214a36;
 }
 
+.sidebar.search-active {
+  position: sticky;
+  overflow: hidden;
+}
+
 .sidebar.search-active .sidebar-scroll {
+  position: absolute;
+  top: 112px;
+  right: 10px;
+  bottom: 72px;
+  left: 10px;
+  display: block !important;
+  margin: 0 !important;
+  padding: 0 1px !important;
+  overflow-x: hidden;
+  overflow-y: auto;
   scroll-behavior: auto;
+  overscroll-behavior: contain;
+  scrollbar-gutter: stable;
 }
 
 .sidebar-search-results {
@@ -157,5 +174,10 @@
     height: 42px !important;
     min-height: 42px !important;
     max-height: 42px !important;
+  }
+
+  .sidebar.search-active .sidebar-scroll {
+    top: max(116px, calc(env(safe-area-inset-top) + 104px));
+    bottom: max(76px, calc(env(safe-area-inset-bottom) + 68px));
   }
 }
