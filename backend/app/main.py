@@ -14,6 +14,7 @@ import app.models  # noqa: F401
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):
+    settings.validate_production_security()
     ensure_database_ready(engine)
     run_startup_migrations(engine)
     yield
@@ -42,7 +43,7 @@ def root():
 
 @app.get('/healthz')
 def healthz():
-    return {'ok': True, 'environment': settings.environment}
+    return {'ok': True}
 
 @app.get('/api/healthz')
 def api_healthz():
@@ -61,7 +62,6 @@ def healthz_details():
         db_ok = False
     return {
         'ok': db_ok and (not migration or bool(migration.get('ok', True))),
-        'environment': settings.environment,
         'database': 'ok' if db_ok else 'error',
         'migration': migration,
         'uploads': UPLOAD_ROOT.exists(),
