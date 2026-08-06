@@ -7,15 +7,22 @@ export default function LoginPage() {
   const [username, setUsername] = useState('');
   const [password, setPassword] = useState('');
   const [showPassword, setShowPassword] = useState(false);
+  const [attempted, setAttempted] = useState(false);
   const [error, setError] = useState('');
   const [busy, setBusy] = useState(false);
 
+  const usernameError = attempted && !username.trim() ? 'Enter your username.' : '';
+  const passwordError = attempted && !password ? 'Enter your password.' : '';
+
   async function submit(event) {
     event.preventDefault();
+    setAttempted(true);
     setError('');
+    if (!username.trim() || !password) return;
+
     setBusy(true);
     try {
-      await login({ username, password });
+      await login({ username: username.trim(), password });
       clearToken();
       const searchParams = new URLSearchParams(window.location.search);
       const next = searchParams.get('next') || '/';
@@ -49,27 +56,30 @@ export default function LoginPage() {
           <p className="muted">Use your Hidden Oasis account to continue.</p>
         </div>
 
-        <form onSubmit={submit} className="auth-login-form">
+        <form onSubmit={submit} className="auth-login-form" noValidate>
           <label>
             Username
             <input
               data-drawer-autofocus
-              required
               autoComplete="username"
               value={username}
               onChange={(event) => setUsername(event.target.value)}
+              aria-invalid={usernameError ? 'true' : undefined}
+              aria-describedby={usernameError ? 'login-username-error' : undefined}
               disabled={busy}
             />
+            {usernameError ? <span id="login-username-error" className="field-error" role="alert">{usernameError}</span> : null}
           </label>
           <label>
             Password
             <span className="auth-password-field">
               <input
-                required
                 autoComplete="current-password"
                 type={showPassword ? 'text' : 'password'}
                 value={password}
                 onChange={(event) => setPassword(event.target.value)}
+                aria-invalid={passwordError ? 'true' : undefined}
+                aria-describedby={passwordError ? 'login-password-error' : undefined}
                 disabled={busy}
               />
               <button
@@ -82,6 +92,7 @@ export default function LoginPage() {
                 {showPassword ? 'Hide' : 'Show'}
               </button>
             </span>
+            {passwordError ? <span id="login-password-error" className="field-error" role="alert">{passwordError}</span> : null}
           </label>
           {error ? <div className="ho-notice ho-notice--danger" role="alert">{error}</div> : null}
           <button type="submit" className="auth-submit" disabled={busy}>
