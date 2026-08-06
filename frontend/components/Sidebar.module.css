@@ -1,0 +1,206 @@
+.sidebarV2 {
+  --sidebar-ink: #1d2822;
+  --sidebar-muted: #68736c;
+  --sidebar-hover: #f2f5f2;
+  --sidebar-active: #e8f0eb;
+  --sidebar-active-line: #287453;
+  background: #fbfcfb;
+  border-right-color: #dfe4df;
+}
+
+.sidebarV2 :global(.brand) {
+  padding: 8px 7px 14px;
+  margin-bottom: 12px;
+}
+
+.sidebarV2 :global(.brand-badge) {
+  background: #193f30;
+  box-shadow: inset 0 0 0 1px rgba(255,255,255,.12);
+}
+
+.sidebarV2 :global(.sidebar-toggle) {
+  background: #f5f7f5;
+  color: #35423a;
+  border-color: #dce2dd;
+}
+
+.sidebarV2 :global(.sidebar-toggle:hover) {
+  background: #edf2ee;
+  color: #1f4f39;
+  border-color: #cfd9d1;
+}
+
+.sidebarV2 :global(.sidebar-scroll) {
+  scrollbar-gutter: stable;
+}
+
+.sidebarV2 :global(.sidebar-eyebrow) {
+  color: #7b857e;
+  letter-spacing: .12em;
+}
+
+.sidebarV2 :global(.nav-group) {
+  margin: 0 0 9px;
+  padding: 0 2px;
+}
+
+.sidebarV2 :global(.nav-group-toggle) {
+  min-height: 42px;
+  background: transparent;
+  color: var(--sidebar-muted);
+  border: 1px solid transparent;
+  border-radius: 8px;
+  transition: background-color 140ms ease, color 140ms ease, border-color 140ms ease;
+}
+
+.sidebarV2 :global(.nav-group-toggle:hover) {
+  background: #f4f6f4;
+  color: #324039;
+  border-color: #e7ebe7;
+}
+
+.sidebarV2 :global(.active-group .nav-group-toggle) {
+  color: #294d3b;
+}
+
+.sidebarV2 :global(.nav-group-heading strong) {
+  font-weight: 620;
+  font-size: 12.5px;
+}
+
+.sidebarV2 :global(.nav-group-heading small) {
+  color: #879089;
+  font-size: 10.5px;
+}
+
+.sidebarV2 :global(.nav-group-icon),
+.sidebarV2 :global(.nav-symbol) {
+  display: inline-grid;
+  place-items: center;
+  flex: 0 0 auto;
+}
+
+.sidebarV2 :global(.nav-group-icon) {
+  width: 24px;
+  height: 24px;
+  color: #6d7971;
+}
+
+.sidebarV2 :global(.nav-symbol) {
+  width: 24px;
+  height: 24px;
+  color: #748078;
+}
+
+.sidebarV2 :global(.nav-group-items) {
+  padding: 3px 0 2px 8px;
+}
+
+.sidebarV2 :global(.nav-group-items a) {
+  position: relative;
+  min-height: 36px;
+  padding: 6px 9px 6px 10px;
+  border: 1px solid transparent;
+  border-radius: 7px;
+  color: #47534c;
+  font-weight: 500;
+  transition: background-color 140ms ease, color 140ms ease, border-color 140ms ease, transform 140ms ease;
+}
+
+.sidebarV2 :global(.nav-group-items a:hover) {
+  background: var(--sidebar-hover);
+  border-color: #e5eae6;
+  color: #26332c;
+  transform: translateX(1px);
+}
+
+.sidebarV2 :global(.nav-group-items a.active) {
+  background: var(--sidebar-active);
+  border-color: #dce7df;
+  color: #183f2d;
+  font-weight: 620;
+  box-shadow: none;
+}
+
+.sidebarV2 :global(.nav-group-items a.active)::before {
+  content: '';
+  position: absolute;
+  left: -9px;
+  top: 7px;
+  bottom: 7px;
+  width: 3px;
+  border-radius: 999px;
+  background: var(--sidebar-active-line);
+}
+
+.sidebarV2 :global(.nav-group-items a.active .nav-symbol) {
+  color: #236a4a;
+}
+
+.sidebarV2 :global(.connected-apps) {
+  margin-top: 14px;
+  padding-top: 13px;
+  border-top: 1px solid #e4e8e4;
+}
+
+.sidebarV2 :global(.connected-apps .nav-group-static-label) {
+  color: #89918c;
+  font-size: 10px;
+  letter-spacing: .11em;
+  text-transform: uppercase;
+  padding: 0 9px 6px;
+}
+
+.sidebarV2 :global(.connected-apps .nav-group-items) {
+  padding-left: 0;
+}
+
+.sidebarV2 :global(.connected-apps .nav-group-items a) {
+  color: #657069;
+  background: transparent;
+}
+
+.sidebarV2 :global(.connected-apps .nav-group-items a:hover) {
+  background: #f3f5f3;
+  color: #354139;
+}
+
+.sidebarV2 :global(.sidebar-user) {
+  margin: 12px 2px 0;
+  padding: 11px 9px;
+  background: #f3f6f3;
+  border: 1px solid #e1e6e2;
+  border-radius: 10px;
+}
+
+.sidebarV2 :global(.user-avatar) {
+  background: #dce9e0;
+  color: #25563e;
+  box-shadow: inset 0 0 0 1px #cfddd3;
+}
+
+.sidebarV2 :global(.sidebar-user-copy strong) {
+  color: #26322b;
+}
+
+.sidebarV2 :global(.sidebar-user-copy span) {
+  color: #78827b;
+}
+
+.sidebarV2 :global(.sidebar-filter) {
+  background: #f4f6f4;
+  border-color: #e0e5e1;
+}
+
+.sidebarV2 :global(.sidebar-filter:focus-within) {
+  background: #fff;
+  border-color: #9bb5a5;
+  box-shadow: 0 0 0 3px rgba(42, 107, 76, .10);
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .sidebarV2 :global(.nav-group-items a),
+  .sidebarV2 :global(.nav-group-toggle) {
+    transition: none;
+  }
+}
