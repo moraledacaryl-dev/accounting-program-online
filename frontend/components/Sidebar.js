@@ -2,7 +2,7 @@
 
 import Link from 'next/link';
 import { usePathname } from 'next/navigation';
-import { useEffect, useMemo, useState } from 'react';
+import { useEffect, useMemo, useRef, useState } from 'react';
 import { canAccess } from '../lib/permissions';
 import { useAppShell } from './app-shell/AppShellContext';
 import NavIcon from './app-shell/NavIcon';
@@ -16,7 +16,8 @@ const connectedApps = [
 ].filter((item) => item.href);
 
 const SIDEBAR_KEY = 'accounting_sidebar_collapsed_v5';
-const GROUPS_KEY = 'accounting_sidebar_groups_v2';
+const ACTIVE_GROUP_KEY = 'accounting_sidebar_active_group_v3';
+const SCROLL_KEY = 'accounting_sidebar_scroll_v1';
 
 function hasAnyPermission(user, keys = []) {
   if (!keys.length) return true;
@@ -32,29 +33,55 @@ function isItemActive(pathname, href) {
   return pathname === href || pathname.startsWith(`${href}/`);
 }
 
-function defaultGroupState() {
-  return Object.fromEntries(navigationGroups.map((group) => [group.id, group.id === 'overview']));
+function activeGroupForPath(pathname) {
+  return navigationGroups.find((group) => group.items.some((item) => isItemActive(pathname, item.href)))?.id || 'overview';
+}
+
+function SidebarSkeleton({ collapsed }) {
+  return (
+    <div className={collapsed ? 'sidebar-nav-skeleton collapsed-skeleton' : 'sidebar-nav-skeleton'} role="status" aria-label="Loading permitted navigation">
+      {!collapsed && <div className="sidebar-skeleton-eyebrow" />}
+      {[0, 1, 2, 3, 4].map((index) => (
+        <div className="sidebar-skeleton-group" key={index}>
+          <span className="sidebar-skeleton-icon" />
+          {!collapsed && (
+            <span className="sidebar-skeleton-copy">
+              <span className="sidebar-skeleton-title" />
+              <span className="sidebar-skeleton-subtitle" />
+            </span>
+          )}
+        </div>
+      ))}
+      <span className="sr-only">Loading access…</span>
+    </div>
+  );
 }
 
 export default function Sidebar() {
   const pathname = usePathname();
   const { user, loaded, mobileNavOpen, closeMobileNav } = useAppShell();
+  const scrollRef = useRef(null);
+  const activeItemRef = useRef(null);
   const [collapsed, setCollapsed] = useState(false);
-  const [openGroups, setOpenGroups] = useState(defaultGroupState);
+  const [openGroupId, setOpenGroupId] = useState(() => activeGroupForPath(pathname));
   const [filter, setFilter] = useState('');
 
   useEffect(() => {
     try {
       setCollapsed(window.localStorage.getItem(SIDEBAR_KEY) === '1');
-      const storedGroups = JSON.parse(window.localStorage.getItem(GROUPS_KEY) || '{}');
-      setOpenGroups((current) => ({ ...current, ...storedGroups }));
+      const storedGroup = window.localStorage.getItem(ACTIVE_GROUP_KEY);
+      if (storedGroup && navigationGroups.some((group) => group.id === storedGroup)) setOpenGroupId(storedGroup);
+      const storedScroll = Number(window.sessionStorage.getItem(SCROLL_KEY) || 0);
+      window.requestAnimationFrame(() => {
+        if (scrollRef.current && Number.isFinite(storedScroll)) scrollRef.current.scrollTop = storedScroll;
+      });
     } catch {
       // Storage can be unavailable in private browsing; defaults remain usable.
     }
   }, []);
 
   useEffect(() => {
-    document.documentElement.style.setProperty('--sidebar-width', collapsed ? '76px' : '292px');
+    document.documentElement.style.setProperty('--sidebar-width', collapsed ? '76px' : '304px');
     try {
       window.localStorage.setItem(SIDEBAR_KEY, collapsed ? '1' : '0');
     } catch {
@@ -65,8 +92,14 @@ export default function Sidebar() {
   useEffect(() => {
     closeMobileNav();
     setFilter('');
-    const activeGroup = navigationGroups.find((group) => group.items.some((item) => isItemActive(pathname, item.href)));
-    if (activeGroup) setOpenGroups((current) => ({ ...current, [activeGroup.id]: true }));
+    const activeGroupId = activeGroupForPath(pathname);
+    setOpenGroupId(activeGroupId);
+    try {
+      window.localStorage.setItem(ACTIVE_GROUP_KEY, activeGroupId);
+    } catch {
+      // Route-aware state still updates when storage is unavailable.
+    }
+    window.requestAnimationFrame(() => activeItemRef.current?.scrollIntoView({ block: 'nearest' }));
   }, [pathname, closeMobileNav]);
 
   const visibleGroups = useMemo(() => navigationGroups
@@ -88,15 +121,24 @@ export default function Sidebar() {
   }, [filter, visibleGroups]);
 
   function toggleGroup(groupId) {
-    setOpenGroups((current) => {
-      const next = { ...current, [groupId]: !current[groupId] };
+    setOpenGroupId((current) => {
+      const next = current === groupId ? null : groupId;
       try {
-        window.localStorage.setItem(GROUPS_KEY, JSON.stringify(next));
+        if (next) window.localStorage.setItem(ACTIVE_GROUP_KEY, next);
+        else window.localStorage.removeItem(ACTIVE_GROUP_KEY);
       } catch {
-        // The visible state still updates when storage is unavailable.
+        // The visible accordion state still updates when storage is unavailable.
       }
       return next;
     });
+  }
+
+  function rememberScroll(event) {
+    try {
+      window.sessionStorage.setItem(SCROLL_KEY, String(event.currentTarget.scrollTop));
+    } catch {
+      // Scroll remains stable for the current mounted session.
+    }
   }
 
   if (pathname === '/login') return null;
@@ -152,76 +194,79 @@ export default function Sidebar() {
           </div>
         )}
 
-        <div className="sidebar-scroll">
-          {!collapsed && <div className="sidebar-eyebrow">Workspace</div>}
-          <nav aria-label="Primary navigation">
-            {filteredGroups.map((group) => {
-              const groupActive = group.items.some((item) => isItemActive(pathname, item.href));
-              const expanded = Boolean(filter) || openGroups[group.id] !== false;
-              const regionId = `sidebar-group-${group.id}`;
-              return (
-                <section key={group.id} className={`nav-group ${groupActive ? 'active-group' : ''}`} aria-label={group.label}>
-                  {!collapsed && (
-                    <button
-                      type="button"
-                      className="nav-group-toggle"
-                      aria-expanded={expanded}
-                      aria-controls={regionId}
-                      onClick={() => toggleGroup(group.id)}
-                    >
-                      <span className="nav-group-heading">
-                        <span className="nav-group-icon"><NavIcon name={group.icon} size={15} /></span>
-                        <span><strong>{group.label}</strong><small>{group.description}</small></span>
-                      </span>
-                      <NavIcon name="down" size={14} className={expanded ? '' : 'rotate-negative-90'} />
-                    </button>
-                  )}
-                  <div id={regionId} className="nav-group-items" hidden={!expanded && !collapsed}>
-                    {group.items.map((item) => {
-                      const active = isItemActive(pathname, item.href);
-                      return (
-                        <Link
-                          key={item.href}
-                          href={item.href}
-                          className={active ? 'active' : ''}
-                          title={collapsed ? item.label : undefined}
-                          aria-label={collapsed ? item.label : undefined}
-                          aria-current={active ? 'page' : undefined}
+        <div className="sidebar-scroll" ref={scrollRef} onScroll={rememberScroll}>
+          {!loaded ? <SidebarSkeleton collapsed={collapsed} /> : (
+            <>
+              {!collapsed && <div className="sidebar-eyebrow">Workspace</div>}
+              <nav aria-label="Primary navigation">
+                {filteredGroups.map((group) => {
+                  const groupActive = group.items.some((item) => isItemActive(pathname, item.href));
+                  const expanded = Boolean(filter) || openGroupId === group.id;
+                  const regionId = `sidebar-group-${group.id}`;
+                  return (
+                    <section key={group.id} className={`nav-group ${groupActive ? 'active-group' : ''}`} aria-label={group.label}>
+                      {!collapsed && (
+                        <button
+                          type="button"
+                          className="nav-group-toggle"
+                          aria-expanded={expanded}
+                          aria-controls={regionId}
+                          onClick={() => toggleGroup(group.id)}
                         >
-                          <span className="nav-symbol"><NavIcon name={item.icon} size={17} /></span>
-                          {!collapsed && <span className="nav-text">{item.label}</span>}
-                        </Link>
-                      );
-                    })}
-                  </div>
-                </section>
-              );
-            })}
-            {!collapsed && filter && !filteredGroups.length && <div className="sidebar-no-results">No navigation matches “{filter}”.</div>}
+                          <span className="nav-group-heading">
+                            <span className="nav-group-icon"><NavIcon name={group.icon} size={16} /></span>
+                            <span><strong>{group.label}</strong><small>{group.description}</small></span>
+                          </span>
+                          <NavIcon name="down" size={13} className={expanded ? '' : 'rotate-negative-90'} />
+                        </button>
+                      )}
+                      <div id={regionId} className="nav-group-items" hidden={!expanded && !collapsed}>
+                        {group.items.map((item) => {
+                          const active = isItemActive(pathname, item.href);
+                          return (
+                            <Link
+                              key={item.href}
+                              href={item.href}
+                              ref={active ? activeItemRef : undefined}
+                              className={active ? 'active' : ''}
+                              title={collapsed ? item.label : undefined}
+                              aria-label={collapsed ? item.label : undefined}
+                              aria-current={active ? 'page' : undefined}
+                            >
+                              <span className="nav-symbol"><NavIcon name={item.icon} size={16} /></span>
+                              {!collapsed && <span className="nav-text">{item.label}</span>}
+                            </Link>
+                          );
+                        })}
+                      </div>
+                    </section>
+                  );
+                })}
+                {!collapsed && filter && !filteredGroups.length && <div className="sidebar-no-results">No navigation matches “{filter}”.</div>}
 
-            {connectedApps.length > 0 && !filter && (
-              <section className="nav-group connected-apps" aria-label="Connected Apps">
-                {!collapsed && <div className="nav-group-static-label">Connected Apps</div>}
-                <div className="nav-group-items">
-                  {connectedApps.map((item) => (
-                    <a key={item.label} href={item.href} rel="noreferrer" title={collapsed ? item.label : undefined} aria-label={collapsed ? item.label : undefined}>
-                      <span className="nav-symbol"><NavIcon name="app" size={17} /></span>
-                      {!collapsed && <><span className="nav-text">{item.label}</span><span className="external-mark" aria-hidden="true">↗</span></>}
-                    </a>
-                  ))}
-                </div>
-              </section>
-            )}
-          </nav>
-          {!loaded && <div className="sidebar-loading" role="status">Loading access…</div>}
+                {connectedApps.length > 0 && !filter && (
+                  <section className="nav-group connected-apps" aria-label="Connected Apps">
+                    {!collapsed && <div className="nav-group-static-label">Connected Apps</div>}
+                    <div className="nav-group-items">
+                      {connectedApps.map((item) => (
+                        <a key={item.label} href={item.href} rel="noreferrer" title={collapsed ? item.label : undefined} aria-label={collapsed ? item.label : undefined}>
+                          <span className="nav-symbol"><NavIcon name="app" size={16} /></span>
+                          {!collapsed && <><span className="nav-text">{item.label}</span><span className="external-mark" aria-hidden="true">↗</span></>}
+                        </a>
+                      ))}
+                    </div>
+                  </section>
+                )}
+              </nav>
+            </>
+          )}
         </div>
 
-        <div className="sidebar-user">
-          <div className="user-avatar" aria-hidden="true">{String(user?.full_name || user?.username || 'U').slice(0, 1).toUpperCase()}</div>
+        <div className={loaded ? 'sidebar-user' : 'sidebar-user sidebar-user-loading'}>
+          <div className="user-avatar" aria-hidden="true">{loaded ? String(user?.full_name || user?.username || 'U').slice(0, 1).toUpperCase() : ''}</div>
           {!collapsed && (
             <div className="sidebar-user-copy">
-              <strong>{user?.full_name || user?.username || 'User'}</strong>
-              <span>{roleName(user)}</span>
+              {loaded ? <><strong>{user?.full_name || user?.username || 'User'}</strong><span>{roleName(user)}</span></> : <><span className="sidebar-user-skeleton wide" /><span className="sidebar-user-skeleton" /></>}
             </div>
           )}
         </div>
