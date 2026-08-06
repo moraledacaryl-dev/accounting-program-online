@@ -1,0 +1,101 @@
+/* Pass 28: settings and integrations workspace refinement. */
+.main:has(a[href="/system-settings"]),
+.main:has(a[href="/integrations/beds24"]),
+.main:has(a[href="/booking-channels"]),
+.main:has(a[href="/room-types"]),
+.main:has(a[href="/rooms"]),
+.main:has(a[href="/rate-plans"]),
+.main:has(a[href="/room-package-rules"]),
+.main:has(a[href="/setup-imports"]),
+.main:has(a[href="/account-mapping"]){--settings-ink:#18372f;--settings-accent:#356b58;--settings-soft:#eaf3ee;--settings-line:#dce6e0;--settings-muted:#66746d}
+
+.main:has(a[href="/system-settings"])>.stack>.section:first-child,
+.main:has(a[href="/integrations/beds24"])>.stack>.section:first-child,
+.main:has(a[href="/booking-channels"])>.stack>.section:first-child,
+.main:has(a[href="/room-types"])>.stack>.section:first-child,
+.main:has(a[href="/rooms"])>.stack>.section:first-child,
+.main:has(a[href="/rate-plans"])>.stack>.section:first-child,
+.main:has(a[href="/room-package-rules"])>.stack>.section:first-child,
+.main:has(a[href="/setup-imports"])>.stack>.section:first-child,
+.main:has(a[href="/account-mapping"])>.stack>.section:first-child{border-top:3px solid var(--settings-accent);background:#fff;box-shadow:0 1px 2px rgba(25,55,47,.04)}
+
+.main:has(a[href="/system-settings"]) .tabs{position:sticky;top:64px;z-index:18;display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:4px;width:min(260px,100%);align-self:start;padding:6px;border:1px solid var(--settings-line);border-radius:14px;background:#f6f9f7;box-shadow:0 8px 24px rgba(25,55,47,.06)}
+.main:has(a[href="/system-settings"]) .tabs .tab{justify-content:flex-start;min-height:38px;padding:0 11px;border:0;border-radius:9px;background:transparent;color:#52625b;box-shadow:none;text-align:left}
+.main:has(a[href="/system-settings"]) .tabs .tab:hover{background:#eef4f0;color:var(--settings-ink)}
+.main:has(a[href="/system-settings"]) .tabs .tab.active{background:#dfece5;color:#204e40;box-shadow:inset 3px 0 0 var(--settings-accent);font-weight:720}
+.main:has(a[href="/system-settings"])>.stack{display:grid;grid-template-columns:260px minmax(0,1fr);gap:18px;align-items:start}
+.main:has(a[href="/system-settings"])>.stack>.section:first-child{grid-column:1/-1}
+.main:has(a[href="/system-settings"])>.stack>.section:first-child .tabs{margin-top:14px}
+.main:has(a[href="/system-settings"])>.stack>.section:not(:first-child){grid-column:2;margin:0}
+.main:has(a[href="/system-settings"]) .section:not(:first-child)>h2{margin-bottom:4px;color:var(--settings-ink)}
+.main:has(a[href="/system-settings"]) .section:not(:first-child)>.muted{margin-top:0;margin-bottom:16px}
+.main:has(a[href="/system-settings"]) .form-grid{grid-template-columns:repeat(2,minmax(0,1fr));gap:13px 16px}
+.main:has(a[href="/system-settings"]) .toggle-field{min-height:58px;padding:10px 12px;border-radius:10px;background:#fff}
+.main:has(a[href="/system-settings"]) .table-wrap{max-height:62vh;overflow:auto;border:1px solid var(--settings-line);border-radius:12px}
+.main:has(a[href="/system-settings"]) .table thead th{position:sticky;top:0;z-index:2;background:#f4f8f5}
+.main:has(a[href="/system-settings"])>.stack>.section:first-child>div:first-child{position:sticky;top:64px;z-index:20;padding:4px 0;background:#fff}
+
+.main:has(a[href="/integrations/beds24"]) .section,
+.main:has(a[href="/booking-channels"]) .section,
+.main:has(a[href="/setup-imports"]) .section,
+.main:has(a[href="/account-mapping"]) .section{scroll-margin-top:130px}
+.main:has(a[href="/integrations/beds24"]) .grid,
+.main:has(a[href="/setup-imports"]) .grid,
+.main:has(a[href="/account-mapping"]) .grid{grid-template-columns:minmax(0,1.35fr) minmax(280px,.65fr);align-items:start}
+.main:has(a[href="/integrations/beds24"]) .grid>.section:last-child,
+.main:has(a[href="/setup-imports"]) .grid>.section:last-child,
+.main:has(a[href="/account-mapping"]) .grid>.section:last-child{position:sticky;top:86px}
+.main:has(a[href="/integrations/beds24"]) .badge,
+.main:has(a[href="/booking-channels"]) .badge{border-color:#c8dbd1;background:#edf5f1;color:#285746}
+.main:has(a[href="/integrations/beds24"]) .code-block{background:#172923;color:#dbe9e2;border-color:#203d33}
+
+.main:has(a[href="/booking-channels"]) .table thead th,
+.main:has(a[href="/room-types"]) .table thead th,
+.main:has(a[href="/rooms"]) .table thead th,
+.main:has(a[href="/rate-plans"]) .table thead th,
+.main:has(a[href="/room-package-rules"]) .table thead th,
+.main:has(a[href="/setup-imports"]) .table thead th,
+.main:has(a[href="/account-mapping"]) .table thead th{position:sticky;top:0;z-index:2;background:#f4f8f5;color:#5d6b65;font-size:10px;letter-spacing:.065em;text-transform:uppercase}
+.main:has(a[href="/booking-channels"]) .table td,
+.main:has(a[href="/room-types"]) .table td,
+.main:has(a[href="/rooms"]) .table td,
+.main:has(a[href="/rate-plans"]) .table td,
+.main:has(a[href="/room-package-rules"]) .table td{vertical-align:middle}
+.main:has(a[href="/booking-channels"]) .form-grid,
+.main:has(a[href="/room-types"]) .form-grid,
+.main:has(a[href="/rooms"]) .form-grid,
+.main:has(a[href="/rate-plans"]) .form-grid,
+.main:has(a[href="/room-package-rules"]) .form-grid{grid-template-columns:repeat(2,minmax(0,1fr));gap:12px 16px}
+
+.main:has(a[href="/system-settings"]) button:not(.secondary),
+.main:has(a[href="/integrations/beds24"]) button:not(.secondary),
+.main:has(a[href="/booking-channels"]) button:not(.secondary){background:#356b58;color:#fff;border-color:#356b58}
+.main:has(a[href="/system-settings"]) button:not(.secondary):hover,
+.main:has(a[href="/integrations/beds24"]) button:not(.secondary):hover,
+.main:has(a[href="/booking-channels"]) button:not(.secondary):hover{background:#2b5b4a;border-color:#2b5b4a;color:#fff}
+
+@media(min-width:1600px){
+  .main:has(a[href="/system-settings"])>.stack{grid-template-columns:280px minmax(0,1240px);justify-content:center}
+  .main:has(a[href="/system-settings"]) .tabs{width:280px}
+}
+@media(max-width:980px){
+  .main:has(a[href="/system-settings"])>.stack{display:flex;flex-direction:column}
+  .main:has(a[href="/system-settings"])>.stack>.section:not(:first-child){width:100%}
+  .main:has(a[href="/system-settings"]) .tabs{position:static;display:flex;width:100%;overflow-x:auto}
+  .main:has(a[href="/system-settings"]) .tabs .tab{flex:0 0 auto}
+  .main:has(a[href="/integrations/beds24"]) .grid,
+  .main:has(a[href="/setup-imports"]) .grid,
+  .main:has(a[href="/account-mapping"]) .grid{grid-template-columns:1fr}
+  .main:has(a[href="/integrations/beds24"]) .grid>.section:last-child,
+  .main:has(a[href="/setup-imports"]) .grid>.section:last-child,
+  .main:has(a[href="/account-mapping"]) .grid>.section:last-child{position:static}
+}
+@media(max-width:680px){
+  .main:has(a[href="/system-settings"]) .form-grid,
+  .main:has(a[href="/booking-channels"]) .form-grid,
+  .main:has(a[href="/room-types"]) .form-grid,
+  .main:has(a[href="/rooms"]) .form-grid,
+  .main:has(a[href="/rate-plans"]) .form-grid,
+  .main:has(a[href="/room-package-rules"]) .form-grid{grid-template-columns:1fr}
+  .main:has(a[href="/system-settings"])>.stack>.section:first-child>div:first-child{position:static}
+}
