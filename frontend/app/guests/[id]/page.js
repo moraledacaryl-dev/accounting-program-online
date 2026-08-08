@@ -3,6 +3,7 @@
 import Link from 'next/link';
 import { useEffect, useMemo, useState } from 'react';
 import { fetchGuestHistory, fetchRoomFolios, mergeGuests, searchGuests } from '../../../lib/api';
+import { useConfirmAction } from '../../../components/ConfirmActionProvider';
 
 function php(value) {
   return Number(value || 0).toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 });
@@ -14,6 +15,7 @@ function compactDate(value) {
 }
 
 export default function GuestProfilePage({ params }) {
+  const confirmAction = useConfirmAction();
   const guestId = Number(params.id);
   const [history, setHistory] = useState(null);
   const [guestFolios, setGuestFolios] = useState([]);
@@ -60,15 +62,22 @@ export default function GuestProfilePage({ params }) {
     };
   }, [guest, bookings, stayHistory, paymentHistory, history]);
 
-
   async function findDuplicates() {
     setMergeCandidates(await searchGuests(mergeQuery || guest?.email || guest?.phone || guest?.full_name || '', 20));
   }
 
   async function mergeIntoCurrent(sourceId) {
-    if (!window.confirm('Merge this guest into the current profile? Bookings, folios, and Beds24 links will move to this guest.')) return;
+    const confirmed = await confirmAction({
+      title: 'Merge this guest into the current profile?',
+      description: 'Bookings, folios, and Beds24 links will move to the current guest. This changes record ownership and should only be used for true duplicates.',
+      confirmLabel: 'Merge guest',
+      tone: 'danger',
+    });
+    if (!confirmed) return;
     await mergeGuests({ source_guest_id: sourceId, target_guest_id: guestId, reason: 'Duplicate guest merged from profile review' });
-    setMergeNotice('Guest records merged.'); setMergeCandidates([]); await load();
+    setMergeNotice('Guest records merged.');
+    setMergeCandidates([]);
+    await load();
   }
 
   if (error) {
@@ -171,7 +180,6 @@ export default function GuestProfilePage({ params }) {
           </table>
         </section>
       </div>
-
 
       <section className="section">
         <div className="row wrap" style={{ justifyContent: 'space-between' }}><div><h2>Duplicate Guest Review</h2><p className="muted">Merge OTA or direct-booking duplicates while preserving bookings, folios, and audit history.</p></div></div>
