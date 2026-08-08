@@ -1,6 +1,7 @@
 'use client';
 
 import { usePathname } from 'next/navigation';
+import AccessibilityEnhancer from '../AccessibilityEnhancer';
 import Header from '../Header';
 import SetupAdministrationNav from '../admin/SetupAdministrationNav';
 import FinanceOperationsNav from '../finance/FinanceOperationsNav';
@@ -27,6 +28,7 @@ export default function AppFrame({ children }) {
 
   return (
     <>
+      <AccessibilityEnhancer />
       <a className="skip-link" href="#main-content">Skip to main content</a>
       <div className="app-shell">
         <Sidebar />
