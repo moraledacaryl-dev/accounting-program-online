@@ -8,6 +8,7 @@ import {
   postPayrollIntegrationReceipt,
   rejectPayrollIntegrationReceipt,
 } from '../../../lib/api';
+import { useConfirmAction } from '../../../components/ConfirmActionProvider';
 
 const tabs = ['For Review', 'Ready to Post', 'Posted', 'Rejected', 'Errors', 'Already Applied'];
 
@@ -16,6 +17,7 @@ function money(value) {
 }
 
 export default function PayrollIntegrationReviewPage() {
+  const confirmAction = useConfirmAction();
   const [status, setStatus] = useState('For Review');
   const [rows, setRows] = useState([]);
   const [openPayloadId, setOpenPayloadId] = useState(null);
@@ -38,12 +40,24 @@ export default function PayrollIntegrationReviewPage() {
     try {
       if (kind === 'approve') await approvePayrollIntegrationReceipt(row.id);
       if (kind === 'post') {
-        if (!window.confirm('Post this reviewed payroll import?')) return;
+        const confirmed = await confirmAction({
+          title: 'Post this reviewed payroll import?',
+          description: 'Posting applies the reviewed payroll receipt to Accounting. Continue only after the journal preview and source payload have been checked.',
+          confirmLabel: 'Post payroll',
+          tone: 'normal',
+        });
+        if (!confirmed) return;
         await postPayrollIntegrationReceipt(row.id);
       }
       if (kind === 'reject') {
-        const reason = window.prompt('Rejection reason');
-        if (!reason) return;
+        const reason = await confirmAction({
+          title: 'Reject this payroll import?',
+          description: 'Enter the rejection reason so the source record has an actionable audit trail.',
+          confirmLabel: 'Reject import',
+          tone: 'danger',
+          reasonRequired: true,
+        });
+        if (!reason || reason === true) return;
         await rejectPayrollIntegrationReceipt(row.id, reason);
       }
       await load();
