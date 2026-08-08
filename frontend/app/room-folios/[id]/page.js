@@ -16,6 +16,7 @@ import {
 } from '../../../lib/api';
 import ConfirmActionModal from '../../../components/ConfirmActionModal';
 import { useConfirmAction } from '../../../components/ConfirmActionProvider';
+import { useInputAction } from '../../../components/InputActionProvider';
 
 const LINE_TYPES = [
   'room_charge',
@@ -68,6 +69,7 @@ function todayIso() {
 
 export default function RoomFolioDetailPage({ params }) {
   const confirmAction = useConfirmAction();
+  const inputAction = useInputAction();
   const folioId = Number(params.id);
   const [folio, setFolio] = useState(null);
   const [editingLineId, setEditingLineId] = useState(null);
@@ -159,15 +161,48 @@ export default function RoomFolioDetailPage({ params }) {
   }
 
   async function reverseLine(row) {
-    const reason = window.prompt('Reason for reversal:');
+    const reason = await inputAction({
+      title: 'Reverse this folio line?',
+      description: 'The original line remains in the audit trail and a reversal entry will be created.',
+      fieldLabel: 'Reversal reason',
+      required: true,
+      confirmLabel: 'Reverse line',
+      tone: 'danger',
+    });
     if (!reason) return;
     setError('');
-    try { await reverseRoomFolioLine(row.id, { transaction_date: todayIso(), reason }); setNotice('Folio line reversed.'); await load(); } catch (err) { setError(err.message || 'Failed to reverse folio line.'); }
+    try {
+      await reverseRoomFolioLine(row.id, { transaction_date: todayIso(), reason: String(reason).trim() });
+      setNotice('Folio line reversed.');
+      await load();
+    } catch (err) {
+      setError(err.message || 'Failed to reverse folio line.');
+    }
   }
 
   async function transferLine(row) {
-    const target = window.prompt('Target folio ID:'); if (!target) return;
-    try { await transferRoomFolioLine(row.id, { target_folio_id: Number(target), transaction_date: todayIso(), reason: 'Transferred from folio detail' }); setNotice('Folio line transferred.'); await load(); } catch (err) { setError(err.message || 'Failed to transfer folio line.'); }
+    const target = await inputAction({
+      title: 'Transfer this folio line?',
+      description: 'Enter the destination folio ID. The transfer will remain traceable from this folio.',
+      fieldLabel: 'Target folio ID',
+      inputType: 'number',
+      required: true,
+      confirmLabel: 'Transfer line',
+      tone: 'normal',
+    });
+    if (!target) return;
+    const targetFolioId = Number(target);
+    if (!Number.isInteger(targetFolioId) || targetFolioId <= 0) {
+      setError('Enter a valid target folio ID.');
+      return;
+    }
+    try {
+      await transferRoomFolioLine(row.id, { target_folio_id: targetFolioId, transaction_date: todayIso(), reason: 'Transferred from folio detail' });
+      setNotice('Folio line transferred.');
+      await load();
+    } catch (err) {
+      setError(err.message || 'Failed to transfer folio line.');
+    }
   }
 
   async function settleCurrentFolio() {
