@@ -2,6 +2,7 @@
 
 import { Component, useEffect, useId, useRef, useState } from 'react';
 import { createPortal } from 'react-dom';
+import { useConfirmAction } from '../ConfirmActionProvider';
 
 const FOCUSABLE = [
   'a[href]',
@@ -56,6 +57,7 @@ export default function Drawer({
   onBeforeClose,
   initialFocusRef,
 }) {
+  const confirmAction = useConfirmAction();
   const titleId = useId();
   const descriptionId = useId();
   const panelRef = useRef(null);
@@ -65,11 +67,16 @@ export default function Drawer({
 
   useEffect(() => setMounted(true), []);
 
-  function requestClose(reason = 'close-button') {
+  async function requestClose(reason = 'close-button') {
     if (busy) return;
     if (onBeforeClose && onBeforeClose(reason) === false) return;
-    if (!onBeforeClose && dirty && typeof window !== 'undefined') {
-      const shouldDiscard = window.confirm('Discard your unsaved changes?');
+    if (!onBeforeClose && dirty) {
+      const shouldDiscard = await confirmAction({
+        title: 'Discard unsaved changes?',
+        description: 'Changes in this panel have not been saved. Closing now will discard them.',
+        confirmLabel: 'Discard changes',
+        tone: 'danger',
+      });
       if (!shouldDiscard) return;
     }
     onClose?.(reason);
