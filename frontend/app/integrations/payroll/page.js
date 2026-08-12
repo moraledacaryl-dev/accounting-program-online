@@ -80,63 +80,89 @@ export default function PayrollIntegrationReviewPage() {
   }
 
   return (
-    <main>
-      <section className="section">
-        <div>
+    <div className="stack payroll-integration-page">
+      <section className="section payroll-integration-header">
+        <div className="payroll-integration-header__copy">
+          <div className="eyebrow">Staff & Payroll intake</div>
           <h1>Payroll Review Queue</h1>
-          <p className="muted">Imported Staff/Payroll records stay review-first until Accounting approves and posts them.</p>
+          <p className="muted">Review imported payroll events, verify the journal preview, then approve and post only the records that are ready for Accounting.</p>
         </div>
-        <button className="btn secondary" onClick={() => load()}>Refresh</button>
+        <div className="payroll-integration-header__actions">
+          <span className="badge">{rows.length} in {status.toLowerCase()}</span>
+          <button className="secondary" type="button" onClick={() => load()}>Refresh</button>
+        </div>
       </section>
+
       {error ? <div className="error-text">{error}</div> : null}
-      <div className="tabs">
-        {tabs.map((tab) => (
-          <button key={tab} className={`tab ${status === tab ? 'active' : ''}`} onClick={() => setStatus(tab)}>{tab}</button>
-        ))}
-      </div>
-      <div className="table-wrap section">
-        <table className="table">
-          <thead>
-            <tr>
-              <th>Source</th>
-              <th>Event</th>
-              <th>External ID</th>
-              <th>Amount</th>
-              <th>Status</th>
-              <th>Preview</th>
-              <th>Actions</th>
-            </tr>
-          </thead>
-          <tbody>
-            {rows.map((row) => (
-              <tr key={row.id}>
-                <td>{row.external_source}</td>
-                <td>{row.event_type}</td>
-                <td>{row.external_id}</td>
-                <td>PHP {money(row.amount)}</td>
-                <td><span className="badge">{row.status}</span></td>
-                <td>
-                  {(row.outcome?.journal_preview || []).slice(0, 4).map((line, idx) => (
-                    <div key={idx} className="muted">{line.debit_account} / {line.credit_account}: PHP {money(line.amount)}</div>
-                  ))}
-                  <details open={openPayloadId === row.id} onToggle={(event) => togglePayload(event, row)}>
-                    <summary>Raw payload</summary>
-                    <pre>{JSON.stringify(payloads[row.id] || {}, null, 2)}</pre>
-                  </details>
-                </td>
-                <td>
-                  <div className="toolbar tight">
-                    {row.status === 'For Review' ? <button className="btn small" onClick={() => act('approve', row)}>Approve</button> : null}
-                    {['For Review', 'Ready to Post'].includes(row.status) ? <button className="btn small" onClick={() => act('post', row)}>Post</button> : null}
-                    {!['Posted', 'Rejected'].includes(row.status) ? <button className="btn small secondary" onClick={() => act('reject', row)}>Reject</button> : null}
-                  </div>
-                </td>
+
+      <section className="section payroll-integration-workspace">
+        <div className="payroll-integration-tabs" role="tablist" aria-label="Payroll review status">
+          {tabs.map((tab) => (
+            <button
+              key={tab}
+              type="button"
+              role="tab"
+              aria-selected={status === tab}
+              className={`payroll-integration-tab ${status === tab ? 'active' : ''}`}
+              onClick={() => setStatus(tab)}
+            >
+              {tab}
+            </button>
+          ))}
+        </div>
+
+        <div className="table-wrap payroll-integration-table-wrap">
+          <table className="table payroll-integration-table">
+            <thead>
+              <tr>
+                <th>Source</th>
+                <th>Event</th>
+                <th>External ID</th>
+                <th className="numeric">Amount</th>
+                <th>Status</th>
+                <th>Journal preview</th>
+                <th>Actions</th>
               </tr>
-            ))}
-            {!rows.length ? <tr><td colSpan="7" className="empty">No receipts in this tab.</td></tr> : null}
-          </tbody>
-        </table>
-      </div>
-    </main>
+            </thead>
+            <tbody>
+              {rows.map((row) => {
+                const preview = (row.outcome?.journal_preview || []).slice(0, 3);
+                return (
+                  <tr key={row.id}>
+                    <td><strong>{row.external_source || '-'}</strong></td>
+                    <td>{row.event_type || '-'}</td>
+                    <td className="payroll-external-id">{row.external_id || '-'}</td>
+                    <td className="numeric payroll-amount">PHP {money(row.amount)}</td>
+                    <td><span className="badge">{row.status}</span></td>
+                    <td className="payroll-preview-cell">
+                      <div className="payroll-preview-lines">
+                        {preview.length ? preview.map((line, idx) => (
+                          <div key={idx} className="payroll-preview-line">
+                            <span>{line.debit_account} → {line.credit_account}</span>
+                            <strong>PHP {money(line.amount)}</strong>
+                          </div>
+                        )) : <span className="small muted">No journal preview supplied.</span>}
+                      </div>
+                      <details className="payroll-payload" open={openPayloadId === row.id} onToggle={(event) => togglePayload(event, row)}>
+                        <summary>Source payload</summary>
+                        <pre>{JSON.stringify(payloads[row.id] || {}, null, 2)}</pre>
+                      </details>
+                    </td>
+                    <td>
+                      <div className="toolbar tight payroll-row-actions">
+                        {row.status === 'For Review' ? <button className="small secondary" type="button" onClick={() => act('approve', row)}>Approve</button> : null}
+                        {['For Review', 'Ready to Post'].includes(row.status) ? <button className="small" type="button" onClick={() => act('post', row)}>Post</button> : null}
+                        {!['Posted', 'Rejected'].includes(row.status) ? <button className="small danger" type="button" onClick={() => act('reject', row)}>Reject</button> : null}
+                      </div>
+                    </td>
+                  </tr>
+                );
+              })}
+              {!rows.length ? <tr><td colSpan="7" className="empty">No receipts in this queue.</td></tr> : null}
+            </tbody>
+          </table>
+        </div>
+      </section>
+    </div>
   );
 }
