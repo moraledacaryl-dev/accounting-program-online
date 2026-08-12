@@ -64,6 +64,8 @@ export default function Sidebar() {
   const scrollRef = useRef(null);
   const activeItemRef = useRef(null);
   const searchInputRef = useRef(null);
+  const preSearchScrollRef = useRef(0);
+  const previousSearchActiveRef = useRef(false);
   const [collapsed, setCollapsed] = useState(false);
   const [openGroupId, setOpenGroupId] = useState(() => activeGroupForPath(pathname));
   const [filter, setFilter] = useState('');
@@ -76,7 +78,12 @@ export default function Sidebar() {
     try {
       setCollapsed(window.localStorage.getItem(SIDEBAR_KEY) === '1');
       const storedGroup = window.localStorage.getItem(ACTIVE_GROUP_KEY);
-      if (storedGroup && navigationGroups.some((group) => group.id === storedGroup)) setOpenGroupId(storedGroup);
+      const routeGroup = activeGroupForPath(pathname);
+      if (storedGroup === routeGroup && navigationGroups.some((group) => group.id === storedGroup)) {
+        setOpenGroupId(storedGroup);
+      } else {
+        setOpenGroupId(routeGroup);
+      }
       const storedScroll = Number(window.sessionStorage.getItem(SCROLL_KEY) || 0);
       window.requestAnimationFrame(() => {
         if (scrollRef.current && Number.isFinite(storedScroll)) scrollRef.current.scrollTop = storedScroll;
@@ -84,7 +91,7 @@ export default function Sidebar() {
     } catch {
       // Storage can be unavailable in private browsing.
     }
-  }, []);
+  }, [pathname]);
 
   useEffect(() => {
     document.documentElement.style.setProperty('--sidebar-width', collapsed ? '76px' : '304px');
@@ -109,11 +116,20 @@ export default function Sidebar() {
   }, [pathname, closeMobileNav]);
 
   useEffect(() => {
-    if (!searchActive) return;
-    window.requestAnimationFrame(() => {
-      if (scrollRef.current) scrollRef.current.scrollTop = 0;
-    });
-  }, [searchActive, normalizedFilter]);
+    const wasSearching = previousSearchActiveRef.current;
+    if (searchActive && !wasSearching) {
+      preSearchScrollRef.current = scrollRef.current?.scrollTop || 0;
+      window.requestAnimationFrame(() => {
+        if (scrollRef.current) scrollRef.current.scrollTop = 0;
+      });
+    }
+    if (!searchActive && wasSearching) {
+      window.requestAnimationFrame(() => {
+        if (scrollRef.current) scrollRef.current.scrollTop = preSearchScrollRef.current;
+      });
+    }
+    previousSearchActiveRef.current = searchActive;
+  }, [searchActive]);
 
   const visibleGroups = useMemo(() => navigationGroups
     .map((group) => ({
@@ -265,7 +281,7 @@ export default function Sidebar() {
                   const regionId = `sidebar-group-${group.id}`;
                   return (
                     <section key={group.id} className={`nav-group ${groupActive ? 'active-group' : ''}`} aria-label={group.label}>
-                      {!collapsed && (
+                      {!collapsed ? (
                         <button
                           type="button"
                           className="nav-group-toggle"
@@ -279,8 +295,19 @@ export default function Sidebar() {
                           </span>
                           <NavIcon name="down" size={13} className={expanded ? '' : 'rotate-negative-90'} />
                         </button>
+                      ) : (
+                        <button
+                          type="button"
+                          className={groupActive ? 'collapsed-group-button active' : 'collapsed-group-button'}
+                          aria-label={group.label}
+                          title={group.label}
+                          aria-expanded={expanded}
+                          onClick={() => toggleGroup(group.id)}
+                        >
+                          <NavIcon name={group.icon} size={17} />
+                        </button>
                       )}
-                      <div id={regionId} className="nav-group-items" hidden={!expanded && !collapsed}>
+                      <div id={regionId} className="nav-group-items" hidden={!expanded}>
                         {group.items.map((item) => {
                           const active = isItemActive(pathname, item.href);
                           return (
@@ -306,14 +333,16 @@ export default function Sidebar() {
                 {connectedApps.length > 0 && (
                   <section className="nav-group connected-apps" aria-label="Connected Apps">
                     {!collapsed && <div className="nav-group-static-label">Connected Apps</div>}
-                    <div className="nav-group-items">
-                      {connectedApps.map((item) => (
-                        <a key={item.label} href={item.href} rel="noreferrer" title={collapsed ? item.label : undefined} aria-label={collapsed ? item.label : undefined}>
-                          <span className="nav-symbol"><NavIcon name="app" size={16} /></span>
-                          {!collapsed && <><span className="nav-text">{item.label}</span><span className="external-mark" aria-hidden="true">↗</span></>}
-                        </a>
-                      ))}
-                    </div>
+                    {!collapsed && (
+                      <div className="nav-group-items">
+                        {connectedApps.map((item) => (
+                          <a key={item.label} href={item.href} rel="noreferrer">
+                            <span className="nav-symbol"><NavIcon name="app" size={16} /></span>
+                            <span className="nav-text">{item.label}</span><span className="external-mark" aria-hidden="true">↗</span>
+                          </a>
+                        ))}
+                      </div>
+                    )}
                   </section>
                 )}
               </nav>
