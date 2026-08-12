@@ -1,6 +1,6 @@
 'use client';
 
-import { useEffect, useId, useState } from 'react';
+import { useEffect, useId, useRef, useState } from 'react';
 
 export default function InputActionModal({
   open,
@@ -16,6 +16,10 @@ export default function InputActionModal({
   onClose,
 }) {
   const titleId = useId();
+  const descriptionId = useId();
+  const errorId = useId();
+  const inputRef = useRef(null);
+  const cancelRef = useRef(null);
   const [value, setValue] = useState('');
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState('');
@@ -25,6 +29,8 @@ export default function InputActionModal({
     setValue(String(defaultValue ?? ''));
     setBusy(false);
     setError('');
+    const timer = window.setTimeout(() => inputRef.current?.focus(), 0);
+    return () => window.clearTimeout(timer);
   }, [defaultValue, open]);
 
   useEffect(() => {
@@ -40,7 +46,11 @@ export default function InputActionModal({
 
   async function submit(event) {
     event.preventDefault();
-    if (required && !String(value).trim()) return setError(`${fieldLabel} is required.`);
+    if (required && !String(value).trim()) {
+      setError(`${fieldLabel} is required.`);
+      inputRef.current?.focus();
+      return;
+    }
     setBusy(true);
     setError('');
     try {
@@ -52,23 +62,39 @@ export default function InputActionModal({
     }
   }
 
+  const isDanger = tone === 'danger';
+
   return (
-    <div className="modal-backdrop" role="dialog" aria-modal="true" aria-labelledby={titleId}>
-      <div className="modal-card" style={{ maxWidth: 520 }}>
+    <div
+      className="modal-backdrop"
+      role="dialog"
+      aria-modal="true"
+      aria-labelledby={titleId}
+      aria-describedby={description ? descriptionId : undefined}
+      onClick={() => !busy && onClose?.()}
+    >
+      <div className={`modal-card input-action-modal ${isDanger ? 'is-danger' : 'is-neutral'}`} onClick={(event) => event.stopPropagation()}>
         <div className="modal-header">
-          <div><h2 id={titleId}>{title}</h2>{!!description && <p className="muted">{description}</p>}</div>
-          <button type="button" className="secondary" onClick={onClose} disabled={busy}>Close</button>
+          <div className="input-action-heading">
+            <span className="input-action-icon" aria-hidden="true">{isDanger ? '!' : 'i'}</span>
+            <div>
+              <h2 id={titleId}>{title}</h2>
+              {!!description && <p id={descriptionId}>{description}</p>}
+            </div>
+          </div>
+          <button type="button" className="modal-close" onClick={onClose} disabled={busy} aria-label="Close dialog">×</button>
         </div>
         <form className="modal-form stack" onSubmit={submit}>
-          <label className="field">{fieldLabel}
+          <label className="field">
+            {fieldLabel}
             {inputType === 'textarea'
-              ? <textarea value={value} onChange={(event) => setValue(event.target.value)} autoFocus />
-              : <input type={inputType} value={value} onChange={(event) => setValue(event.target.value)} autoFocus />}
+              ? <textarea ref={inputRef} value={value} onChange={(event) => setValue(event.target.value)} aria-invalid={!!error} aria-describedby={error ? errorId : undefined} />
+              : <input ref={inputRef} type={inputType} value={value} onChange={(event) => setValue(event.target.value)} aria-invalid={!!error} aria-describedby={error ? errorId : undefined} />}
           </label>
-          {!!error && <p className="error-text">{error}</p>}
-          <div className="row wrap">
-            <button type="submit" className={tone === 'danger' ? 'danger' : ''} disabled={busy}>{busy ? 'Processing...' : confirmLabel}</button>
-            <button type="button" className="secondary" onClick={onClose} disabled={busy}>Cancel</button>
+          {!!error && <p id={errorId} className="error-text" role="alert">{error}</p>}
+          <div className="row wrap modal-actions">
+            <button ref={cancelRef} type="button" className="secondary" onClick={onClose} disabled={busy}>Cancel</button>
+            <button type="submit" className={isDanger ? 'danger' : ''} disabled={busy}>{busy ? 'Processing…' : confirmLabel}</button>
           </div>
         </form>
       </div>
