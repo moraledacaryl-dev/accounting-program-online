@@ -45,6 +45,7 @@ import './pass-20-page-template-system.css';
 import './pass-33-sidebar-search-containment.css';
 import './pass-41-ui-closure.css';
 import './pass-42-modal-closure.css';
+import './pass-46-settings-ia.css';
 import ConfirmActionProvider from '../components/ConfirmActionProvider';
 import InputActionProvider from '../components/InputActionProvider';
 import AppFrame from '../components/app-shell/AppFrame';
