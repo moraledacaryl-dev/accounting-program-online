@@ -42,7 +42,7 @@ export default function AppFrame({ children }) {
             <SetupAdministrationNav />
           </div>
           <div className="shell-content">
-            <main id="main-content" className="main" tabIndex="-1">
+            <main id="main-content" className="main" data-route={pathname} tabIndex="-1">
               <RouteGuard>{children}</RouteGuard>
             </main>
           </div>
