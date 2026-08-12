@@ -53,6 +53,7 @@ import './pass-49-final-global-visual-closure.css';
 import './pass-50-route-audit.css';
 import './pass-51-record-detail-closure.css';
 import './pass-52-form-table-closure.css';
+import './pass-53-overlay-empty-state-closure.css';
 import ConfirmActionProvider from '../components/ConfirmActionProvider';
 import InputActionProvider from '../components/InputActionProvider';
 import AppFrame from '../components/app-shell/AppFrame';
