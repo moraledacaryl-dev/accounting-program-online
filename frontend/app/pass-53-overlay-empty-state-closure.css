@@ -1,0 +1,218 @@
+/* Pass 53: final overlay, empty-state, and feedback closure. */
+
+/* Input/action modal now shares the same hierarchy as confirmation dialogs. */
+.input-action-modal {
+  width: min(520px, calc(100vw - 32px));
+  max-width: 520px !important;
+}
+
+.input-action-modal .modal-header {
+  align-items: flex-start;
+  gap: 16px;
+  padding: 21px 22px 17px;
+  border-bottom: 1px solid #e0e7e3;
+  background: #fff;
+}
+
+.input-action-heading {
+  display: flex;
+  align-items: flex-start;
+  gap: 12px;
+  min-width: 0;
+}
+
+.input-action-icon {
+  display: grid;
+  flex: 0 0 auto;
+  place-items: center;
+  width: 34px;
+  height: 34px;
+  border: 1px solid #c9d9d1;
+  border-radius: 10px;
+  background: #edf4f0;
+  color: #315f52;
+  font-size: 18px;
+  font-weight: 800;
+}
+
+.input-action-modal.is-danger .input-action-icon {
+  border-color: #e8b9b4;
+  background: #fff1ef;
+  color: #a53a32;
+}
+
+.input-action-modal .modal-header h2 {
+  margin: 0 0 5px;
+  color: #20372f;
+  font-size: 19px;
+  line-height: 1.3;
+}
+
+.input-action-modal .modal-header p {
+  max-width: 48ch;
+  margin: 0;
+  color: #69776f;
+  font-size: 13px;
+  line-height: 1.55;
+}
+
+.input-action-modal .modal-close {
+  flex: 0 0 auto;
+  width: 34px;
+  height: 34px;
+  padding: 0;
+  border: 1px solid #dae3de;
+  border-radius: 9px;
+  background: #f7f9f8;
+  color: #526159;
+}
+
+.input-action-modal .modal-close:hover,
+.input-action-modal .modal-close:focus-visible {
+  border-color: #bdd0c6;
+  background: #eef5f1;
+  color: #17352f;
+}
+
+.input-action-modal .modal-form {
+  gap: 14px;
+  padding: 18px 22px 20px;
+}
+
+.input-action-modal .field {
+  gap: 7px;
+  color: #40534b;
+  font-size: 12px;
+  font-weight: 700;
+}
+
+.input-action-modal textarea {
+  min-height: 96px;
+}
+
+.input-action-modal [aria-invalid='true'] {
+  border-color: #d67b72;
+  box-shadow: 0 0 0 3px rgba(165, 58, 50, .08);
+}
+
+.input-action-modal .error-text {
+  margin: 0;
+}
+
+.input-action-modal .modal-actions {
+  justify-content: flex-end;
+  gap: 8px;
+  margin-top: 2px;
+}
+
+/* Table-empty rows: compact contextual state instead of bare floating text. */
+.main .table tbody > tr:only-child > td[colspan],
+.main .dense-table tbody > tr:only-child > td[colspan] {
+  height: 116px;
+  padding: 28px 18px;
+  border-bottom: 0;
+  background:
+    radial-gradient(circle at center 30%, rgba(49, 95, 82, .055), transparent 42%),
+    #fbfcfb;
+  color: #65746c;
+  font-size: 12px;
+  font-weight: 600;
+  line-height: 1.55;
+  text-align: center;
+}
+
+.main .table tbody > tr:only-child > td[colspan]::before,
+.main .dense-table tbody > tr:only-child > td[colspan]::before {
+  content: '';
+  display: block;
+  width: 26px;
+  height: 26px;
+  margin: 0 auto 9px;
+  border: 1px solid #cad8d1;
+  border-radius: 8px;
+  background:
+    linear-gradient(#dfe8e3, #dfe8e3) 7px 7px / 12px 2px no-repeat,
+    linear-gradient(#dfe8e3, #dfe8e3) 7px 12px / 9px 2px no-repeat,
+    linear-gradient(#dfe8e3, #dfe8e3) 7px 17px / 7px 2px no-repeat,
+    #f5f8f6;
+}
+
+/* Feedback surfaces remain compact and visually distinct from content cards. */
+.main .error-text,
+.main .success-text {
+  border: 1px solid transparent;
+  box-shadow: none;
+  font-size: 12px;
+  line-height: 1.5;
+}
+
+.main .error-text {
+  border-color: #f0d1cc;
+  color: #87332d;
+}
+
+.main .success-text {
+  border-color: #cfe4d6;
+  color: #2d6849;
+}
+
+/* Drawer final rhythm: grouped body, stronger footer separation, safer small screens. */
+.ho-drawer__body > .stack {
+  gap: 14px;
+}
+
+.ho-drawer__body .section + .section {
+  margin-top: 0;
+}
+
+.ho-drawer__footer .row.wrap {
+  justify-content: flex-end;
+}
+
+.ho-drawer__busy {
+  background: rgba(255,255,255,.92);
+  color: #315f52;
+  font-size: 12px;
+  font-weight: 700;
+  backdrop-filter: blur(5px);
+}
+
+@media (max-width: 720px) {
+  .input-action-modal {
+    width: calc(100vw - 24px);
+    margin: 12px;
+  }
+
+  .input-action-modal .modal-header {
+    padding: 18px 17px 15px;
+  }
+
+  .input-action-modal .modal-form {
+    padding: 16px 17px 18px;
+  }
+
+  .input-action-modal .modal-actions {
+    display: grid;
+    grid-template-columns: 1fr;
+  }
+
+  .input-action-modal .modal-actions button {
+    width: 100%;
+  }
+
+  .main .table tbody > tr:only-child > td[colspan],
+  .main .dense-table tbody > tr:only-child > td[colspan] {
+    height: 102px;
+    padding: 22px 14px;
+  }
+
+  .ho-drawer__footer .row.wrap {
+    display: grid;
+    grid-template-columns: 1fr;
+    width: 100%;
+  }
+
+  .ho-drawer__footer .row.wrap > * {
+    width: 100%;
+  }
+}
