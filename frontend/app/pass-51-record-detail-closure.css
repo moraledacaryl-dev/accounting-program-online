@@ -1,0 +1,315 @@
+/* Pass 51: route-scoped record-detail closure. No shared/global behavior changes. */
+
+/* Shared detail rhythm for the four remaining dynamic detail surfaces. */
+.main[data-route^="/room-folios/"] > .stack,
+.main[data-route^="/guests/"] > .stack,
+.main[data-route^="/payroll-periods/"] > .stack,
+.main[data-route^="/cashflow/"] > .stack {
+  gap: 14px;
+}
+
+.main[data-route^="/room-folios/"] > .stack > .section:first-child,
+.main[data-route^="/guests/"] > .stack > .section:first-child,
+.main[data-route^="/payroll-periods/"] > .stack > .section:first-child,
+.main[data-route^="/cashflow/"] > .stack > .section:first-of-type {
+  margin-bottom: 0;
+  padding: 16px 18px;
+  border-radius: 14px;
+  box-shadow: none;
+}
+
+.main[data-route^="/room-folios/"] h1,
+.main[data-route^="/guests/"] h1,
+.main[data-route^="/payroll-periods/"] h1,
+.main[data-route^="/cashflow/"] h1 {
+  margin-bottom: 4px;
+  font-size: clamp(1.5rem, 2vw, 1.85rem);
+  letter-spacing: -.035em;
+}
+
+.main[data-route^="/room-folios/"] .card-grid,
+.main[data-route^="/guests/"] .card-grid,
+.main[data-route^="/payroll-periods/"] .card-grid {
+  gap: 10px;
+}
+
+.main[data-route^="/room-folios/"] .stat-card,
+.main[data-route^="/guests/"] .stat-card,
+.main[data-route^="/payroll-periods/"] .stat-card {
+  min-height: 92px;
+  padding: 14px 16px;
+  border-radius: 13px;
+  box-shadow: none;
+}
+
+.main[data-route^="/room-folios/"] .stat-card .kpi,
+.main[data-route^="/guests/"] .stat-card .kpi,
+.main[data-route^="/payroll-periods/"] .stat-card .kpi {
+  margin-top: 5px;
+  font-size: clamp(1.35rem, 2vw, 1.7rem);
+}
+
+.main[data-route^="/room-folios/"] .table th,
+.main[data-route^="/guests/"] .table th,
+.main[data-route^="/payroll-periods/"] .table th,
+.main[data-route^="/cashflow/"] .table th {
+  position: sticky;
+  top: 0;
+  z-index: 2;
+  background: #f7f9f7;
+}
+
+.main[data-route^="/room-folios/"] .table td,
+.main[data-route^="/guests/"] .table td,
+.main[data-route^="/payroll-periods/"] .table td,
+.main[data-route^="/cashflow/"] .table td {
+  vertical-align: middle;
+}
+
+/* Room Folio: transaction workspace + compact sticky controls. */
+@media (min-width: 1080px) {
+  .main[data-route^="/room-folios/"] > .stack > .grid:first-of-type {
+    grid-template-columns: minmax(0, 1.55fr) minmax(300px, .75fr);
+    align-items: start;
+    gap: 14px;
+  }
+
+  .main[data-route^="/room-folios/"] > .stack > .grid:first-of-type > .section:last-child {
+    position: sticky;
+    top: 82px;
+  }
+}
+
+.main[data-route^="/room-folios/"] > .stack > .grid:first-of-type > .section {
+  margin-bottom: 0;
+}
+
+.main[data-route^="/room-folios/"] > .stack > .grid:first-of-type .form-grid {
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 10px 12px;
+}
+
+.main[data-route^="/room-folios/"] > .stack > .grid:first-of-type textarea {
+  min-height: 74px;
+}
+
+.main[data-route^="/room-folios/"] > .stack > .grid:first-of-type > .section:last-child .row.wrap {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+}
+
+.main[data-route^="/room-folios/"] > .stack > .grid:first-of-type > .section:last-child .row.wrap > * {
+  width: 100%;
+  justify-content: center;
+}
+
+.main[data-route^="/room-folios/"] .dense-table td:last-child,
+.main[data-route^="/room-folios/"] .dense-table th:last-child {
+  text-align: right;
+  font-variant-numeric: tabular-nums;
+}
+
+/* Guest Profile: primary identity/open-balance information first; history reads as secondary data. */
+@media (min-width: 1100px) {
+  .main[data-route^="/guests/"] > .stack > .grid:first-of-type {
+    grid-template-columns: minmax(0, 1.15fr) minmax(420px, .85fr);
+    align-items: start;
+    gap: 14px;
+  }
+}
+
+.main[data-route^="/guests/"] > .stack > .grid:first-of-type > .section {
+  margin-bottom: 0;
+}
+
+.main[data-route^="/guests/"] > .stack > .grid:first-of-type > .section:first-child .table th {
+  width: 132px;
+  color: var(--ho-muted-strong, #526059);
+  font-size: 11px;
+  text-transform: uppercase;
+  letter-spacing: .045em;
+}
+
+.main[data-route^="/guests/"] > .stack > .grid:first-of-type > .section:first-child .table td {
+  font-weight: 600;
+}
+
+.main[data-route^="/guests/"] > .stack > .section:nth-of-type(2) {
+  padding: 14px 16px;
+  border-style: dashed;
+  background: #fbfcfb;
+  box-shadow: none;
+}
+
+.main[data-route^="/guests/"] > .stack > .section:nth-of-type(2) h2 {
+  font-size: 15px;
+}
+
+.main[data-route^="/guests/"] .table td:nth-last-child(-n+3),
+.main[data-route^="/guests/"] .table th:nth-last-child(-n+3) {
+  font-variant-numeric: tabular-nums;
+}
+
+/* Payroll Period: persistent period context, tighter tabs, denser data-entry surfaces. */
+.main[data-route^="/payroll-periods/"] > .stack > .section:first-child {
+  position: sticky;
+  top: 58px;
+  z-index: 8;
+  background: rgba(255,255,255,.97);
+  backdrop-filter: blur(10px);
+  box-shadow: 0 8px 24px rgba(20,36,30,.06);
+}
+
+.main[data-route^="/payroll-periods/"] > .stack > .section:first-child .tabs {
+  margin: 12px -18px -16px;
+  padding: 0 12px;
+  background: #fafbfa;
+}
+
+.main[data-route^="/payroll-periods/"] > .stack > .section:first-child .tab {
+  min-height: 38px;
+  padding: 8px 11px;
+  font-size: 12px;
+}
+
+.main[data-route^="/payroll-periods/"] > .stack > .section:first-child .tab.active {
+  color: var(--ho-ink, #17211d);
+  background: transparent;
+  box-shadow: inset 0 -2px 0 var(--ho-gold, #c99545);
+}
+
+.main[data-route^="/payroll-periods/"] .form-grid {
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 10px 12px;
+}
+
+.main[data-route^="/payroll-periods/"] textarea {
+  min-height: 74px;
+}
+
+.main[data-route^="/payroll-periods/"] .table-wrap {
+  scrollbar-gutter: stable;
+}
+
+.main[data-route^="/payroll-periods/"] .table input {
+  min-width: 92px;
+}
+
+.main[data-route^="/payroll-periods/"] .table td,
+.main[data-route^="/payroll-periods/"] .table th {
+  padding-top: 8px;
+  padding-bottom: 8px;
+}
+
+/* Cash account history: ledger first, filters as a compact utility bar. */
+.main[data-route^="/cashflow/"] > .stack > .section:nth-of-type(2) {
+  margin-bottom: 0;
+  padding: 12px 14px;
+  box-shadow: none;
+}
+
+.main[data-route^="/cashflow/"] > .stack > .section:nth-of-type(2) .form-grid {
+  grid-template-columns: repeat(3, minmax(160px, 1fr));
+  gap: 10px;
+}
+
+.main[data-route^="/cashflow/"] > .stack > .section:nth-of-type(2) .row.wrap {
+  margin-top: 10px;
+}
+
+.main[data-route^="/cashflow/"] > .stack > .section:nth-of-type(3) {
+  margin-bottom: 0;
+  padding: 13px 16px;
+  border-color: #ccd9d2;
+  background: #f8faf8;
+  box-shadow: none;
+}
+
+.main[data-route^="/cashflow/"] > .stack > .section:nth-of-type(3) h2 {
+  margin-bottom: 2px;
+  font-size: 16px;
+}
+
+.main[data-route^="/cashflow/"] > .stack > .section:nth-of-type(3) .badge {
+  min-height: 28px;
+  padding-inline: 9px;
+  font-variant-numeric: tabular-nums;
+}
+
+.main[data-route^="/cashflow/"] > .stack > .section:last-child {
+  padding: 0;
+  overflow: hidden;
+}
+
+.main[data-route^="/cashflow/"] > .stack > .section:last-child .table-wrap {
+  border-radius: inherit;
+}
+
+@media (max-width: 900px) {
+  .main[data-route^="/room-folios/"] > .stack > .grid:first-of-type .form-grid,
+  .main[data-route^="/payroll-periods/"] .form-grid,
+  .main[data-route^="/cashflow/"] > .stack > .section:nth-of-type(2) .form-grid {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+
+  .main[data-route^="/payroll-periods/"] > .stack > .section:first-child {
+    top: 52px;
+  }
+}
+
+@media (max-width: 620px) {
+  .main[data-route^="/room-folios/"] > .stack,
+  .main[data-route^="/guests/"] > .stack,
+  .main[data-route^="/payroll-periods/"] > .stack,
+  .main[data-route^="/cashflow/"] > .stack {
+    gap: 10px;
+  }
+
+  .main[data-route^="/room-folios/"] > .stack > .section:first-child,
+  .main[data-route^="/guests/"] > .stack > .section:first-child,
+  .main[data-route^="/payroll-periods/"] > .stack > .section:first-child,
+  .main[data-route^="/cashflow/"] > .stack > .section:first-of-type {
+    padding: 13px 14px;
+  }
+
+  .main[data-route^="/room-folios/"] .card-grid,
+  .main[data-route^="/guests/"] .card-grid,
+  .main[data-route^="/payroll-periods/"] .card-grid {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+
+  .main[data-route^="/room-folios/"] .stat-card,
+  .main[data-route^="/guests/"] .stat-card,
+  .main[data-route^="/payroll-periods/"] .stat-card {
+    min-height: 78px;
+    padding: 11px 12px;
+  }
+
+  .main[data-route^="/room-folios/"] > .stack > .grid:first-of-type .form-grid,
+  .main[data-route^="/payroll-periods/"] .form-grid,
+  .main[data-route^="/cashflow/"] > .stack > .section:nth-of-type(2) .form-grid {
+    grid-template-columns: 1fr;
+  }
+
+  .main[data-route^="/room-folios/"] > .stack > .grid:first-of-type > .section:last-child .row.wrap {
+    grid-template-columns: 1fr;
+  }
+
+  .main[data-route^="/payroll-periods/"] > .stack > .section:first-child {
+    position: static;
+    backdrop-filter: none;
+  }
+
+  .main[data-route^="/payroll-periods/"] > .stack > .section:first-child .tabs {
+    margin-left: -14px;
+    margin-right: -14px;
+    padding-inline: 8px;
+    overflow-x: auto;
+    scrollbar-width: none;
+  }
+
+  .main[data-route^="/cashflow/"] > .stack > .section:nth-of-type(3) .row {
+    align-items: flex-start;
+    flex-direction: column;
+  }
+}

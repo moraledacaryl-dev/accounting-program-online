@@ -51,6 +51,7 @@ import './pass-47-booking-calendar-mobile.css';
 import './pass-48-sidebar-final-closure.css';
 import './pass-49-final-global-visual-closure.css';
 import './pass-50-route-audit.css';
+import './pass-51-record-detail-closure.css';
 import ConfirmActionProvider from '../components/ConfirmActionProvider';
 import InputActionProvider from '../components/InputActionProvider';
 import AppFrame from '../components/app-shell/AppFrame';
