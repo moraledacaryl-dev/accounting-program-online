@@ -14,6 +14,10 @@ function signedMoney(value) {
   return Number(value || 0).toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2, signDisplay: 'always' });
 }
 
+function statusLabel(value) {
+  return String(value || 'confirmed').replaceAll('_', ' ');
+}
+
 export default function BookingDetailPage({ params }) {
   const { can } = useCurrentUser();
   const confirmAction = useConfirmAction();
@@ -93,29 +97,60 @@ export default function BookingDetailPage({ params }) {
 
   if (!booking) return null;
 
+  const guestName = booking.guest_full_name || booking.guest_name || 'Guest';
+  const roomName = booking.room_display_name || booking.room_name || 'Unassigned room';
+  const roomType = booking.room_type_display_name || booking.room_type || 'Room type unavailable';
+  const balanceDue = booking.balance_due ?? booking.outstanding_balance ?? (Number(booking.gross_amount || 0) - Number(booking.deposit_amount || 0));
+
   return (
-    <div className="stack">
-      <section className="section">
-        <div className="row" style={{ justifyContent: 'space-between', alignItems: 'flex-start' }}>
+    <div className="stack booking-detail-page">
+      <section className="section booking-hero">
+        <div className="booking-hero-topline">
           <div>
-            <h1>BOOK-{booking.id}</h1>
-            <p className="muted">{booking.guest_full_name || booking.guest_name || 'Guest'} · {booking.status || 'confirmed'}</p>
+            <div className="eyebrow">Booking · BOOK-{booking.id}</div>
+            <h1>{roomName}</h1>
+            <p className="muted">{roomType}</p>
           </div>
-          <div className="row wrap">
-            <Link className="button-link secondary-link" href="/bookings/calendar">Calendar</Link>
-            <Link className="button-link secondary-link" href="/bookings">Booking List</Link>
-            <Link className="button-link secondary-link" href={booking.primary_folio_id ? `/room-folios/${booking.primary_folio_id}` : `/room-folios?booking_id=${booking.id}`}>Open Folio</Link>
+          <span className={`booking-status booking-status-${String(booking.status || 'confirmed').toLowerCase()}`}>{statusLabel(booking.status)}</span>
+        </div>
+
+        <div className="booking-summary-grid">
+          <div className="booking-summary-item">
+            <span>Stay</span>
+            <strong>{booking.check_in || '-'} → {booking.check_out || '-'}</strong>
+            <small>{booking.rate_plan_name || 'Standard stay'}</small>
           </div>
+          <div className="booking-summary-item">
+            <span>Balance</span>
+            <strong>{money(balanceDue)}</strong>
+            <small>Gross {money(booking.gross_amount)} · Deposit {money(booking.deposit_amount)}</small>
+          </div>
+          <div className="booking-summary-item">
+            <span>Guest</span>
+            <strong>{guestName}</strong>
+            <small>{booking.guest_phone || booking.guest_email || 'No contact details'}</small>
+          </div>
+          <div className="booking-summary-item">
+            <span>Source</span>
+            <strong>{booking.channel_display_name || booking.channel || 'Direct'}</strong>
+            <small>{booking.external_source ? `${booking.external_source} ${booking.external_booking_id || ''}` : 'Internal booking'}</small>
+          </div>
+        </div>
+
+        <div className="booking-hero-actions">
+          <Link className="button-link secondary-link" href="/bookings/calendar">Calendar</Link>
+          <Link className="button-link secondary-link" href="/bookings">Booking List</Link>
+          <Link className="button-link" href={booking.primary_folio_id ? `/room-folios/${booking.primary_folio_id}` : `/room-folios?booking_id=${booking.id}`}>Open Folio</Link>
         </div>
       </section>
 
-      <div className="grid two">
+      <div className="grid two booking-detail-grid">
         <section className="section">
-          <h2>Stay</h2>
-          <table className="table dense-table">
+          <h2>Stay Details</h2>
+          <table className="table dense-table booking-key-value">
             <tbody>
               <tr><th>Dates</th><td>{booking.check_in || '-'} to {booking.check_out || '-'}</td></tr>
-              <tr><th>Room</th><td>{booking.room_display_name || booking.room_name || '-'} · {booking.room_type_display_name || booking.room_type || '-'}</td></tr>
+              <tr><th>Room</th><td>{roomName} · {roomType}</td></tr>
               <tr><th>Rate Plan</th><td>{booking.rate_plan_name || '-'}</td></tr>
               <tr><th>Channel</th><td>{booking.channel_display_name || booking.channel || '-'}</td></tr>
               <tr><th>External</th><td>{booking.external_source ? `${booking.external_source} ${booking.external_booking_id || ''}` : '-'}</td></tr>
@@ -124,14 +159,15 @@ export default function BookingDetailPage({ params }) {
         </section>
 
         <section className="section">
-          <h2>Guest & Amounts</h2>
-          <table className="table dense-table">
+          <h2>Guest & Financials</h2>
+          <table className="table dense-table booking-key-value">
             <tbody>
-              <tr><th>Guest</th><td>{booking.guest_full_name || booking.guest_name || '-'}</td></tr>
+              <tr><th>Guest</th><td>{guestName}</td></tr>
               <tr><th>Phone</th><td>{booking.guest_phone || '-'}</td></tr>
               <tr><th>Email</th><td>{booking.guest_email || '-'}</td></tr>
               <tr><th>Gross</th><td>{money(booking.gross_amount)}</td></tr>
               <tr><th>Deposit</th><td>{money(booking.deposit_amount)}</td></tr>
+              <tr><th>Balance</th><td><strong>{money(balanceDue)}</strong></td></tr>
             </tbody>
           </table>
         </section>
@@ -145,7 +181,7 @@ export default function BookingDetailPage({ params }) {
           </div>
           <button type="button" className="secondary">Open in POS</button>
         </div>
-        <div className="card-grid" style={{ marginTop: 10 }}>
+        <div className="card-grid booking-service-kpis" style={{ marginTop: 10 }}>
           <div className="card"><div className="small muted">Included</div><div className="kpi compact-kpi">{booking.breakfast_included_count ?? booking.adults ?? '-'}</div></div>
           <div className="card"><div className="small muted">Served</div><div className="kpi compact-kpi">{breakfastLogs.reduce((sum, item) => sum + Number(item.quantity || item.served_count || 0), 0)}</div></div>
           <div className="card"><div className="small muted">Excess</div><div className="kpi compact-kpi">{breakfastLogs.reduce((sum, item) => sum + Number(item.excess_quantity || 0), 0)}</div></div>
