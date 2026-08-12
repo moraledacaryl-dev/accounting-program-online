@@ -1,0 +1,239 @@
+/* Pass 50: route-level closure for the remaining payroll integration outlier. */
+
+.payroll-integration-page {
+  gap: 14px;
+}
+
+.payroll-integration-header {
+  display: flex;
+  align-items: flex-end;
+  justify-content: space-between;
+  gap: 20px;
+  margin-bottom: 0;
+  padding: 18px 20px;
+}
+
+.payroll-integration-header__copy {
+  min-width: 0;
+  max-width: 760px;
+}
+
+.payroll-integration-header .eyebrow {
+  margin-bottom: 5px;
+  color: #8f6a2c;
+  font-size: 10px;
+  font-weight: 800;
+  letter-spacing: .12em;
+  text-transform: uppercase;
+}
+
+.payroll-integration-header h1 {
+  margin: 0;
+  font-size: clamp(1.45rem, 2vw, 1.85rem);
+  letter-spacing: -.03em;
+}
+
+.payroll-integration-header p {
+  max-width: 70ch;
+  margin: 6px 0 0;
+  line-height: 1.45;
+}
+
+.payroll-integration-header__actions {
+  display: flex;
+  align-items: center;
+  justify-content: flex-end;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+
+.payroll-integration-workspace {
+  margin-bottom: 0;
+  padding: 0;
+  overflow: hidden;
+}
+
+.payroll-integration-tabs {
+  display: flex;
+  align-items: center;
+  gap: 3px;
+  padding: 8px 10px 0;
+  overflow-x: auto;
+  border-bottom: 1px solid var(--line);
+  scrollbar-width: none;
+}
+
+.payroll-integration-tabs::-webkit-scrollbar {
+  display: none;
+}
+
+.payroll-integration-tab {
+  flex: 0 0 auto;
+  min-height: 36px;
+  padding: 7px 10px 8px;
+  border: 0;
+  border-bottom: 2px solid transparent;
+  border-radius: 7px 7px 0 0;
+  background: transparent;
+  color: #67736c;
+  box-shadow: none;
+  font-size: 12px;
+  font-weight: 700;
+}
+
+.payroll-integration-tab:hover {
+  transform: none;
+  background: #f5f7f5;
+  color: #2e3d35;
+  box-shadow: none;
+}
+
+.payroll-integration-tab.active,
+.payroll-integration-tab[aria-selected='true'] {
+  border-bottom-color: #2f6b57;
+  background: #edf3ef;
+  color: #214b38;
+}
+
+.payroll-integration-table-wrap {
+  border-radius: 0;
+}
+
+.payroll-integration-table {
+  min-width: 1060px;
+  margin: 0;
+}
+
+.payroll-integration-table th {
+  position: sticky;
+  top: 0;
+  z-index: 1;
+  background: #fafbfa;
+  color: #68736d;
+  font-size: 10px;
+  letter-spacing: .06em;
+  text-transform: uppercase;
+}
+
+.payroll-integration-table th,
+.payroll-integration-table td {
+  padding-top: 10px;
+  padding-bottom: 10px;
+  vertical-align: top;
+}
+
+.payroll-integration-table tbody tr:hover td {
+  background: #fbfcfb;
+}
+
+.payroll-integration-table .numeric,
+.payroll-amount {
+  text-align: right;
+  font-variant-numeric: tabular-nums;
+  white-space: nowrap;
+}
+
+.payroll-external-id {
+  max-width: 180px;
+  overflow: hidden;
+  color: #5f6c65;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.payroll-preview-cell {
+  min-width: 300px;
+  max-width: 390px;
+}
+
+.payroll-preview-lines {
+  display: grid;
+  gap: 4px;
+}
+
+.payroll-preview-line {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  align-items: baseline;
+  gap: 10px;
+  color: #657169;
+  font-size: 11px;
+  line-height: 1.35;
+}
+
+.payroll-preview-line span {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.payroll-preview-line strong {
+  color: #33443b;
+  font-variant-numeric: tabular-nums;
+  white-space: nowrap;
+}
+
+.payroll-payload {
+  margin-top: 7px;
+}
+
+.payroll-payload summary {
+  width: max-content;
+  cursor: pointer;
+  color: #537062;
+  font-size: 10.5px;
+  font-weight: 700;
+}
+
+.payroll-payload pre {
+  max-height: 220px;
+  margin: 8px 0 0;
+  padding: 10px;
+  overflow: auto;
+  border: 1px solid #e0e6e2;
+  border-radius: 8px;
+  background: #f7f9f8;
+  color: #435148;
+  font-size: 10.5px;
+  line-height: 1.45;
+}
+
+.payroll-row-actions {
+  min-width: 132px;
+  justify-content: flex-end;
+}
+
+.payroll-row-actions button {
+  min-height: 31px;
+  padding: 5px 8px;
+}
+
+@media (max-width: 760px) {
+  .payroll-integration-page {
+    gap: 10px;
+  }
+
+  .payroll-integration-header {
+    display: grid;
+    gap: 12px;
+    padding: 15px;
+  }
+
+  .payroll-integration-header__actions {
+    justify-content: flex-start;
+  }
+
+  .payroll-integration-tabs {
+    padding-inline: 8px;
+    scroll-snap-type: x proximity;
+  }
+
+  .payroll-integration-tab {
+    scroll-snap-align: start;
+  }
+
+  .payroll-integration-table {
+    min-width: 920px;
+  }
+}
