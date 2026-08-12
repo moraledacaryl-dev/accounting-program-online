@@ -1,0 +1,333 @@
+/* Pass 49: final global visual closure. Keep this layer intentionally conservative and cross-app. */
+
+:root {
+  --ho-content-max: 1720px;
+}
+
+/* Page rhythm and large-monitor balance. */
+.main {
+  margin-inline: auto;
+}
+
+.main > .stack,
+.main > div > .stack {
+  min-width: 0;
+}
+
+.main .section > :first-child {
+  margin-top: 0;
+}
+
+.main .section > :last-child {
+  margin-bottom: 0;
+}
+
+.main .section > h1,
+.main .section > h2,
+.main .section > h3 {
+  text-wrap: balance;
+}
+
+.main .section > h1 + .muted,
+.main .section > h2 + .muted,
+.main .section > h3 + .muted {
+  max-width: 76ch;
+}
+
+/* Buttons and links: prevent conflicting inherited white-on-white combinations. */
+.main button.secondary,
+.main .button-link.secondary-link,
+.main a.button-link.secondary-link {
+  border-color: var(--ho-line-strong);
+  background: var(--ho-surface);
+  color: var(--ho-ink-soft);
+  box-shadow: none;
+}
+
+.main button.secondary:hover:not(:disabled),
+.main .button-link.secondary-link:hover,
+.main a.button-link.secondary-link:hover {
+  border-color: #b9c6bf;
+  background: #f5f7f5;
+  color: var(--ho-ink);
+  box-shadow: 0 4px 12px rgba(20, 36, 30, 0.045);
+}
+
+.main .row.wrap {
+  row-gap: 8px;
+}
+
+.main .row.wrap > button,
+.main .row.wrap > .button-link {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+}
+
+/* Badges, chips and status pills share one visual cadence. */
+.main :where(.badge, .chip, .status) {
+  min-height: 24px;
+  padding: 0.25rem 0.55rem;
+  border-radius: 999px;
+  font-size: 0.625rem;
+  font-weight: 760;
+  line-height: 1.15;
+  font-variant-numeric: tabular-nums;
+}
+
+.main :where(.badge, .chip, .status):empty {
+  display: none;
+}
+
+/* Tables: tighten edge behavior without changing data density. */
+.main .table-wrap,
+.main .table-container {
+  border-radius: var(--ho-radius-md);
+  scrollbar-gutter: stable;
+}
+
+.main .table th {
+  vertical-align: middle;
+}
+
+.main .table td {
+  vertical-align: middle;
+}
+
+.main .table th,
+.main .table td {
+  font-variant-numeric: tabular-nums;
+}
+
+.main .table tbody tr:last-child td {
+  border-bottom-color: transparent;
+}
+
+.main td.muted[colspan] {
+  min-height: 112px;
+  padding: 28px 18px;
+  background: #fbfcfb;
+  color: #738078;
+  font-size: 12px;
+  line-height: 1.5;
+}
+
+/* Filters and toolbars: controls align on a common baseline. */
+.main :where(.filter-bar, .toolbar, .table-toolbar) {
+  align-items: end;
+}
+
+.main :where(.filter-bar, .toolbar, .table-toolbar) label {
+  min-width: 0;
+}
+
+.main :where(.filter-bar, .toolbar, .table-toolbar) > button,
+.main :where(.filter-bar, .toolbar, .table-toolbar) > .button-link {
+  min-height: 40px;
+}
+
+/* Empty/loading states should feel contextual, not like oversized placeholders. */
+.main :where(.empty-state, .empty-panel, .table-empty, .blank-state) {
+  min-height: 132px;
+  padding: 24px 20px;
+  border-color: #d4ddd7;
+  background: linear-gradient(180deg, #fcfdfc, #f8faf8);
+}
+
+.main :where(.empty-state, .empty-panel, .blank-state) h2,
+.main :where(.empty-state, .empty-panel, .blank-state) h3 {
+  color: #2c453c;
+  font-size: 15px;
+  letter-spacing: -0.01em;
+}
+
+.main :where(.empty-state, .empty-panel, .blank-state) p {
+  max-width: 48ch;
+  font-size: 12px;
+}
+
+/* Generic modal closure so non-confirmation modals match the refined confirmation system. */
+.modal-card:not(.confirm-action-modal) {
+  border: 1px solid #d9e2dd;
+  border-radius: 16px;
+  background: #fff;
+  box-shadow: 0 26px 78px rgba(8, 27, 20, 0.22);
+}
+
+.modal-card:not(.confirm-action-modal) .modal-header {
+  padding: 19px 21px 16px;
+  border-bottom: 1px solid #e1e7e3;
+  background: #fff;
+}
+
+.modal-card:not(.confirm-action-modal) .modal-header h2 {
+  margin: 0;
+  color: var(--ho-ink);
+  font-size: 18px;
+  line-height: 1.25;
+}
+
+.modal-card:not(.confirm-action-modal) .modal-form,
+.modal-card:not(.confirm-action-modal) .modal-body {
+  padding: 18px 21px 20px;
+}
+
+.modal-card:not(.confirm-action-modal) .modal-actions {
+  gap: 8px;
+  align-items: center;
+  justify-content: flex-end;
+}
+
+/* Drawer rhythm: slightly more compact and consistent with dense ERP forms. */
+.ho-drawer__header {
+  min-height: 74px;
+}
+
+.ho-drawer__body {
+  overscroll-behavior: contain;
+}
+
+.ho-drawer__body .form-grid {
+  gap: 13px 15px;
+}
+
+.ho-drawer__footer > button,
+.ho-drawer__footer > .button-link {
+  min-width: 96px;
+}
+
+/* Keep destructive actions visually distinct without oversized red fills. */
+.main button.danger:not(:disabled) {
+  border-color: #e3b6b2;
+  background: #fff2f0;
+  color: #963b34;
+}
+
+.main button.danger:hover:not(:disabled) {
+  border-color: #d99b95;
+  background: #fbe7e4;
+  color: #842f29;
+}
+
+/* Numeric and metadata rhythm. */
+.main :where(.kpi, .metric-value, .amount, .money) {
+  font-variant-numeric: tabular-nums lining-nums;
+}
+
+.main .small.muted,
+.main small.muted {
+  line-height: 1.4;
+}
+
+/* Ultrawide: use more of the viewport without allowing content to sprawl. */
+@media (min-width: 1600px) {
+  .main {
+    padding-inline: clamp(2rem, 2.6vw, 3rem);
+  }
+
+  .main .grid:not(.two):not(.three) {
+    gap: 18px;
+  }
+}
+
+/* Tablet: keep action groups compact and readable. */
+@media (max-width: 1024px) {
+  .main .section {
+    margin-bottom: 12px;
+  }
+
+  .main :where(.filter-bar, .toolbar, .table-toolbar) {
+    gap: 8px;
+  }
+}
+
+/* Mobile: reduce unnecessary vertical expansion and only force width on genuinely dense tables. */
+@media (max-width: 760px) {
+  .main {
+    padding-inline: 12px;
+    padding-block: 12px 18px;
+  }
+
+  .main .section {
+    padding: 14px;
+    margin-bottom: 10px;
+  }
+
+  .main .row.wrap {
+    gap: 7px;
+  }
+
+  .main .row.wrap > button,
+  .main .row.wrap > .button-link {
+    min-height: 38px;
+  }
+
+  .main .table:not(.dense-table) {
+    min-width: 560px;
+  }
+
+  .main .dense-table {
+    min-width: 680px;
+  }
+
+  .main :where(.badge, .chip, .status) {
+    min-height: 22px;
+    padding: 0.2rem 0.48rem;
+  }
+
+  .modal-card:not(.confirm-action-modal) {
+    width: calc(100vw - 24px);
+    max-height: calc(100dvh - 24px);
+    margin: 12px;
+  }
+
+  .modal-card:not(.confirm-action-modal) .modal-header,
+  .modal-card:not(.confirm-action-modal) .modal-form,
+  .modal-card:not(.confirm-action-modal) .modal-body {
+    padding-left: 16px;
+    padding-right: 16px;
+  }
+
+  .modal-card:not(.confirm-action-modal) .modal-actions {
+    display: grid;
+    grid-template-columns: 1fr;
+  }
+
+  .modal-card:not(.confirm-action-modal) .modal-actions > button,
+  .modal-card:not(.confirm-action-modal) .modal-actions > .button-link {
+    width: 100%;
+  }
+
+  .ho-drawer__header {
+    min-height: 68px;
+  }
+
+  .ho-drawer__footer {
+    gap: 8px;
+  }
+}
+
+@media (max-width: 420px) {
+  .main {
+    padding-inline: 9px;
+  }
+
+  .main .section {
+    padding: 12px;
+    border-radius: 13px;
+  }
+
+  .main h1 {
+    font-size: clamp(1.5rem, 8vw, 1.9rem);
+  }
+}
+
+@media print {
+  .main {
+    max-width: none;
+  }
+
+  .main td.muted[colspan] {
+    background: transparent;
+  }
+}
