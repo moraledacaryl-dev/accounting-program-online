@@ -1,0 +1,392 @@
+.main[data-route^="/bookings/"] {
+  --booking-gap: 12px;
+}
+
+.booking-detail-page {
+  gap: var(--booking-gap);
+}
+
+.booking-hero {
+  display: grid;
+  gap: 14px;
+  padding: 18px 20px;
+  background: linear-gradient(180deg, #ffffff 0%, #fbfcfb 100%);
+  border-color: #dfe4e0;
+  box-shadow: 0 10px 28px rgba(0, 0, 0, 0.035);
+}
+
+.booking-hero-topline {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 18px;
+}
+
+.booking-hero .eyebrow {
+  margin-bottom: 4px;
+  color: #737973;
+  font-size: 10px;
+  font-weight: 650;
+  letter-spacing: .09em;
+  text-transform: uppercase;
+}
+
+.booking-hero h1 {
+  margin: 0 0 3px;
+  font-size: clamp(22px, 2vw, 30px);
+  line-height: 1.06;
+  letter-spacing: -.025em;
+}
+
+.booking-status {
+  flex: 0 0 auto;
+  display: inline-flex;
+  align-items: center;
+  min-height: 28px;
+  padding: 5px 9px;
+  border: 1px solid #d8e2da;
+  border-radius: 999px;
+  background: #eef5f0;
+  color: #315c42;
+  font-size: 10.5px;
+  font-weight: 650;
+  text-transform: capitalize;
+}
+
+.booking-status-cancelled,
+.booking-status-no_show {
+  border-color: #ecd7d5;
+  background: #fbf0ef;
+  color: #8d2d25;
+}
+
+.booking-status-checked_out {
+  border-color: #e0e2df;
+  background: #f3f4f2;
+  color: #626762;
+}
+
+.booking-status-checked_in {
+  border-color: #cfe2d5;
+  background: #edf7f0;
+  color: #285c3c;
+}
+
+.booking-summary-grid {
+  display: grid;
+  grid-template-columns: 1.1fr .9fr 1fr .9fr;
+  gap: 1px;
+  overflow: hidden;
+  border: 1px solid var(--line);
+  border-radius: 12px;
+  background: var(--line);
+}
+
+.booking-summary-item {
+  min-width: 0;
+  padding: 12px 13px;
+  background: #fff;
+}
+
+.booking-summary-item > span {
+  display: block;
+  margin-bottom: 5px;
+  color: #777c77;
+  font-size: 9.5px;
+  font-weight: 650;
+  letter-spacing: .08em;
+  text-transform: uppercase;
+}
+
+.booking-summary-item strong {
+  display: block;
+  overflow: hidden;
+  color: #181a18;
+  font-size: 14px;
+  font-variant-numeric: tabular-nums;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.booking-summary-item small {
+  display: block;
+  margin-top: 4px;
+  overflow: hidden;
+  color: var(--muted);
+  font-size: 10.5px;
+  line-height: 1.3;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.booking-hero-actions {
+  display: flex;
+  justify-content: flex-end;
+  gap: 7px;
+  flex-wrap: wrap;
+}
+
+.booking-detail-grid {
+  align-items: stretch;
+  gap: var(--booking-gap);
+}
+
+.booking-detail-grid > .section {
+  margin-bottom: 0;
+}
+
+.booking-key-value th {
+  width: 110px;
+  color: #727772;
+  font-size: 10.5px;
+  font-weight: 580;
+}
+
+.booking-key-value td {
+  font-variant-numeric: tabular-nums;
+}
+
+.booking-service-kpis {
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 8px;
+}
+
+.booking-service-kpis .card {
+  min-height: 72px;
+  padding: 11px 12px;
+  box-shadow: none;
+}
+
+.main[data-route="/bookings/calendar"] > .stack {
+  gap: 10px;
+}
+
+.main[data-route="/bookings/calendar"] > .stack > .section:first-child {
+  margin-bottom: 0;
+  padding: 14px 16px;
+}
+
+.main[data-route="/bookings/calendar"] > .stack > .section:first-child .row {
+  gap: 12px;
+}
+
+.main[data-route="/bookings/calendar"] > .stack > .section:nth-child(2) {
+  margin-bottom: 0;
+  padding: 14px;
+}
+
+.main[data-route="/bookings/calendar"] > .stack > .section:nth-child(2) > .row:first-child {
+  gap: 12px;
+  margin-bottom: 10px;
+}
+
+.main[data-route="/bookings/calendar"] > .stack > .section:nth-child(2) > .row:first-child > .row {
+  gap: 7px;
+}
+
+.main[data-route="/bookings/calendar"] > .stack > .section:nth-child(2) label {
+  gap: 4px;
+  font-size: 10.5px;
+}
+
+.main[data-route="/bookings/calendar"] .calendar-grid {
+  border: 1px solid var(--line-strong);
+  border-radius: 12px;
+  overflow: hidden;
+  background: var(--line);
+  gap: 1px;
+}
+
+.main[data-route="/bookings/calendar"] .calendar-weekday {
+  min-height: 31px;
+  padding: 8px 9px;
+  background: #f6f7f5;
+  color: #6f746f;
+  font-size: 9.5px;
+  font-weight: 650;
+  letter-spacing: .06em;
+  text-transform: uppercase;
+}
+
+.main[data-route="/bookings/calendar"] .calendar-day {
+  min-height: 128px;
+  padding: 8px;
+  border: 0;
+  background: #fff;
+}
+
+.main[data-route="/bookings/calendar"] .calendar-day.muted-day {
+  background: #fafafa;
+  color: #a5a9a5;
+}
+
+.main[data-route="/bookings/calendar"] .calendar-date {
+  display: inline-grid;
+  place-items: center;
+  width: 23px;
+  height: 23px;
+  margin-bottom: 5px;
+  border-radius: 7px;
+  color: #5c615c;
+  font-size: 10.5px;
+  font-weight: 620;
+}
+
+.main[data-route="/bookings/calendar"] .calendar-day:has(.calendar-event) {
+  background: #fdfefd;
+}
+
+.main[data-route="/bookings/calendar"] .calendar-event {
+  display: grid;
+  gap: 2px;
+  margin-bottom: 4px;
+  padding: 5px 6px 5px 8px;
+  border: 1px solid #e4e9e5;
+  border-left: 2px solid #6b8f79;
+  border-radius: 7px;
+  background: #f7faf8;
+  box-shadow: none;
+  transition: border-color 120ms ease, background 120ms ease, transform 120ms ease;
+}
+
+.main[data-route="/bookings/calendar"] .calendar-event:hover {
+  border-color: #d3ddd6;
+  background: #f2f7f3;
+  transform: translateY(-1px);
+}
+
+.main[data-route="/bookings/calendar"] .calendar-event .status {
+  display: none;
+}
+
+.main[data-route="/bookings/calendar"] .calendar-event strong {
+  overflow: hidden;
+  color: #222522;
+  font-size: 10px;
+  font-weight: 620;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.main[data-route="/bookings/calendar"] .calendar-event > span:last-child {
+  overflow: hidden;
+  color: #737873;
+  font-size: 9px;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+@media (min-width: 1440px) {
+  .main[data-route="/bookings/calendar"] .calendar-day {
+    min-height: 148px;
+  }
+}
+
+@media (max-width: 980px) {
+  .booking-summary-grid {
+    grid-template-columns: 1fr 1fr;
+  }
+
+  .main[data-route="/bookings/calendar"] > .stack > .section:first-child .row,
+  .main[data-route="/bookings/calendar"] > .stack > .section:nth-child(2) > .row:first-child {
+    align-items: stretch !important;
+  }
+
+  .main[data-route="/bookings/calendar"] > .stack > .section:nth-child(2) > .row:first-child {
+    display: block;
+  }
+
+  .main[data-route="/bookings/calendar"] > .stack > .section:nth-child(2) > .row:first-child > .row {
+    margin-top: 8px;
+  }
+
+  .main[data-route="/bookings/calendar"] .calendar-grid {
+    min-width: 820px;
+  }
+
+  .main[data-route="/bookings/calendar"] > .stack > .section:nth-child(2) {
+    overflow-x: auto;
+  }
+}
+
+@media (max-width: 640px) {
+  .booking-hero {
+    gap: 11px;
+    padding: 14px;
+  }
+
+  .booking-hero-topline {
+    gap: 10px;
+  }
+
+  .booking-hero h1 {
+    font-size: 21px;
+  }
+
+  .booking-summary-grid {
+    grid-template-columns: 1fr 1fr;
+  }
+
+  .booking-summary-item {
+    padding: 10px;
+  }
+
+  .booking-summary-item strong {
+    font-size: 12.5px;
+  }
+
+  .booking-summary-item small {
+    white-space: normal;
+  }
+
+  .booking-hero-actions {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+  }
+
+  .booking-hero-actions .button-link:last-child {
+    grid-column: 1 / -1;
+  }
+
+  .booking-hero-actions .button-link {
+    justify-content: center;
+    width: 100%;
+  }
+
+  .booking-service-kpis {
+    grid-template-columns: repeat(3, minmax(0, 1fr));
+  }
+
+  .main[data-route="/bookings/calendar"] > .stack > .section:first-child {
+    padding: 12px;
+  }
+
+  .main[data-route="/bookings/calendar"] > .stack > .section:first-child > .row {
+    display: block;
+  }
+
+  .main[data-route="/bookings/calendar"] > .stack > .section:first-child > .row > .row {
+    display: grid;
+    grid-template-columns: 1fr 1fr 1fr;
+    margin-top: 9px;
+  }
+
+  .main[data-route="/bookings/calendar"] > .stack > .section:first-child > .row > .row .button-link {
+    grid-column: 1 / -1;
+    justify-content: center;
+    width: 100%;
+  }
+
+  .main[data-route="/bookings/calendar"] > .stack > .section:nth-child(2) > .row:first-child > .row {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+  }
+
+  .main[data-route="/bookings/calendar"] > .stack > .section:nth-child(2) > .row:first-child > .row label {
+    min-width: 0 !important;
+  }
+
+  .main[data-route="/bookings/calendar"] > .stack > .section:nth-child(2) > .row:first-child > .row label:last-child {
+    grid-column: 1 / -1;
+  }
+}
