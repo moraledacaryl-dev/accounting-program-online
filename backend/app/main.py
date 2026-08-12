@@ -1,4 +1,3 @@
-
 from contextlib import asynccontextmanager
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
@@ -9,7 +8,14 @@ from app.core.migrations import ensure_database_ready, migration_status
 from app.core.settings import settings
 from app.db.database import SessionLocal, engine
 from app.db.schema_migration import run_startup_migrations
+from app.services.pos_accounting_boundary import install_pos_accounting_boundary
 import app.models  # noqa: F401
+
+
+# Dedicated POS is the operational source for restaurant sales. Install the
+# receiver-side guard before serving requests so Accounting never duplicates
+# physical stock consumption/reversal and POS room-charge retries are replay-safe.
+install_pos_accounting_boundary()
 
 
 @asynccontextmanager
