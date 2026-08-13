@@ -7,7 +7,7 @@
  * drawer breakpoint (980px). Keep the desktop shell intact in that 20px seam. */
 @media (min-width: 981px) and (max-width: 1000px) {
   .app-shell {
-    grid-template-columns: var(--sidebar-width-expanded, 292px) minmax(0, 1fr);
+    grid-template-columns: var(--sidebar-width, var(--sidebar-width-expanded, 292px)) minmax(0, 1fr);
   }
 
   .sidebar {
