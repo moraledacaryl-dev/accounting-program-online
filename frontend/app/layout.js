@@ -55,6 +55,7 @@ import './pass-51-record-detail-closure.css';
 import './pass-52-form-table-closure.css';
 import './pass-53-overlay-empty-state-closure.css';
 import './pass-54-responsive-edge-case-closure.css';
+import './pass-56-color-state-verification.css';
 import ConfirmActionProvider from '../components/ConfirmActionProvider';
 import InputActionProvider from '../components/InputActionProvider';
 import AppFrame from '../components/app-shell/AppFrame';
