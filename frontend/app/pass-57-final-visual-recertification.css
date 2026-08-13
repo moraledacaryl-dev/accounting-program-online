@@ -1,0 +1,53 @@
+/* Pass 57: final visual recertification.
+ * Only concrete cascade gaps found after Pass 56 are corrected here.
+ */
+
+/* Reports uses a deliberately high-specificity route selector, so its selected
+ * family tab must be recertified at the same scope. Keep selection quiet and
+ * integrated: soft sage surface, dark ink, no white highlight block. */
+.main[data-route="/reports"] > div > .section:first-child > .tabs .tab.active {
+  border-color: var(--state-selected-border, #cddfd3);
+  background: var(--state-selected-bg, #edf4ef);
+  color: var(--state-selected-ink, #214934);
+  box-shadow: inset 0 -2px 0 #6f9b82;
+}
+
+.main[data-route="/reports"] > div > .section:first-child > .tabs .tab.active:hover {
+  border-color: #bdd3c5;
+  background: var(--state-selected-bg-hover, #e5efe8);
+  color: #173f2d;
+}
+
+/* Disabled fields should read as intentionally unavailable rather than relying
+ * on browser-specific greying. Preserve legibility while clearly reducing
+ * interaction affordance. */
+.main :where(input, select, textarea):disabled,
+.modal-card :where(input, select, textarea):disabled,
+.ho-drawer :where(input, select, textarea):disabled {
+  border-color: var(--state-disabled-border, #e0e3df);
+  background: var(--state-disabled-bg, #f2f3f1);
+  color: #747b75;
+  -webkit-text-fill-color: #747b75;
+  opacity: 1;
+  cursor: not-allowed;
+}
+
+.main :where(input, select, textarea):disabled::placeholder,
+.modal-card :where(input, select, textarea):disabled::placeholder,
+.ho-drawer :where(input, select, textarea):disabled::placeholder {
+  color: #969c97;
+  -webkit-text-fill-color: #969c97;
+}
+
+@media (prefers-contrast: more) {
+  .main[data-route="/reports"] > div > .section:first-child > .tabs .tab.active {
+    border-color: #6d9b80;
+  }
+
+  .main :where(input, select, textarea):disabled,
+  .modal-card :where(input, select, textarea):disabled,
+  .ho-drawer :where(input, select, textarea):disabled {
+    color: #5f665f;
+    -webkit-text-fill-color: #5f665f;
+  }
+}
