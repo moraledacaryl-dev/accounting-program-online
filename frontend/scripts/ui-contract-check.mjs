@@ -45,6 +45,24 @@ if (!enhancer.includes('Ledger start date') || !enhancer.includes('Ledger status
   failures.push('Cash & Treasury filter accessibility labels are missing');
 }
 
+const colorState = fs.readFileSync(path.join(root, 'app/pass-56-color-state-verification.css'), 'utf8');
+const layout = fs.readFileSync(path.join(root, 'app/layout.js'), 'utf8');
+if (!layout.includes("import './pass-56-color-state-verification.css';")) {
+  failures.push('Pass 56 color-state verification layer is not loaded last');
+}
+if (!colorState.includes('--state-selected-ink: #214934')) {
+  failures.push('Selected light surfaces must keep a dark readable ink color');
+}
+if (!colorState.includes('.main .tab.active') || !colorState.includes("[aria-selected='true']")) {
+  failures.push('Selected tab state normalization is missing');
+}
+if (!colorState.includes('--state-disabled-bg') || !colorState.includes('.main button:disabled')) {
+  failures.push('Intentional disabled-control state is missing');
+}
+if (!colorState.includes('.sidebar .nav-group-items a.active') || !colorState.includes('var(--sidebar-active-ink')) {
+  failures.push('Sidebar active state must remain a soft surface with dark text');
+}
+
 if (failures.length) {
   console.error('UI contract check failed:\n- ' + failures.join('\n- '));
   process.exit(1);
