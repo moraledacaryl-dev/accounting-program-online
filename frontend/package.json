@@ -4,7 +4,7 @@
   "version": "0.1.0",
   "scripts": {
     "dev": "next dev",
-    "qa:ui": "node scripts/ui-contract-check.mjs",
+    "qa:ui": "node scripts/ui-contract-check.mjs && node scripts/responsive-contract-check.mjs",
     "build": "npm run qa:ui && next build",
     "start": "next start"
   },
