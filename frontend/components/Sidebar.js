@@ -66,7 +66,8 @@ export default function Sidebar() {
   const searchInputRef = useRef(null);
   const preSearchScrollRef = useRef(0);
   const previousSearchActiveRef = useRef(false);
-  const [collapsed, setCollapsed] = useState(false);
+  const [desktopCollapsed, setCollapsed] = useState(false);
+  const collapsed = desktopCollapsed && !mobileNavOpen;
   const [openGroupId, setOpenGroupId] = useState(() => activeGroupForPath(pathname));
   const [filter, setFilter] = useState('');
 
@@ -94,13 +95,13 @@ export default function Sidebar() {
   }, [pathname]);
 
   useEffect(() => {
-    document.documentElement.style.setProperty('--sidebar-width', collapsed ? '76px' : '304px');
+    document.documentElement.style.setProperty('--sidebar-width', desktopCollapsed ? '76px' : '304px');
     try {
-      window.localStorage.setItem(SIDEBAR_KEY, collapsed ? '1' : '0');
+      window.localStorage.setItem(SIDEBAR_KEY, desktopCollapsed ? '1' : '0');
     } catch {
       // Keep in-memory preference when storage is unavailable.
     }
-  }, [collapsed]);
+  }, [desktopCollapsed]);
 
   useEffect(() => {
     closeMobileNav();
@@ -205,11 +206,11 @@ export default function Sidebar() {
           <button
             type="button"
             className="sidebar-toggle desktop-only"
-            aria-label={collapsed ? 'Expand sidebar' : 'Collapse sidebar'}
-            aria-pressed={collapsed}
+            aria-label={desktopCollapsed ? 'Expand sidebar' : 'Collapse sidebar'}
+            aria-pressed={desktopCollapsed}
             onClick={() => setCollapsed((value) => !value)}
           >
-            <NavIcon name="chevron" size={17} className={collapsed ? '' : 'rotate-180'} />
+            <NavIcon name="chevron" size={17} className={desktopCollapsed ? '' : 'rotate-180'} />
           </button>
           <button type="button" className="sidebar-toggle mobile-only" onClick={closeMobileNav} aria-label="Close navigation">
             <NavIcon name="close" size={18} />
