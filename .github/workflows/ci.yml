@@ -107,3 +107,13 @@ jobs:
       - name: Smoke-test production frontend
         working-directory: frontend
         run: bash scripts/smoke-test.sh
+
+      - name: Install pinned browser blocker tooling
+        working-directory: frontend
+        run: |
+          npm install --no-save --package-lock=false @playwright/test@1.55.0
+          npx playwright install --with-deps chromium
+
+      - name: Run dynamic-route browser blocker
+        working-directory: frontend
+        run: npx playwright test --config=playwright.config.js
