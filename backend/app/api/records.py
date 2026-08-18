@@ -4,7 +4,7 @@ from app.db.database import get_db
 from app.schemas.common import RecordCreate, RecordUpdate, ApprovalPayload
 from app.services.record_service import create_record, delete_record, get_record, list_records, update_record, get_record_obj
 from app.services.taxonomy_service import get_module_by_slug, get_module_name
-from app.api.deps import get_current_user, require_any_permissions, require_permissions
+from app.api.deps import enforce_external_record_ownership, get_current_user, require_any_permissions, require_permissions
 
 router = APIRouter()
 
@@ -59,6 +59,10 @@ def single_update(
     )),
 ):
     try:
+        current = get_record_obj(db, record_id)
+        if not current:
+            raise HTTPException(status_code=404, detail='Record not found')
+        enforce_external_record_ownership(current.module_slug, user)
         record = update_record(db, record_id, payload, approver=user.username)
         if not record:
             raise HTTPException(status_code=404, detail='Record not found')
@@ -71,7 +75,10 @@ def approve_record(record_id: int, payload: ApprovalPayload, db: Session = Depen
     status = 'approved' if payload.approved else 'rejected'
     try:
         current = get_record_obj(db, record_id)
-        notes = current.notes if current else None
+        if not current:
+            raise HTTPException(status_code=404, detail='Record not found')
+        enforce_external_record_ownership(current.module_slug, user)
+        notes = current.notes
         if payload.note:
             notes = '\n'.join(filter(None, [notes, f'{status.title()} by {user.username}: {payload.note.strip()}']))
         record = update_record(db, record_id, RecordUpdate(workflow_status=status, notes=notes), approver=user.username)
@@ -88,6 +95,10 @@ def single_delete(
     user=Depends(require_any_permissions('approvals.act', 'cashflow.money_out', 'inventory.manage', 'assets.manage')),
 ):
     try:
+        current = get_record_obj(db, record_id)
+        if not current:
+            raise HTTPException(status_code=404, detail='Record not found')
+        enforce_external_record_ownership(current.module_slug, user)
         ok = delete_record(db, record_id)
         if not ok:
             raise HTTPException(status_code=404, detail='Record not found')

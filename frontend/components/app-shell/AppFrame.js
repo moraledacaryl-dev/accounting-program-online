@@ -2,6 +2,7 @@
 
 import { usePathname } from 'next/navigation';
 import AccessibilityEnhancer from '../AccessibilityEnhancer';
+import ExternalOwnershipBoundary from '../ExternalOwnershipBoundary';
 import Header from '../Header';
 import SetupAdministrationNav from '../admin/SetupAdministrationNav';
 import FinanceOperationsNav from '../finance/FinanceOperationsNav';
@@ -43,7 +44,9 @@ export default function AppFrame({ children }) {
           </div>
           <div className="shell-content">
             <main id="main-content" className="main" data-route={pathname} tabIndex="-1">
-              <RouteGuard>{children}</RouteGuard>
+              <RouteGuard>
+                <ExternalOwnershipBoundary>{children}</ExternalOwnershipBoundary>
+              </RouteGuard>
             </main>
           </div>
         </div>
