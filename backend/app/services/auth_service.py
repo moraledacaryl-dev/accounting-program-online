@@ -1,7 +1,7 @@
 from datetime import datetime, timedelta, timezone
 import secrets
 
-from jose import jwt
+import jwt
 from passlib.context import CryptContext
 from sqlalchemy.orm import Session
 from app.core.settings import settings
@@ -17,15 +17,23 @@ def is_integration_username(username: str | None) -> bool:
     configured = (settings.integration_username or '').strip().lower()
     return bool(configured and (username or '').strip().lower() == configured)
 
+
 def hash_password(password: str) -> str:
     return pwd_context.hash(password)
+
 
 def verify_password(password: str, hashed: str) -> bool:
     return pwd_context.verify(password, hashed)
 
+
 def create_access_token(subject: str) -> str:
     expire = datetime.now(timezone.utc) + timedelta(minutes=settings.access_token_expire_minutes)
     return jwt.encode({"sub": subject, "exp": expire}, settings.secret_key, algorithm=ALGORITHM)
+
+
+def decode_access_token(token: str) -> dict:
+    return jwt.decode(token, settings.secret_key, algorithms=[ALGORITHM])
+
 
 def authenticate_user(db: Session, username: str, password: str):
     if settings.integration_enabled and is_integration_username(username):

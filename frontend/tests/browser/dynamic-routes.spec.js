@@ -102,11 +102,11 @@ for (const scenario of [
   });
 }
 
-test('/records/inventory resolves module before redirecting', async ({ page }) => {
+test('/records/inventory resolves module and reaches canonical inventory route', async ({ page }) => {
   const undefinedRequests = [];
   await installApiFixtures(page, undefinedRequests);
   await page.goto('/records/inventory');
-  await expect(page).toHaveURL(/\/workspace\/inventory\?tab=records$/);
+  await expect(page).toHaveURL(/\/inventory-items$/);
   expect(undefinedRequests).toEqual([]);
 });
 

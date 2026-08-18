@@ -438,7 +438,10 @@ def set_user_dashboard_override(
 
 
 def get_code_rule(settings: dict[str, Any], entity_key: str) -> dict[str, Any]:
+    normalized_key = str(entity_key or '').strip().lower()
+    if normalized_key not in DEFAULT_CODE_ENTITIES:
+        raise ValueError(f'Unsupported code entity: {entity_key}.')
     code_settings = _as_dict(_as_dict(settings.get('code_generation')).get('entities'))
-    base = DEFAULT_CODE_ENTITIES.get(entity_key, {'prefix': entity_key.upper(), 'digits': 4, 'include_year': False, 'include_month': False, 'separator': '-', 'editable_after_create': True})
-    merged = _deep_merge(base, _as_dict(code_settings.get(entity_key)))
-    return _normalize_code_entities({entity_key: merged})[entity_key]
+    base = DEFAULT_CODE_ENTITIES[normalized_key]
+    merged = _deep_merge(base, _as_dict(code_settings.get(normalized_key)))
+    return _normalize_code_entities({normalized_key: merged})[normalized_key]
