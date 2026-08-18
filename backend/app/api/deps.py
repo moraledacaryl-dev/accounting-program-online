@@ -1,13 +1,13 @@
 from hmac import compare_digest
 
-from jose import JWTError, jwt
+from jwt.exceptions import InvalidTokenError
 from fastapi import Cookie, Depends, HTTPException, Request
 from fastapi.security import OAuth2PasswordBearer
 from sqlalchemy.orm import Session
 from app.core.settings import settings
 from app.db.database import get_db
 from app.models.entities import User
-from app.services.auth_service import is_integration_username
+from app.services.auth_service import decode_access_token, is_integration_username
 from app.services.permission_service import get_user_permission_keys
 
 oauth2_scheme = OAuth2PasswordBearer(tokenUrl="/api/auth/login", auto_error=False)
@@ -89,11 +89,11 @@ def get_current_user(
     if not token:
         raise credentials_exception
     try:
-        payload = jwt.decode(token, settings.secret_key, algorithms=["HS256"])
+        payload = decode_access_token(token)
         username = payload.get("sub")
         if not username:
             raise credentials_exception
-    except JWTError:
+    except InvalidTokenError:
         raise credentials_exception
     user = db.query(User).filter(User.username == username, User.is_active == True).first()
     if not user:
