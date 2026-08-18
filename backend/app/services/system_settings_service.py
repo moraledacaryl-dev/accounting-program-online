@@ -53,13 +53,73 @@ CODE_ENTITY_CATALOG = [
 ]
 
 DEFAULT_ROLE_WIDGETS = {
-    'owner': ['occupancy_rate','arrivals_today','departures_today','in_house_guests','revenue_today','cash_in_today','cash_out_today','pending_approvals','overdue_receivables','overdue_payables','low_stock_count','top_channels','pending_by_workflow','bir_status'],
-    'manager': ['occupancy_rate','arrivals_today','departures_today','revenue_today','cash_in_today','cash_out_today','pending_approvals','low_stock_count','top_channels','pending_by_workflow'],
-    'front_desk': ['arrivals_today','departures_today','in_house_guests','vip_arrivals_today','occupancy_rate','cash_in_today','pending_approvals'],
-    'restaurant_admin': ['fnb_sales_today','revenue_today','low_stock_count','cash_in_today','pending_approvals','low_stock_items'],
-    'accounting_admin': ['cash_in_today','cash_out_today','pending_approvals','overdue_receivables','overdue_payables','bir_status','pending_by_workflow'],
-    'purchasing_admin': ['low_stock_count','pending_approvals','overdue_payables','low_stock_items','pending_by_workflow'],
-    'payroll_admin': ['labor_summary','pending_approvals','cash_out_today','overdue_payables'],
+    'owner': [
+        'occupancy_rate',
+        'arrivals_today',
+        'departures_today',
+        'in_house_guests',
+        'revenue_today',
+        'cash_in_today',
+        'cash_out_today',
+        'pending_approvals',
+        'overdue_receivables',
+        'overdue_payables',
+        'low_stock_count',
+        'top_channels',
+        'pending_by_workflow',
+        'bir_status',
+    ],
+    'manager': [
+        'occupancy_rate',
+        'arrivals_today',
+        'departures_today',
+        'revenue_today',
+        'cash_in_today',
+        'cash_out_today',
+        'pending_approvals',
+        'low_stock_count',
+        'top_channels',
+        'pending_by_workflow',
+    ],
+    'front_desk': [
+        'arrivals_today',
+        'departures_today',
+        'in_house_guests',
+        'vip_arrivals_today',
+        'occupancy_rate',
+        'cash_in_today',
+        'pending_approvals',
+    ],
+    'restaurant_admin': [
+        'fnb_sales_today',
+        'revenue_today',
+        'low_stock_count',
+        'cash_in_today',
+        'pending_approvals',
+        'low_stock_items',
+    ],
+    'accounting_admin': [
+        'cash_in_today',
+        'cash_out_today',
+        'pending_approvals',
+        'overdue_receivables',
+        'overdue_payables',
+        'bir_status',
+        'pending_by_workflow',
+    ],
+    'purchasing_admin': [
+        'low_stock_count',
+        'pending_approvals',
+        'overdue_payables',
+        'low_stock_items',
+        'pending_by_workflow',
+    ],
+    'payroll_admin': [
+        'labor_summary',
+        'pending_approvals',
+        'cash_out_today',
+        'overdue_payables',
+    ],
 }
 
 DEFAULT_CODE_ENTITIES = {
@@ -76,14 +136,51 @@ DEFAULT_CODE_ENTITIES = {
 }
 
 DEFAULT_SYSTEM_SETTINGS = {
-    'general': {'business_name': 'PrimeSlice Hospitality','property_name': 'PrimeSlice Resort','timezone': 'Asia/Manila','currency': 'PHP','default_language': 'en','date_format': 'YYYY-MM-DD','number_format': '#,##0.00'},
-    'dashboard': {'allow_user_overrides': False,'role_widgets': copy.deepcopy(DEFAULT_ROLE_WIDGETS),'user_widgets': {}},
-    'code_generation': {'allow_manual_override': True,'entities': copy.deepcopy(DEFAULT_CODE_ENTITIES)},
-    'financial_defaults': {'default_cash_account_id': None,'default_bank_account_id': None,'auto_require_daily_reconciliation': True,'default_bir_include': False},
-    'workflow': {'require_approval_purchase_requests': True,'require_approval_purchase_orders': True,'require_approval_cashflow': False,'require_approval_payroll_posting': True,'allow_reopen_locked_periods': True},
-    'hospitality': {'default_check_in_time': '14:00','default_check_out_time': '12:00','default_booking_status': 'confirmed'},
-    'payroll': {'default_period_name_pattern': 'Payroll {period_start} to {period_end}','require_review_before_post': True},
-    'ui': {'table_page_size': 20,'show_inactive_by_default': False,'default_landing_by_role': {}},
+    'general': {
+        'business_name': 'PrimeSlice Hospitality',
+        'property_name': 'PrimeSlice Resort',
+        'timezone': 'Asia/Manila',
+        'currency': 'PHP',
+        'default_language': 'en',
+        'date_format': 'YYYY-MM-DD',
+        'number_format': '#,##0.00',
+    },
+    'dashboard': {
+        'allow_user_overrides': False,
+        'role_widgets': copy.deepcopy(DEFAULT_ROLE_WIDGETS),
+        'user_widgets': {},
+    },
+    'code_generation': {
+        'allow_manual_override': True,
+        'entities': copy.deepcopy(DEFAULT_CODE_ENTITIES),
+    },
+    'financial_defaults': {
+        'default_cash_account_id': None,
+        'default_bank_account_id': None,
+        'auto_require_daily_reconciliation': True,
+        'default_bir_include': False,
+    },
+    'workflow': {
+        'require_approval_purchase_requests': True,
+        'require_approval_purchase_orders': True,
+        'require_approval_cashflow': False,
+        'require_approval_payroll_posting': True,
+        'allow_reopen_locked_periods': True,
+    },
+    'hospitality': {
+        'default_check_in_time': '14:00',
+        'default_check_out_time': '12:00',
+        'default_booking_status': 'confirmed',
+    },
+    'payroll': {
+        'default_period_name_pattern': 'Payroll {period_start} to {period_end}',
+        'require_review_before_post': True,
+    },
+    'ui': {
+        'table_page_size': 20,
+        'show_inactive_by_default': False,
+        'default_landing_by_role': {},
+    },
 }
 
 SETTING_SECTIONS = tuple(DEFAULT_SYSTEM_SETTINGS.keys())
@@ -141,13 +238,19 @@ def _normalize_dashboard(settings: dict[str, Any]) -> dict[str, Any]:
         base = DEFAULT_ROLE_WIDGETS.get(role_key, [])
         chosen = _normalize_widget_list(role_widgets.get(role_key))
         normalized_role_widgets[role_key] = chosen or list(base)
+
     raw_user_widgets = _as_dict(raw.get('user_widgets'))
     user_widgets: dict[str, list[str]] = {}
     for user_key, widget_keys in raw_user_widgets.items():
         normalized = _normalize_widget_list(widget_keys if isinstance(widget_keys, list) else [])
         if normalized:
             user_widgets[str(user_key)] = normalized
-    return {'allow_user_overrides': bool(raw.get('allow_user_overrides', False)),'role_widgets': normalized_role_widgets,'user_widgets': user_widgets}
+
+    return {
+        'allow_user_overrides': bool(raw.get('allow_user_overrides', False)),
+        'role_widgets': normalized_role_widgets,
+        'user_widgets': user_widgets,
+    }
 
 
 def _normalize_code_entities(raw_entities: dict[str, Any]) -> dict[str, Any]:
@@ -166,26 +269,38 @@ def _normalize_code_entities(raw_entities: dict[str, Any]) -> dict[str, Any]:
         separator = str(source.get('separator') if source.get('separator') is not None else defaults['separator']).strip()
         if not separator:
             separator = '-'
-        out[key] = {'prefix': prefix,'digits': digits,'include_year': bool(source.get('include_year', defaults['include_year'])),'include_month': bool(source.get('include_month', defaults['include_month'])),'separator': separator,'editable_after_create': bool(source.get('editable_after_create', defaults['editable_after_create']))}
+        out[key] = {
+            'prefix': prefix,
+            'digits': digits,
+            'include_year': bool(source.get('include_year', defaults['include_year'])),
+            'include_month': bool(source.get('include_month', defaults['include_month'])),
+            'separator': separator,
+            'editable_after_create': bool(source.get('editable_after_create', defaults['editable_after_create'])),
+        }
     return out
 
 
 def _normalize_code_generation(settings: dict[str, Any]) -> dict[str, Any]:
     raw = _as_dict(settings)
     entities = _normalize_code_entities(_as_dict(raw.get('entities')))
-    return {'allow_manual_override': bool(raw.get('allow_manual_override', True)),'entities': entities}
+    return {
+        'allow_manual_override': bool(raw.get('allow_manual_override', True)),
+        'entities': entities,
+    }
 
 
 def normalize_system_settings(settings: dict[str, Any]) -> dict[str, Any]:
     merged = _deep_merge(copy.deepcopy(DEFAULT_SYSTEM_SETTINGS), _as_dict(settings))
     merged['dashboard'] = _normalize_dashboard(merged.get('dashboard'))
     merged['code_generation'] = _normalize_code_generation(merged.get('code_generation'))
+
     merged['general'] = _as_dict(merged.get('general'))
     merged['financial_defaults'] = _as_dict(merged.get('financial_defaults'))
     merged['workflow'] = _as_dict(merged.get('workflow'))
     merged['hospitality'] = _as_dict(merged.get('hospitality'))
     merged['payroll'] = _as_dict(merged.get('payroll'))
     merged['ui'] = _as_dict(merged.get('ui'))
+
     table_page_size = merged['ui'].get('table_page_size', 20)
     try:
         table_page_size = int(table_page_size)
@@ -206,13 +321,16 @@ def load_system_settings(db: Session) -> dict[str, Any]:
 def save_system_settings(db: Session, updates: dict[str, Any], *, updated_by: str | None = None) -> dict[str, Any]:
     existing = load_system_settings(db)
     merged = copy.deepcopy(existing)
+
     for section in SETTING_SECTIONS:
         if section not in updates:
             continue
         value = updates.get(section)
         if isinstance(value, dict):
             merged[section] = _deep_merge(_as_dict(merged.get(section)), value)
+
     normalized = normalize_system_settings(merged)
+
     rows = {row.key: row for row in db.query(SystemSetting).filter(SystemSetting.key.in_(SETTING_SECTIONS)).all()}
     for section in SETTING_SECTIONS:
         row = rows.get(section)
@@ -238,7 +356,11 @@ def code_entity_catalog() -> list[dict[str, str]]:
 
 
 def settings_meta() -> dict[str, Any]:
-    return {'dashboard_roles': dashboard_role_options(),'dashboard_widgets': dashboard_widget_catalog(),'code_entities': code_entity_catalog()}
+    return {
+        'dashboard_roles': dashboard_role_options(),
+        'dashboard_widgets': dashboard_widget_catalog(),
+        'code_entities': code_entity_catalog(),
+    }
 
 
 def resolve_dashboard_role_for_user(db: Session, user: User) -> str:
@@ -246,14 +368,30 @@ def resolve_dashboard_role_for_user(db: Session, user: User) -> str:
     legacy = str(getattr(user, 'role', '') or '').strip().lower()
     if legacy:
         role_codes.add(legacy)
-    links = db.query(UserRole).join(Role, Role.id == UserRole.role_id).filter(UserRole.user_id == int(user.id), Role.is_active == True).all()
+
+    links = (
+        db.query(UserRole)
+        .join(Role, Role.id == UserRole.role_id)
+        .filter(UserRole.user_id == int(user.id), Role.is_active == True)
+        .all()
+    )
     for link in links:
         if link.role and link.role.code:
             role_codes.add(str(link.role.code).strip().lower())
-    ordered = ['owner','manager','front_desk','restaurant_admin','accounting_admin','purchasing_admin','payroll_admin']
+
+    ordered = [
+        'owner',
+        'manager',
+        'front_desk',
+        'restaurant_admin',
+        'accounting_admin',
+        'purchasing_admin',
+        'payroll_admin',
+    ]
     for role_key in ordered:
         if role_key in role_codes:
             return role_key
+
     if role_codes:
         return sorted(role_codes)[0]
     return 'manager'
@@ -265,6 +403,7 @@ def get_effective_dashboard_widgets(db: Session, user: User, *, settings: dict[s
     role = resolve_dashboard_role_for_user(db, user)
     role_widgets = _as_dict(dashboard.get('role_widgets')).get(role) or DEFAULT_ROLE_WIDGETS.get(role, [])
     widgets = _normalize_widget_list(role_widgets)
+
     if bool(dashboard.get('allow_user_overrides', False)):
         user_widgets_map = _as_dict(dashboard.get('user_widgets'))
         override = user_widgets_map.get(str(user.id))
@@ -272,12 +411,19 @@ def get_effective_dashboard_widgets(db: Session, user: User, *, settings: dict[s
             override_keys = _normalize_widget_list(override)
             if override_keys:
                 widgets = override_keys
+
     if not widgets:
         widgets = list(DEFAULT_ROLE_WIDGETS.get('manager', []))
     return role, widgets
 
 
-def set_user_dashboard_override(db: Session, *, user_id: int, widgets: list[str], updated_by: str | None = None) -> dict[str, Any]:
+def set_user_dashboard_override(
+    db: Session,
+    *,
+    user_id: int,
+    widgets: list[str],
+    updated_by: str | None = None,
+) -> dict[str, Any]:
     settings = load_system_settings(db)
     dashboard = _as_dict(settings.get('dashboard'))
     user_widgets = _as_dict(dashboard.get('user_widgets'))
@@ -286,6 +432,7 @@ def set_user_dashboard_override(db: Session, *, user_id: int, widgets: list[str]
         user_widgets[str(user_id)] = normalized
     elif str(user_id) in user_widgets:
         user_widgets.pop(str(user_id), None)
+
     dashboard['user_widgets'] = user_widgets
     return save_system_settings(db, {'dashboard': dashboard}, updated_by=updated_by)
 
