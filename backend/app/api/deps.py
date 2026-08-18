@@ -7,10 +7,25 @@ from sqlalchemy.orm import Session
 from app.core.settings import settings
 from app.db.database import get_db
 from app.models.entities import User
+from app.services.auth_service import is_integration_username
 from app.services.permission_service import get_user_permission_keys
 
 oauth2_scheme = OAuth2PasswordBearer(tokenUrl="/api/auth/login", auto_error=False)
 SAFE_METHODS = {'GET', 'HEAD', 'OPTIONS', 'TRACE'}
+EXTERNAL_API_OWNERS = {
+    '/api/stock': 'Inventory & Procurement',
+    '/api/suppliers': 'Inventory & Procurement',
+    '/api/purchase-requests': 'Inventory & Procurement',
+    '/api/purchase-orders': 'Inventory & Procurement',
+    '/api/receiving': 'Inventory & Procurement',
+    '/api/setup-imports': 'Inventory & Procurement',
+    '/api/menu': 'POS Cloud',
+}
+EXTERNAL_RECORD_MODULE_OWNERS = {
+    'inventory': 'Inventory & Procurement',
+    'procurement': 'Inventory & Procurement',
+    'restaurant': 'POS Cloud',
+}
 
 
 def _csrf_tokens_match(cookie_token: str | None, header_token: str | None) -> bool:
@@ -26,6 +41,41 @@ def _enforce_cookie_csrf(request: Request, bearer_token: str | None, cookie_toke
     csrf_header = request.headers.get(settings.csrf_header_name)
     if not _csrf_tokens_match(csrf_cookie, csrf_header):
         raise HTTPException(status_code=403, detail='CSRF token missing or invalid')
+
+
+def external_owner_for_request(request: Request) -> str | None:
+    path = request.url.path.rstrip('/') or '/'
+    for prefix, owner in EXTERNAL_API_OWNERS.items():
+        if path == prefix or path.startswith(f'{prefix}/'):
+            return owner
+    if path.startswith('/api/records/'):
+        parts = [part for part in path.split('/') if part]
+        if len(parts) >= 3 and parts[1] == 'records':
+            return EXTERNAL_RECORD_MODULE_OWNERS.get(parts[2].strip().lower())
+    return None
+
+
+def enforce_external_record_ownership(module_slug: str | None, user: User):
+    owner = EXTERNAL_RECORD_MODULE_OWNERS.get((module_slug or '').strip().lower())
+    if owner and not is_integration_username(getattr(user, 'username', None)):
+        raise HTTPException(
+            status_code=409,
+            detail=f'{owner} owns this operational workflow. Accounting is read-only for direct human mutation.',
+        )
+    return user
+
+
+def _enforce_external_ownership(request: Request, user: User):
+    if request.method.upper() in SAFE_METHODS:
+        return
+    owner = external_owner_for_request(request)
+    if not owner or is_integration_username(getattr(user, 'username', None)):
+        return
+    raise HTTPException(
+        status_code=409,
+        detail=f'{owner} owns this operational workflow. Accounting is read-only for direct human mutation.',
+    )
+
 
 def get_current_user(
     request: Request,
@@ -48,7 +98,9 @@ def get_current_user(
     user = db.query(User).filter(User.username == username, User.is_active == True).first()
     if not user:
         raise credentials_exception
+    _enforce_external_ownership(request, user)
     return user
+
 
 def require_roles(*roles):
     def inner(user: User = Depends(get_current_user)):
