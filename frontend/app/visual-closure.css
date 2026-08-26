@@ -235,7 +235,30 @@
     padding: 12px 13px;
   }
 
-  .main[data-route="/integrations/beds24"] .table-wrap,
+  /* Beds24 is an unusually control-dense admin surface. On phone widths, pair
+   * compact controls into two columns rather than stacking every field. JSON
+   * mapping textareas stay full-width for readability. This preserves every
+   * control while substantially reducing document height. */
+  .main[data-route="/integrations/beds24"] .form-grid {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    gap: 9px 10px;
+  }
+
+  .main[data-route="/integrations/beds24"] .form-grid > label:has(textarea) {
+    grid-column: 1 / -1;
+  }
+
+  .main[data-route="/integrations/beds24"] .form-grid :where(input, select, textarea) {
+    min-width: 0;
+  }
+
+  .main[data-route="/integrations/beds24"] .table-wrap {
+    max-height: 46vh;
+    overflow: auto;
+    overscroll-behavior: contain;
+    scrollbar-width: thin;
+  }
+
   .main[data-route="/restaurant-ops"] .table-wrap,
   .main[data-route="/assets"] .table-wrap {
     max-height: 58vh;
