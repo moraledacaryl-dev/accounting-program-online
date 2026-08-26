@@ -1,6 +1,9 @@
 from __future__ import annotations
 
+from datetime import datetime, timedelta, timezone
+
 from fastapi import HTTPException, Response
+import jwt
 import pytest
 from sqlalchemy import create_engine, select
 from sqlalchemy.orm import sessionmaker
@@ -8,6 +11,7 @@ from starlette.requests import Request
 
 from app.api.auth import LOGIN_MAX_FAILURES, login, logout
 from app.api.deps import get_current_user
+from app.core.settings import settings
 from app.db.database import Base
 from app.models.auth_security import RevokedAccessToken
 from app.models.entities import User
@@ -17,7 +21,7 @@ from app.services.auth_security_service import (
     login_failure_key,
     recent_login_failure_count,
 )
-from app.services.auth_service import create_access_token, hash_password
+from app.services.auth_service import ALGORITHM, create_access_token, hash_password
 
 
 def make_database(tmp_path):
@@ -153,3 +157,36 @@ def test_revoking_one_session_does_not_revoke_another_for_same_user(tmp_path):
             cookie_token=None,
         )
         assert authenticated.username == 'shared-owner'
+
+
+def test_legacy_hs256_token_without_jti_remains_valid_and_revocable(tmp_path):
+    Session = make_database(tmp_path)
+    legacy_token = jwt.encode(
+        {
+            'sub': 'shared-owner',
+            'exp': datetime.now(timezone.utc) + timedelta(minutes=5),
+        },
+        settings.secret_key,
+        algorithm=ALGORITHM,
+    )
+
+    with Session() as db:
+        user = add_user(db)
+        authenticated = get_current_user(
+            make_request('GET', '/api/auth/me', token=legacy_token),
+            db=db,
+            bearer_token=legacy_token,
+            cookie_token=None,
+        )
+        assert authenticated.username == user.username
+        logout(make_request('POST', '/api/auth/logout', token=legacy_token), Response(), db, user)
+
+    with Session() as db:
+        with pytest.raises(HTTPException) as exc_info:
+            get_current_user(
+                make_request('GET', '/api/auth/me', token=legacy_token),
+                db=db,
+                bearer_token=legacy_token,
+                cookie_token=None,
+            )
+        assert exc_info.value.status_code == 401
