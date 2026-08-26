@@ -29,6 +29,16 @@ Primary deployment guide:
 docs/HIDDENOASIS_LIVE_DEPLOYMENT.md
 ```
 
+## Backend tests
+
+From the repository root, run the isolated backend suite with:
+
+```bash
+bash scripts/test-backend.sh
+```
+
+Production/runtime Python dependencies are installed from `backend/requirements.lock.txt` through `backend/requirements.txt`.
+
 Deployment model:
 
 - Ubuntu 22.04

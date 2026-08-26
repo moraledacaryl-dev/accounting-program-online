@@ -1,5 +1,5 @@
 import secrets
-from time import monotonic
+from datetime import datetime, timezone
 
 from fastapi import APIRouter, Depends, HTTPException, Request, Response
 from sqlalchemy.orm import Session
@@ -15,50 +15,43 @@ from app.schemas.common import (
 from app.services.auth_service import (
     authenticate_user,
     create_access_token,
+    decode_access_token,
     ensure_admin_user,
     ensure_integration_user,
     hash_password,
 )
 from app.api.deps import get_current_user, require_permissions
 from app.core.settings import settings
+from app.services.auth_security_service import (
+    LOGIN_MAX_FAILURES,
+    clear_login_failures,
+    login_failure_key,
+    recent_login_failure_count,
+    record_login_failure,
+    revoke_access_token,
+)
 from app.services.permission_service import assign_user_roles, get_user_effective_permissions, get_user_roles
 
 router = APIRouter()
 
-LOGIN_FAILURE_WINDOW_SECONDS = 5 * 60
-LOGIN_MAX_FAILURES = 8
-_login_failures: dict[str, list[float]] = {}
-
 
 def _login_failure_key(request: Request, username: str) -> str:
     client_host = request.client.host if request.client else 'unknown'
-    normalized_username = (username or '').strip().lower()
-    return f'{client_host}:{normalized_username}'
+    return login_failure_key(client_host, username)
 
 
-def _recent_login_failures(key: str) -> list[float]:
-    cutoff = monotonic() - LOGIN_FAILURE_WINDOW_SECONDS
-    recent = [stamp for stamp in _login_failures.get(key, []) if stamp >= cutoff]
-    if recent:
-        _login_failures[key] = recent
-    else:
-        _login_failures.pop(key, None)
-    return recent
-
-
-def _assert_login_allowed(key: str):
-    if len(_recent_login_failures(key)) >= LOGIN_MAX_FAILURES:
+def _assert_login_allowed(db: Session, key_hash: str):
+    if recent_login_failure_count(db, key_hash) >= LOGIN_MAX_FAILURES:
         raise HTTPException(status_code=429, detail='Too many failed login attempts. Please wait a few minutes and try again.')
 
 
-def _record_login_failure(key: str):
-    recent = _recent_login_failures(key)
-    recent.append(monotonic())
-    _login_failures[key] = recent
-
-
-def _clear_login_failures(key: str):
-    _login_failures.pop(key, None)
+def _request_access_token(request: Request) -> str | None:
+    authorization = (request.headers.get('authorization') or '').strip()
+    if authorization.lower().startswith('bearer '):
+        token = authorization[7:].strip()
+        if token:
+            return token
+    return request.cookies.get(settings.auth_cookie_name)
 
 
 def _set_session_cookie(response: Response, token: str):
@@ -111,6 +104,7 @@ def _clear_session_cookie(response: Response):
         samesite=settings.auth_cookie_samesite_value,
     )
 
+
 @router.post('/bootstrap')
 def bootstrap(db: Session = Depends(get_db)):
     if not settings.bootstrap_enabled:
@@ -131,15 +125,16 @@ def bootstrap(db: Session = Depends(get_db)):
         response['temporary_password_shown_once'] = True
     return response
 
+
 @router.post('/login')
 def login(payload: LoginPayload, request: Request, response: Response, db: Session = Depends(get_db)):
     failure_key = _login_failure_key(request, payload.username)
-    _assert_login_allowed(failure_key)
+    _assert_login_allowed(db, failure_key)
     user = authenticate_user(db, payload.username, payload.password)
     if not user:
-        _record_login_failure(failure_key)
+        record_login_failure(db, failure_key)
         raise HTTPException(status_code=401, detail='Incorrect username or password')
-    _clear_login_failures(failure_key)
+    clear_login_failures(db, failure_key)
     perms = get_user_effective_permissions(db, user.id)
     token = create_access_token(user.username)
     _set_session_cookie(response, token)
@@ -160,7 +155,20 @@ def login(payload: LoginPayload, request: Request, response: Response, db: Sessi
 
 
 @router.post('/logout')
-def logout(response: Response, user: User = Depends(get_current_user)):
+def logout(
+    request: Request,
+    response: Response,
+    db: Session = Depends(get_db),
+    user: User = Depends(get_current_user),
+):
+    token = _request_access_token(request)
+    if token:
+        payload = decode_access_token(token)
+        expires_at = None
+        raw_exp = payload.get('exp')
+        if raw_exp is not None:
+            expires_at = datetime.fromtimestamp(float(raw_exp), tz=timezone.utc)
+        revoke_access_token(db, token, subject=user.username, expires_at=expires_at)
     _clear_session_cookie(response)
     return {'ok': True}
 
@@ -195,6 +203,7 @@ def integration_token(payload: IntegrationTokenPayload, db: Session = Depends(ge
     ensure_integration_user(db)
     return {'access_token': create_access_token(settings.integration_username)}
 
+
 @router.get('/users')
 def list_users(db: Session = Depends(get_db), user: User = Depends(require_permissions('users.manage'))):
     rows = db.query(User).order_by(User.username.asc()).all()
@@ -211,6 +220,7 @@ def list_users(db: Session = Depends(get_db), user: User = Depends(require_permi
             'roles': roles.get('roles', []),
         })
     return out
+
 
 @router.post('/users')
 def create_user(payload: UserCreate, db: Session = Depends(get_db), user: User = Depends(require_permissions('users.manage'))):
@@ -232,6 +242,7 @@ def create_user(payload: UserCreate, db: Session = Depends(get_db), user: User =
         'role_ids': roles.get('role_ids', []),
         'roles': roles.get('roles', []),
     }
+
 
 @router.put('/users/{user_id}')
 def update_user(user_id: int, payload: UserUpdate, db: Session = Depends(get_db), user: User = Depends(require_permissions('users.manage'))):

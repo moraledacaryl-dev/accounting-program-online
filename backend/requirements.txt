@@ -1,11 +1,1 @@
-fastapi>=0.115
-uvicorn[standard]>=0.30
-sqlalchemy>=2.0
-alembic>=1.13
-psycopg[binary]>=3.1
-pydantic>=2.8
-pydantic-settings>=2.3
-PyJWT==2.13.0
-passlib[bcrypt]==1.7.4
-bcrypt==4.0.1
-python-multipart>=0.0.9
+-r requirements.lock.txt

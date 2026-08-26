@@ -21,7 +21,7 @@ jobs:
     env:
       ENVIRONMENT: test
       DATABASE_URL: sqlite:///./ci-accounting.db
-      SECRET_KEY: ci-secret-key-do-not-use
+      SECRET_KEY: aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa
       STARTUP_REQUIRE_MIGRATIONS: 'false'
       ALLOW_DEFAULT_ADMIN_BOOTSTRAP: 'false'
       ALLOW_DEMO_SEED: 'false'
@@ -40,16 +40,16 @@ jobs:
           python3 --version
           python3 -m pip --version
 
-      - name: Install backend dependencies
+      - name: Install locked backend dependencies
         working-directory: backend
-        run: python3 -m pip install --upgrade pip && python3 -m pip install -r requirements.txt pytest
+        run: python3 -m pip install --upgrade pip && python3 -m pip install -r requirements.txt pytest==9.1.1
 
-      - name: Audit backend dependencies
+      - name: Audit locked backend dependencies
         working-directory: backend
         run: |
           set -euo pipefail
           python3 -m pip install pip-audit==2.10.1
-          python3 -m pip_audit -r requirements.txt
+          python3 -m pip_audit -r requirements.lock.txt
           if python3 -m pip list --format=freeze | grep -Eiq '^(python-jose|ecdsa)=='; then
             echo 'Forbidden legacy JWT dependency detected.'
             python3 -m pip list --format=freeze | grep -Ei '^(python-jose|ecdsa)=='
@@ -82,11 +82,8 @@ jobs:
           python3 -m alembic upgrade head
           python3 -m alembic current
 
-      - name: Run backend tests
-        working-directory: backend
-        run: |
-          rm -f ci-accounting.db
-          python3 -m pytest tests
+      - name: Run backend tests from repository root
+        run: bash scripts/test-backend.sh
 
   frontend-build:
     name: Frontend build

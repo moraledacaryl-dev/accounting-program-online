@@ -8,6 +8,7 @@ from app.core.settings import settings
 from app.db.database import get_db
 from app.models.entities import User
 from app.services.auth_service import decode_access_token, is_integration_username
+from app.services.auth_security_service import is_access_token_revoked
 from app.services.permission_service import get_user_permission_keys
 
 oauth2_scheme = OAuth2PasswordBearer(tokenUrl="/api/auth/login", auto_error=False)
@@ -87,6 +88,8 @@ def get_current_user(
     _enforce_cookie_csrf(request, bearer_token, cookie_token)
     token = bearer_token or cookie_token
     if not token:
+        raise credentials_exception
+    if is_access_token_revoked(db, token):
         raise credentials_exception
     try:
         payload = decode_access_token(token)
