@@ -152,7 +152,7 @@ test('Beds24 stays bounded with production-scale debug data on mobile', async ({
   const response = await page.goto('/integrations/beds24');
   expect(response && response.status()).toBeLessThan(500);
   await expect(page.getByRole('heading', { name: 'Beds24 Integration' })).toBeVisible();
-  await expect(page.getByText('Representative Beds24 synchronization message 1')).toBeVisible();
+  await expect(page.getByText('Representative Beds24 synchronization message 1', { exact: true })).toBeVisible();
 
   const metrics = await pageMetrics(page);
   expect(metrics.width).toBeLessThanOrEqual(metrics.viewport + 1);
