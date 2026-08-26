@@ -1,16 +1,16 @@
-# Exact Python 3.12 runtime set proven by Pass 60 CI.
+# Exact Python 3.12 runtime set proven by CI and dependency audit.
 # Regenerate deliberately; CI and production install this file via requirements.txt.
 alembic==1.19.1
 annotated-doc==0.0.5
 annotated-types==0.8.0
 anyio==4.14.2
 bcrypt==4.0.1
-click==8.1.6
+click==8.3.3
 fastapi==0.141.1
 greenlet==3.5.5
 h11==0.16.0
 httptools==0.8.0
-idna==3.6
+idna==3.15
 Mako==1.4.1
 MarkupSafe==2.1.5
 passlib==1.7.4
