@@ -67,6 +67,51 @@ function beds24MappingHelpers(count = 60) {
   };
 }
 
+function bookingRows(count = 100) {
+  return Array.from({ length: count }, (_, index) => ({
+    id: index + 1,
+    guest_id: index + 1,
+    guest_name: `Production Scale Guest ${index + 1}`,
+    guest_full_name: `Production Scale Guest ${index + 1}`,
+    guest_phone: `09${String(100000000 + index).slice(-9)}`,
+    guest_email: `guest${index + 1}@example.com`,
+    guest_vip_flag: index % 12 === 0,
+    room_id: (index % 20) + 1,
+    room_name: `Room ${(index % 20) + 1}`,
+    room_display_name: `Room ${(index % 20) + 1}`,
+    room_type_id: 1,
+    room_type: 'Standard',
+    room_type_display_name: 'Standard',
+    rate_plan_id: 1,
+    rate_plan_name: 'Standard Rate',
+    channel_id: 1,
+    channel: 'Direct',
+    channel_display_name: 'Direct',
+    channel_is_prepaid: false,
+    status: index % 3 === 0 ? 'checked_in' : 'confirmed',
+    check_in: '2026-08-26',
+    check_out: '2026-08-27',
+    gross_amount: 2500,
+    deposit_amount: 500,
+    breakfast_included: 2,
+    primary_folio_id: index + 1,
+  }));
+}
+
+function breakfastRows(count = 100) {
+  return Array.from({ length: count }, (_, index) => ({
+    id: index + 1,
+    breakfast_no: `BR-${String(index + 1).padStart(4, '0')}`,
+    meal_date: '2026-08-26',
+    booking_id: index + 1,
+    guest_name: `Production Scale Guest ${index + 1}`,
+    menu_item_name: 'Breakfast Set',
+    quantity: 2,
+    charged_amount: 0,
+    cogs_amount: 180,
+  }));
+}
+
 async function installMobileFixtures(page) {
   await page.setViewportSize({ width: 390, height: 844 });
 
@@ -84,6 +129,10 @@ async function installMobileFixtures(page) {
       body = beds24SyncState();
     } else if (url.pathname === '/api/integrations/beds24/mapping-helpers') {
       body = beds24MappingHelpers();
+    } else if (url.pathname === '/api/reservations/bookings') {
+      body = bookingRows();
+    } else if (url.pathname === '/api/reservations/breakfast-logs') {
+      body = breakfastRows();
     } else if (url.pathname.includes('taxonomy')) {
       body = taxonomyRows();
     } else if (url.pathname.includes('system-settings')) {
@@ -164,10 +213,29 @@ test('Beds24 stays bounded with production-scale debug data on mobile', async ({
   expect(bounded).toBeTruthy();
 });
 
+test('bookings bounds production-scale booking and breakfast histories on mobile', async ({ page }) => {
+  await installMobileFixtures(page);
+  const response = await page.goto('/bookings');
+  expect(response && response.status()).toBeLessThan(500);
+  await expect(page.getByRole('heading', { name: 'Bookings' })).toBeVisible();
+  await expect(page.getByText('Production Scale Guest 1', { exact: true }).first()).toBeVisible();
+
+  const tables = page.locator('.main[data-route="/bookings"] .section > .table');
+  expect(await tables.count()).toBe(2);
+  const scrollStates = await tables.evaluateAll((nodes) => nodes.map((node) => ({
+    clientHeight: node.clientHeight,
+    scrollHeight: node.scrollHeight,
+  })));
+  expect(scrollStates.every((row) => row.scrollHeight > row.clientHeight)).toBeTruthy();
+
+  const metrics = await pageMetrics(page);
+  expect(metrics.width).toBeLessThanOrEqual(metrics.viewport + 1);
+  expect(metrics.height).toBeLessThan(4200);
+});
+
 for (const scenario of [
   { path: '/restaurant-ops', maxHeight: 6000 },
   { path: '/assets', maxHeight: 5200 },
-  { path: '/bookings', maxHeight: 4200 },
   { path: '/roles-permissions', maxHeight: 3800 },
 ]) {
   test(`${scenario.path} stays within the mobile density and overflow contract`, async ({ page }) => {
