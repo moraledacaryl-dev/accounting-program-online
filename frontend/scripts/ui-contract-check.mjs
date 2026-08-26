@@ -45,34 +45,32 @@ if (!enhancer.includes('Ledger start date') || !enhancer.includes('Ledger status
   failures.push('Cash & Treasury filter accessibility labels are missing');
 }
 
-const colorState = fs.readFileSync(path.join(root, 'app/pass-56-color-state-verification.css'), 'utf8');
-const recertification = fs.readFileSync(path.join(root, 'app/pass-57-final-visual-recertification.css'), 'utf8');
+const visualClosure = fs.readFileSync(path.join(root, 'app/visual-closure.css'), 'utf8');
 const layout = fs.readFileSync(path.join(root, 'app/layout.js'), 'utf8');
-const pass56Import = "import './pass-56-color-state-verification.css';";
-const pass57Import = "import './pass-57-final-visual-recertification.css';";
-if (!layout.includes(pass56Import)) {
-  failures.push('Pass 56 color-state verification layer is not loaded');
+const visualClosureImport = "import './visual-closure.css';";
+if (!layout.includes(visualClosureImport)) {
+  failures.push('Consolidated visual closure layer is not loaded');
 }
-if (!layout.includes(pass57Import) || layout.indexOf(pass57Import) < layout.indexOf(pass56Import)) {
-  failures.push('Pass 57 visual recertification layer must load after Pass 56');
-}
-if (!colorState.includes('--state-selected-ink: #214934')) {
+if (!visualClosure.includes('--state-selected-ink: #214934')) {
   failures.push('Selected light surfaces must keep a dark readable ink color');
 }
-if (!colorState.includes('.main .tab.active') || !colorState.includes("[aria-selected='true']")) {
+if (!visualClosure.includes('.main .tab.active') || !visualClosure.includes("[aria-selected='true']")) {
   failures.push('Selected tab state normalization is missing');
 }
-if (!colorState.includes('--state-disabled-bg') || !colorState.includes('.main button:disabled')) {
+if (!visualClosure.includes('--state-disabled-bg') || !visualClosure.includes('.main button:disabled')) {
   failures.push('Intentional disabled-button state is missing');
 }
-if (!colorState.includes('.sidebar .nav-group-items a.active') || !colorState.includes('var(--sidebar-active-ink')) {
+if (!visualClosure.includes('.sidebar .nav-group-items a.active') || !visualClosure.includes('var(--sidebar-active-ink')) {
   failures.push('Sidebar active state must remain a soft surface with dark text');
 }
-if (!recertification.includes('.main[data-route="/reports"] > div > .section:first-child > .tabs .tab.active')) {
+if (!visualClosure.includes('.main[data-route="/reports"] > div > .section:first-child > .tabs .tab.active')) {
   failures.push('Report-family selected state is not protected from the route-specific cascade');
 }
-if (!recertification.includes(':where(input, select, textarea):disabled')) {
+if (!visualClosure.includes(':where(input, select, textarea):disabled')) {
   failures.push('Disabled form-field state normalization is missing');
+}
+if (!visualClosure.includes('.main[data-route="/taxonomy-admin"] .grid-30-70')) {
+  failures.push('Taxonomy Administration must keep its live grid-30-70 layout contract');
 }
 
 if (failures.length) {
