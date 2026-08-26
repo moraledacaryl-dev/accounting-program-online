@@ -156,8 +156,6 @@
   -webkit-text-fill-color: #969c97;
 }
 
-/* Taxonomy now uses grid-30-70. Keep the semantic two-pane treatment aligned
- * with the live markup instead of relying on older .grid-era selectors. */
 .main[data-route="/taxonomy-admin"] .grid-30-70 {
   grid-template-columns: minmax(220px, 280px) minmax(0, 1fr);
   gap: 18px;
@@ -169,9 +167,6 @@
   overflow: auto;
 }
 
-/* Residual mobile-density closure. Long reference/admin tables stay fully
- * available inside bounded scroll regions instead of making the document tens
- * of thousands of pixels tall. */
 @media (max-width: 680px) {
   .main[data-route="/taxonomy-admin"] .grid-30-70 {
     grid-template-columns: 1fr;
@@ -235,10 +230,6 @@
     padding: 12px 13px;
   }
 
-  /* Beds24 is an unusually control-dense admin surface. On phone widths, pair
-   * compact controls into two columns rather than stacking every field. JSON
-   * mapping textareas stay full-width for readability. This preserves every
-   * control while substantially reducing document height. */
   .main[data-route="/integrations/beds24"] .form-grid {
     grid-template-columns: repeat(2, minmax(0, 1fr));
     gap: 9px 10px;
@@ -264,6 +255,24 @@
     overflow: auto;
     overscroll-behavior: contain;
     scrollbar-width: thin;
+  }
+
+  /* Booking and breakfast histories can each contain hundreds of rows. Keep
+   * both complete datasets accessible in bounded table scroll regions instead
+   * of allowing mobile card/table expansion to create a 20k+ pixel document. */
+  .main[data-route="/bookings"] .section > .table {
+    display: block;
+    width: 100%;
+    max-height: 42vh;
+    overflow: auto;
+    overscroll-behavior: contain;
+    scrollbar-width: thin;
+  }
+
+  .main[data-route="/bookings"] .section > .table > thead,
+  .main[data-route="/bookings"] .section > .table > tbody {
+    width: max-content;
+    min-width: 100%;
   }
 
   .main[data-route="/restaurant-ops"] .table-wrap,
