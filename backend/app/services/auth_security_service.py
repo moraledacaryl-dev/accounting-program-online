@@ -39,9 +39,11 @@ def recent_login_failure_count(db: Session, key_hash: str, *, now: datetime | No
 
 
 def record_login_failure(db: Session, key_hash: str, *, attempted_at: datetime | None = None) -> int:
-    db.add(AuthLoginFailure(key_hash=key_hash, attempted_at=attempted_at or _utcnow()))
+    current = attempted_at or _utcnow()
+    db.execute(delete(AuthLoginFailure).where(AuthLoginFailure.attempted_at < _failure_cutoff(current)))
+    db.add(AuthLoginFailure(key_hash=key_hash, attempted_at=current))
     db.commit()
-    return recent_login_failure_count(db, key_hash, now=attempted_at)
+    return recent_login_failure_count(db, key_hash, now=current)
 
 
 def clear_login_failures(db: Session, key_hash: str) -> None:
@@ -72,9 +74,17 @@ def revoke_access_token(
     subject: str | None = None,
     expires_at: datetime | None = None,
 ) -> None:
+    current = _utcnow()
+    db.execute(
+        delete(RevokedAccessToken).where(
+            RevokedAccessToken.expires_at.is_not(None),
+            RevokedAccessToken.expires_at < current,
+        )
+    )
     token_hash = access_token_fingerprint(token)
     existing = db.scalar(select(RevokedAccessToken).where(RevokedAccessToken.token_hash == token_hash))
     if existing:
+        db.commit()
         return
     db.add(
         RevokedAccessToken(
