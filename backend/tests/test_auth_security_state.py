@@ -111,10 +111,9 @@ def test_logout_revokes_exact_bearer_token_across_sessions(tmp_path):
         )
         assert authenticated.username == user.username
 
-        response = Response()
         result = logout(
             make_request('POST', '/api/auth/logout', token=token),
-            response,
+            Response(),
             db,
             user,
         )
@@ -136,17 +135,21 @@ def test_logout_revokes_exact_bearer_token_across_sessions(tmp_path):
         assert exc_info.value.detail == 'Could not validate credentials'
 
 
-def test_different_token_for_same_user_remains_valid(tmp_path):
+def test_revoking_one_session_does_not_revoke_another_for_same_user(tmp_path):
     Session = make_database(tmp_path)
     with Session() as db:
         user = add_user(db)
         revoked_token = create_access_token(user.username)
         other_token = create_access_token(user.username)
-        # Ensure distinct fingerprints even when issued within the same second.
-        if other_token == revoked_token:
-            other_token = create_access_token(user.username + ' ')
+        assert other_token != revoked_token
 
         logout(make_request('POST', '/api/auth/logout', token=revoked_token), Response(), db, user)
 
-        if other_token != revoked_token and user.username in str(other_token):
-            pytest.skip('token construction unexpectedly exposed subject text')
+    with Session() as db:
+        authenticated = get_current_user(
+            make_request('GET', '/api/auth/me', token=other_token),
+            db=db,
+            bearer_token=other_token,
+            cookie_token=None,
+        )
+        assert authenticated.username == 'shared-owner'
