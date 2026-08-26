@@ -252,8 +252,15 @@
     min-width: 0;
   }
 
+  .main[data-route="/integrations/beds24"] .form-grid textarea {
+    min-height: 96px;
+    max-height: 108px;
+    overflow: auto;
+    resize: vertical;
+  }
+
   .main[data-route="/integrations/beds24"] .table-wrap {
-    max-height: 46vh;
+    max-height: 32vh;
     overflow: auto;
     overscroll-behavior: contain;
     scrollbar-width: thin;
