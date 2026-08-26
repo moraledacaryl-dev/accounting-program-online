@@ -85,6 +85,54 @@ jobs:
       - name: Run backend tests from repository root
         run: bash scripts/test-backend.sh
 
+  backend-postgresql:
+    name: Backend PostgreSQL integration
+    runs-on: ubuntu-latest
+    services:
+      postgres:
+        image: postgres:16
+        env:
+          POSTGRES_USER: accounting
+          POSTGRES_PASSWORD: accounting
+          POSTGRES_DB: accounting_ci
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd "pg_isready -U accounting -d accounting_ci"
+          --health-interval 10s
+          --health-timeout 5s
+          --health-retries 5
+    env:
+      ENVIRONMENT: test
+      DATABASE_URL: postgresql+psycopg://accounting:accounting@127.0.0.1:5432/accounting_ci
+      SECRET_KEY: bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb
+      STARTUP_REQUIRE_MIGRATIONS: 'false'
+      ALLOW_DEFAULT_ADMIN_BOOTSTRAP: 'false'
+      ALLOW_DEMO_SEED: 'false'
+    steps:
+      - name: Check out repository without marketplace actions
+        shell: bash
+        run: |
+          set -euo pipefail
+          git init .
+          git remote add origin "https://github.com/${GITHUB_REPOSITORY}.git"
+          git fetch --no-tags --depth=1 origin "${GITHUB_SHA}"
+          git checkout --detach FETCH_HEAD
+
+      - name: Install locked backend dependencies
+        working-directory: backend
+        run: python3 -m pip install --upgrade pip && python3 -m pip install -r requirements.txt pytest==9.1.1
+
+      - name: Upgrade real PostgreSQL schema
+        working-directory: backend
+        run: |
+          python3 -m alembic upgrade head
+          python3 -m alembic current
+
+      - name: Run PostgreSQL workflow tests
+        working-directory: backend
+        run: python3 -m pytest tests/test_postgresql_ci.py -q
+
   frontend-build:
     name: Frontend build
     runs-on: ubuntu-latest
@@ -107,6 +155,10 @@ jobs:
         working-directory: frontend
         run: npm ci
 
+      - name: Audit production frontend dependencies
+        working-directory: frontend
+        run: npm audit --omit=dev
+
       - name: Build frontend
         working-directory: frontend
         run: |
@@ -123,6 +175,6 @@ jobs:
           npm install --no-save --package-lock=false @playwright/test@1.55.0
           npx playwright install --with-deps chromium
 
-      - name: Run dynamic-route browser blocker
+      - name: Run browser regression blocker
         working-directory: frontend
         run: npx playwright test --config=playwright.config.js
