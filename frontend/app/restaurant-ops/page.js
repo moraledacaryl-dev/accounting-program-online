@@ -1,4 +1,5 @@
 'use client';
+import { businessDateISO } from '../../lib/businessDate';
 import LegacyExternalModuleNotice from '../../components/LegacyExternalModuleNotice';
 
 import Link from 'next/link';
@@ -41,7 +42,7 @@ const EXPENSE_MODULES = ['procurement', 'inventory', 'finance'];
 const BUILDER_TABS = ['menu', 'components', 'skus', 'promos'];
 
 function todayISO() {
-  return new Date().toISOString().slice(0, 10);
+  return businessDateISO();
 }
 
 function num(value, fallback = 0) {

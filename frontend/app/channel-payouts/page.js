@@ -1,4 +1,5 @@
 'use client';
+import { businessDateISO } from '../../lib/businessDate';
 
 import { useEffect, useState } from 'react';
 import { createPayout, fetchPayoutChannelOptions, fetchPayouts, settlePayout, updatePayout } from '../../lib/api';
@@ -8,7 +9,7 @@ import { useCurrentUser } from '../../lib/useCurrentUser';
 const PAYMENT_METHODS = ['ota_payout', 'bank_transfer', 'cash', 'gcash'];
 
 function todayISO() {
-  return new Date().toISOString().slice(0, 10);
+  return businessDateISO();
 }
 
 function money(value) {

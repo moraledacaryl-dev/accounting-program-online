@@ -6,6 +6,7 @@ from typing import Iterable
 from sqlalchemy import func
 from sqlalchemy.orm import Session
 
+from app.core.business_clock import business_today
 from app.models.entities import (
     Booking,
     BookingFolio,
@@ -424,7 +425,7 @@ def create_sale_order(db: Session, payload, username: str | None = None) -> Sale
     if not lines:
         raise ValueError('Sale order must contain at least one line.')
 
-    order_date = payload.order_date or datetime.utcnow().strftime('%Y-%m-%d')
+    order_date = payload.order_date or business_today()
     order_no = (payload.order_no or '').strip() or generate_sale_order_no(db)
     external_source = (getattr(payload, 'external_source', None) or '').strip() or None
     external_id = (getattr(payload, 'external_id', None) or '').strip() or None
@@ -620,7 +621,7 @@ def void_sale_order(db: Session, order: SaleOrder, payload, username: str | None
     reason = (payload.reason or '').strip()
     if not reason:
         raise ValueError('Void reason is required.')
-    void_date = payload.void_date or datetime.utcnow().strftime('%Y-%m-%d')
+    void_date = payload.void_date or business_today()
     reverse_inventory = bool(getattr(payload, 'reverse_inventory', True))
     auto_post_accounting = bool(getattr(payload, 'auto_post_accounting', False))
 

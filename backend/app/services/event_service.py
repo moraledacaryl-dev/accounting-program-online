@@ -5,6 +5,7 @@ from datetime import datetime
 from sqlalchemy import func, or_
 from sqlalchemy.orm import Session, selectinload
 
+from app.core.business_clock import business_today
 from app.models.entities import (
     EventBooking,
     EventBookingLine,
@@ -27,7 +28,7 @@ EDITABLE_DIRECT_STATUSES = {'draft', 'quoted'}
 
 
 def _today() -> str:
-    return datetime.utcnow().strftime('%Y-%m-%d')
+    return business_today()
 
 
 def _now_iso() -> str:

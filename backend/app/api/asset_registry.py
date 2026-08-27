@@ -3,6 +3,7 @@ from datetime import datetime
 
 from fastapi import APIRouter, Depends, HTTPException
 from sqlalchemy.orm import Session
+from app.core.business_clock import business_today
 from app.db.database import get_db
 from app.models.entities import Asset, AssetDepreciationLog, AssetDisposalLog, AssetMaintenanceLog
 from app.schemas.common import (
@@ -293,7 +294,7 @@ def add_maintenance(
     if float(payload.amount or 0) <= 0:
         raise HTTPException(status_code=400, detail='Maintenance amount must be greater than zero.')
 
-    tx_date = payload.service_date or datetime.utcnow().strftime('%Y-%m-%d')
+    tx_date = payload.service_date or business_today()
     record = None
     try:
         if payload.auto_post_accounting:
@@ -353,7 +354,7 @@ def dispose_asset(
     if not asset:
         raise HTTPException(status_code=404, detail='Asset not found')
 
-    tx_date = payload.disposal_date or datetime.utcnow().strftime('%Y-%m-%d')
+    tx_date = payload.disposal_date or business_today()
     income_record = None
     expense_record = None
     try:

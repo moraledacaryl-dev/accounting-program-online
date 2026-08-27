@@ -1,4 +1,5 @@
 'use client';
+import { businessDateISO } from '../../lib/businessDate';
 
 import { useEffect, useMemo, useState } from 'react';
 import {
@@ -17,7 +18,7 @@ import {
 const PAYMENT_METHODS = ['cash', 'gcash', 'card', 'bank_transfer', 'on_account'];
 
 function todayISO() {
-  return new Date().toISOString().slice(0, 10);
+  return businessDateISO();
 }
 
 function currency(value) {

@@ -1,4 +1,5 @@
 'use client';
+import { businessDateISO } from '../../lib/businessDate';
 
 import Link from 'next/link';
 import { useEffect, useMemo, useState } from 'react';
@@ -67,7 +68,7 @@ const EMPTY_BREAKFAST_FORM = {
 };
 
 function todayISO() {
-  return new Date().toISOString().slice(0, 10);
+  return businessDateISO();
 }
 
 function asNumber(value, fallback = 0) {
