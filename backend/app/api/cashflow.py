@@ -2,6 +2,7 @@ from fastapi import APIRouter, Depends, HTTPException, Query
 from sqlalchemy.orm import Session
 
 from app.api.deps import require_any_permissions, require_permissions
+from app.core.business_clock import business_today
 from app.db.database import get_db
 from app.schemas.cashflow import CashflowActionPayload, MoneyTransactionCreate, MoneyTransactionUpdate
 from app.services.cashflow_service import (
@@ -26,7 +27,7 @@ def get_summary(
     user=Depends(require_permissions('cashflow.view')),
     date: str | None = None,
 ):
-    return cashflow_summary(db, target_date=date)
+    return cashflow_summary(db, target_date=(date or '').strip() or business_today())
 
 
 @router.get('/transactions')

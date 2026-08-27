@@ -1,5 +1,7 @@
+import { businessDateISO } from '../../lib/businessDate';
+
 export function todayISO() {
-  return new Date().toISOString().slice(0, 10);
+  return businessDateISO();
 }
 
 export function money(value) {

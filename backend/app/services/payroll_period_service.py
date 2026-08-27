@@ -1,8 +1,9 @@
 from __future__ import annotations
 
-from datetime import datetime
 
 from sqlalchemy.orm import Session, selectinload
+
+from app.core.business_clock import business_today
 
 from app.models.entities import JournalEntry, JournalLine, PayrollImportBatch, PayrollPeriod, PayrollPeriodLine
 from app.schemas.payroll_periods import PayrollImportCreate, PayrollPeriodCreate, PayrollPeriodLineInput, PayrollPeriodUpdate
@@ -10,7 +11,7 @@ from app.services.bir_service import ensure_date_unlocked
 
 
 def _today() -> str:
-    return datetime.utcnow().strftime('%Y-%m-%d')
+    return business_today()
 
 
 def _norm(value: str | None) -> str | None:
