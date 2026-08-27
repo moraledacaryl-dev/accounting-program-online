@@ -24,14 +24,14 @@ test('payable retry reuses the same Idempotency-Key after an ambiguous failure',
     if (url.pathname === '/api/auth/csrf') {
       return route.fulfill({ status: 200, contentType: 'application/json', body: JSON.stringify({ csrf_token: 'pass64-csrf' }) });
     }
-    if (url.pathname === '/api/financial-accounts/') {
+    if (url.pathname.startsWith('/api/financial-accounts')) {
       return route.fulfill({
         status: 200,
         contentType: 'application/json',
         body: JSON.stringify([{ id: 1, name: 'Pass 64 Bank', code: 'P64', account_type: 'bank', current_balance: 10000 }]),
       });
     }
-    if (url.pathname === '/api/payables/' && request.method() === 'GET') {
+    if (url.pathname === '/api/payables' && request.method() === 'GET') {
       return route.fulfill({ status: 200, contentType: 'application/json', body: '[]' });
     }
     if (url.pathname === '/api/payables/' && request.method() === 'POST') {
