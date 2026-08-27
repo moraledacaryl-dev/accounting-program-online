@@ -6,8 +6,9 @@ import pytest
 from sqlalchemy import text
 
 from app.db.database import SessionLocal, engine
-from app.models.entities import FinancialAccount, MenuItem, MoneyTransaction, SaleOrder
-from app.schemas.cashflow import MoneyTransactionCreate
+from app.models.entities import FinancialAccount, MenuItem, MoneyTransaction, Payable, SaleOrder
+from app.models.mutation_idempotency import MutationIdempotency
+from app.schemas.cashflow import MoneyTransactionCreate, PayableCreate, PayablePayPayload
 from app.schemas.common import SaleOrderCreate
 from app.services.auth_security_service import (
     clear_login_failures,
@@ -16,6 +17,10 @@ from app.services.auth_security_service import (
     record_login_failure,
 )
 from app.services.cashflow_service import create_money_transaction, ensure_default_financial_accounts
+from app.services.payable_atomicity_service import (
+    create_payable_idempotent,
+    pay_payable_idempotent,
+)
 from app.services.restaurant_service import create_sale_order
 
 
@@ -28,7 +33,7 @@ pytestmark = pytest.mark.skipif(
 def test_postgresql_migration_head_and_auth_security_tables_exist():
     with engine.connect() as connection:
         head = connection.execute(text('SELECT version_num FROM alembic_version')).scalar_one()
-        assert head == '0006_auth_security_state'
+        assert head == '0007_payable_idempotency'
 
         tables = set(
             connection.execute(
@@ -41,6 +46,7 @@ def test_postgresql_migration_head_and_auth_security_tables_exist():
 
     assert 'auth_login_failures' in tables
     assert 'revoked_access_tokens' in tables
+    assert 'mutation_idempotency' in tables
     assert 'money_transactions' in tables
     assert 'sale_orders' in tables
 
@@ -124,3 +130,84 @@ def test_postgresql_shared_login_failure_state_survives_sessions():
 
     with SessionLocal() as third_session:
         assert recent_login_failure_count(third_session, key_hash) == 0
+
+
+def test_postgresql_payable_create_and_payment_replays_are_idempotent_and_atomic():
+    marker = uuid4().hex[:12]
+    create_key = f'pass64-create-{marker}'
+    payment_key = f'pass64-payment-{marker}'
+
+    with SessionLocal() as db:
+        account = FinancialAccount(
+            name=f'Pass 64 PostgreSQL Bank {marker}',
+            code=f'P64-{marker}',
+            account_type='bank',
+            subtype='ci',
+            currency='PHP',
+            is_active=True,
+            requires_daily_reconciliation=False,
+            reconciliation_mode='none',
+            requires_physical_count=False,
+            variance_tolerance=0,
+            approval_required_on_variance=False,
+            opening_balance=1000,
+            current_balance=1000,
+            department='finance',
+        )
+        db.add(account)
+        db.commit()
+        db.refresh(account)
+
+        create_payload = PayableCreate(
+            supplier_name=f'Pass 64 PostgreSQL Supplier {marker}',
+            bill_date='2026-08-27',
+            due_date='2026-09-27',
+            gross_amount=600,
+        )
+        first, replayed = create_payable_idempotent(db, create_payload, create_key)
+        assert replayed is False
+        db.commit()
+
+        replay, replayed = create_payable_idempotent(db, create_payload, create_key)
+        assert replayed is True
+        db.commit()
+        assert replay['id'] == first['id']
+        assert db.query(Payable).filter(Payable.id == first['id']).count() == 1
+
+        payment_payload = PayablePayPayload(
+            amount=200,
+            payment_date='2026-08-27',
+            financial_account_id=account.id,
+            payment_method='bank_transfer',
+        )
+        paid, replayed = pay_payable_idempotent(
+            db,
+            first['id'],
+            payment_payload,
+            payment_key,
+            username='pass64-ci',
+        )
+        assert replayed is False
+        db.commit()
+
+        paid_replay, replayed = pay_payable_idempotent(
+            db,
+            first['id'],
+            payment_payload,
+            payment_key,
+            username='pass64-ci',
+        )
+        assert replayed is True
+        db.commit()
+
+        db.refresh(account)
+        stored = db.get(Payable, first['id'])
+
+        assert paid_replay['transaction']['id'] == paid['transaction']['id']
+        assert float(stored.amount_paid or 0) == 200
+        assert float(stored.balance_due or 0) == 400
+        assert float(account.current_balance or 0) == 800
+        assert db.query(MoneyTransaction).filter(MoneyTransaction.payable_id == first['id']).count() == 1
+        assert db.query(MutationIdempotency).filter(
+            MutationIdempotency.idempotency_key.in_([create_key, payment_key])
+        ).count() == 2
