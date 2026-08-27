@@ -1,4 +1,5 @@
 'use client';
+import { businessDateISO } from '../../../lib/businessDate';
 
 import Link from 'next/link';
 import { useEffect, useMemo, useState } from 'react';
@@ -64,7 +65,7 @@ function php(value) {
 }
 
 function todayIso() {
-  return new Date().toISOString().slice(0, 10);
+  return businessDateISO();
 }
 
 export default function RoomFolioDetailPage({ params }) {

@@ -5,6 +5,7 @@ from datetime import datetime
 from sqlalchemy import and_, func, or_
 from sqlalchemy.orm import Session, selectinload
 
+from app.core.business_clock import business_today
 from app.models.entities import (
     BookingChannel,
     Booking,
@@ -31,7 +32,7 @@ from app.services.restaurant_service import (
 
 
 def _today() -> str:
-    return datetime.utcnow().strftime('%Y-%m-%d')
+    return business_today()
 
 
 def _normalize(value: str | None) -> str:

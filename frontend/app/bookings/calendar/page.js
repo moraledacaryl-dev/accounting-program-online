@@ -1,4 +1,5 @@
 'use client';
+import { businessDateISO } from '../../../lib/businessDate';
 
 import Link from 'next/link';
 import { useEffect, useMemo, useState } from 'react';
@@ -50,7 +51,10 @@ function statusClass(status) {
 }
 
 export default function BookingCalendarPage() {
-  const [monthDate, setMonthDate] = useState(startOfCalendarMonth(new Date()));
+  const [monthDate, setMonthDate] = useState(() => {
+    const [year, month, day] = businessDateISO().split('-').map(Number);
+    return startOfCalendarMonth(new Date(year, month - 1, day, 12, 0, 0));
+  });
   const [rows, setRows] = useState([]);
   const [rooms, setRooms] = useState([]);
   const [channels, setChannels] = useState([]);

@@ -9,6 +9,7 @@ from sqlalchemy import func, or_
 from sqlalchemy.orm import Session
 
 from app.api.deps import require_any_permissions, require_permissions
+from app.core.business_clock import business_today
 from app.db.database import get_db
 from app.models.entities import (
     AccountTransfer,
@@ -49,7 +50,7 @@ router = APIRouter()
 
 
 def _today() -> str:
-    return datetime.utcnow().strftime('%Y-%m-%d')
+    return business_today()
 
 
 def _norm(value: str | None) -> str:
@@ -394,7 +395,7 @@ def _sum_settlements_by_record(db: Session, record_ids: list[int]) -> dict[int, 
 
 
 def _build_aging_report(db: Session, as_of_date: str | None = None):
-    as_of = _parse_iso_date(as_of_date) or datetime.utcnow()
+    as_of = _parse_iso_date(as_of_date) or datetime.strptime(business_today(), '%Y-%m-%d')
     as_of_str = as_of.strftime('%Y-%m-%d')
 
     rows = db.query(Record).filter(Record.workflow_status == 'approved').order_by(Record.id.asc()).all()

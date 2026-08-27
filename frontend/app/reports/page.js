@@ -1,4 +1,5 @@
 'use client';
+import { businessDateISO } from '../../lib/businessDate';
 
 import { useEffect, useMemo, useState } from 'react';
 import {
@@ -12,13 +13,11 @@ import {
 import { shouldPreventEnterSubmit } from '../../lib/formBehavior';
 
 function todayISO() {
-  return new Date().toISOString().slice(0, 10);
+  return businessDateISO();
 }
 
 function monthStartISO() {
-  const d = new Date();
-  d.setDate(1);
-  return d.toISOString().slice(0, 10);
+  return `${businessDateISO().slice(0, 7)}-01`;
 }
 
 function currency(value) {

@@ -1,4 +1,5 @@
 'use client';
+import { businessDateISO } from '../../lib/businessDate';
 import LegacyExternalModuleNotice from '../../components/LegacyExternalModuleNotice';
 
 import { useEffect, useMemo, useState } from 'react';
@@ -14,7 +15,7 @@ const PAYMENT_METHODS = ['inventory', 'cash', 'gcash', 'card', 'bank_transfer', 
 const SERVED_TO_OPTIONS = ['Kitchen Staff', 'Service Staff', 'Office Staff', 'Other'];
 
 function todayISO() {
-  return new Date().toISOString().slice(0, 10);
+  return businessDateISO();
 }
 
 function asNumber(value, fallback = 0) {

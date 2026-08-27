@@ -1,4 +1,5 @@
 'use client';
+import { businessDateISO } from '../../../lib/businessDate';
 
 import { useEffect, useMemo, useState } from 'react';
 import {
@@ -54,13 +55,13 @@ const RESET_MODE_OPTIONS = [
 ];
 
 function todayISO() {
-  return new Date().toISOString().slice(0, 10);
+  return businessDateISO();
 }
 
 function addMonthsISO(months) {
-  const date = new Date();
-  date.setMonth(date.getMonth() + months);
-  return date.toISOString().slice(0, 10);
+  const [year, month, day] = businessDateISO().split('-').map(Number);
+  const date = new Date(Date.UTC(year, month - 1 + months, day, 12, 0, 0));
+  return businessDateISO(date);
 }
 
 function pretty(value) {

@@ -4,6 +4,7 @@ from datetime import datetime
 
 from sqlalchemy.orm import Session, selectinload
 
+from app.core.business_clock import business_today
 from app.models.entities import BookingChannel, RatePlan, Room, RoomPackageRule, RoomType
 from app.schemas.rooms import (
     BookingChannelCreate,
@@ -21,7 +22,7 @@ from app.services.code_service import ensure_editable_after_create, generate_cod
 
 
 def _today() -> str:
-    return datetime.utcnow().strftime('%Y-%m-%d')
+    return business_today()
 
 
 def _norm(text: str | None) -> str | None:
