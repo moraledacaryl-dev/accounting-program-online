@@ -1,10 +1,9 @@
-from datetime import datetime
-
 from fastapi import APIRouter, Depends
 from sqlalchemy import and_, func, or_
 from sqlalchemy.orm import Session, selectinload
 
 from app.api.deps import require_permissions
+from app.core.business_clock import business_today
 from app.db.database import get_db
 from app.models.entities import (
     Beds24SyncLog,
@@ -134,7 +133,7 @@ def _line_work_item(line: BookingFolioLine) -> dict:
 
 @router.get('/summary')
 def summary(db: Session = Depends(get_db), user=Depends(require_permissions('dashboard.view'))):
-    today = datetime.utcnow().strftime('%Y-%m-%d')
+    today = business_today()
 
     income = db.query(func.coalesce(func.sum(Record.amount), 0)).filter(
         Record.direction == 'income',
@@ -153,7 +152,7 @@ def summary(db: Session = Depends(get_db), user=Depends(require_permissions('das
     ]
     low_stock_count = len(low_stock_rows)
 
-    cashflow = cashflow_summary(db)
+    cashflow = cashflow_summary(db, target_date=today)
     cards = cashflow.get('summary_cards') or {}
 
     bookings_total = int(db.query(Booking).count() or 0)
