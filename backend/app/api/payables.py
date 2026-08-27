@@ -1,4 +1,4 @@
-from fastapi import APIRouter, BackgroundTasks, Depends, HTTPException, Query
+from fastapi import APIRouter, BackgroundTasks, Depends, Header, HTTPException, Query
 from sqlalchemy.orm import Session
 
 from app.api.deps import require_permissions
@@ -6,13 +6,16 @@ from app.db.database import get_db
 from app.schemas.cashflow import CashflowActionPayload, PayableCreate, PayablePayPayload
 from app.services.operations_integration import is_due_or_overdue, publish_operations_event
 from app.services.cashflow_service import (
-    create_payable,
     list_payables,
-    pay_payable,
     reopen_payable,
     reverse_payable_payment,
     update_payable,
     write_off_payable,
+)
+from app.services.payable_atomicity_service import (
+    IdempotencyConflict,
+    create_payable_idempotent,
+    pay_payable_idempotent,
 )
 
 router = APIRouter()
@@ -42,32 +45,40 @@ def get_payables(
 def add_payable(
     payload: PayableCreate,
     background_tasks: BackgroundTasks,
+    idempotency_key: str | None = Header(default=None, alias='Idempotency-Key'),
     db: Session = Depends(get_db),
     user=Depends(require_permissions('cashflow.money_out')),
 ):
     try:
-        item = create_payable(db, payload)
-        if (item.balance_due or 0) > 0 and is_due_or_overdue(item.due_date):
+        item, replayed = create_payable_idempotent(db, payload, idempotency_key)
+        db.commit()
+
+        balance_due = float(item.get('balance_due') or 0)
+        due_date = item.get('due_date')
+        if not replayed and balance_due > 0 and is_due_or_overdue(due_date):
             background_tasks.add_task(
                 publish_operations_event,
-                event_id=f'payable:{item.id}:due:{item.due_date}',
+                event_id=f"payable:{item['id']}:due:{due_date}",
                 event_type='payable.due',
-                title=f'Payable due: {item.supplier_name or "Unspecified supplier"}',
-                summary=f'Balance due: {item.balance_due:,.2f} on {item.due_date}.',
+                title=f"Payable due: {item.get('supplier_name') or 'Unspecified supplier'}",
+                summary=f'Balance due: {balance_due:,.2f} on {due_date}.',
                 priority='High',
                 subject_type='payable',
-                subject_id=item.id,
+                subject_id=item['id'],
                 payload={
-                    'supplier_name': item.supplier_name,
-                    'payable_type': item.payable_type,
-                    'bill_date': item.bill_date,
-                    'due_date': item.due_date,
-                    'gross_amount': item.gross_amount,
-                    'balance_due': item.balance_due,
-                    'status': item.status,
+                    'supplier_name': item.get('supplier_name'),
+                    'payable_type': item.get('payable_type'),
+                    'bill_date': item.get('bill_date'),
+                    'due_date': due_date,
+                    'gross_amount': item.get('gross_amount'),
+                    'balance_due': balance_due,
+                    'status': item.get('status'),
                 },
             )
         return item
+    except IdempotencyConflict as e:
+        db.rollback()
+        raise HTTPException(status_code=409, detail=str(e))
     except ValueError as e:
         db.rollback()
         raise HTTPException(status_code=400, detail=str(e))
@@ -91,11 +102,23 @@ def edit_payable(
 def pay_payable_balance(
     payable_id: int,
     payload: PayablePayPayload,
+    idempotency_key: str | None = Header(default=None, alias='Idempotency-Key'),
     db: Session = Depends(get_db),
     user=Depends(require_permissions('cashflow.money_out')),
 ):
     try:
-        return pay_payable(db, payable_id, payload, username=getattr(user, 'username', None))
+        result, _ = pay_payable_idempotent(
+            db,
+            payable_id,
+            payload,
+            idempotency_key,
+            username=getattr(user, 'username', None),
+        )
+        db.commit()
+        return result
+    except IdempotencyConflict as e:
+        db.rollback()
+        raise HTTPException(status_code=409, detail=str(e))
     except ValueError as e:
         db.rollback()
         raise HTTPException(status_code=400, detail=str(e))
