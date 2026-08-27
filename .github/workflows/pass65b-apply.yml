@@ -6,6 +6,7 @@ on:
       - pass-65b-business-date-sweep
     paths:
       - scripts/pass65b_business_date_sweep.py
+      - scripts/pass65b_extra_business_dates.py
       - .github/workflows/pass65b-apply.yml
 
 permissions:
@@ -31,6 +32,7 @@ jobs:
       - name: Apply guarded business-date sweep
         run: |
           set -euo pipefail
+          python3 scripts/pass65b_extra_business_dates.py
           python3 scripts/pass65b_business_date_sweep.py
           git diff --check
 
