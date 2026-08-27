@@ -14,7 +14,6 @@ from app.services.cashflow_service import (
     _apply_money_effect,
     _as_float,
     _create_linked_record,
-    _normalize,
     _safe_date,
     _serialize_money_transaction,
     _serialize_payable,
@@ -170,6 +169,7 @@ def pay_payable_idempotent(
     *,
     username: str | None = None,
 ) -> tuple[dict, bool]:
+    normalized_key = _normalize_idempotency_key(idempotency_key)
     payload_data = {
         'payable_id': int(payable_id),
         'payload': payload.model_dump(mode='json'),
@@ -178,7 +178,7 @@ def pay_payable_idempotent(
     reservation, replayed = _reserve(
         db,
         scope='payable:payment',
-        idempotency_key=idempotency_key,
+        idempotency_key=normalized_key,
         fingerprint=fingerprint,
     )
 
@@ -248,7 +248,7 @@ def pay_payable_idempotent(
         created_by=username,
         approved_by=username,
         external_source='payable_payment',
-        external_id=_normalize_idempotency_key(idempotency_key),
+        external_id=hashlib.sha256(normalized_key.encode('utf-8')).hexdigest(),
     )
     db.add(tx)
     db.flush()
