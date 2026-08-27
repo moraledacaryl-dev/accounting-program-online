@@ -1,7 +1,22 @@
 from __future__ import annotations
 
-from typing import Any
-from pydantic import BaseModel, Field
+from typing import Any, ClassVar
+
+from pydantic import BaseModel, Field, model_validator
+
+from app.core.business_clock import business_today
+
+
+class BusinessDateDefaults(BaseModel):
+    business_date_fields: ClassVar[tuple[str, ...]] = ()
+
+    @model_validator(mode='after')
+    def default_business_dates(self):
+        for field_name in self.business_date_fields:
+            value = getattr(self, field_name, None)
+            if value is None or (isinstance(value, str) and not value.strip()):
+                setattr(self, field_name, business_today())
+        return self
 
 
 class FinancialAccountCreate(BaseModel):
@@ -44,7 +59,8 @@ class FinancialAccountUpdate(BaseModel):
     notes: str | None = None
 
 
-class MoneyTransactionCreate(BaseModel):
+class MoneyTransactionCreate(BusinessDateDefaults):
+    business_date_fields = ('transaction_date',)
     transaction_date: str | None = None
     direction: str
     financial_account_id: int
@@ -92,7 +108,8 @@ class MoneyTransactionUpdate(BaseModel):
     allow_overdraw: bool = False
 
 
-class AccountTransferCreate(BaseModel):
+class AccountTransferCreate(BusinessDateDefaults):
+    business_date_fields = ('transfer_date',)
     transfer_date: str | None = None
     from_account_id: int
     to_account_id: int
@@ -118,7 +135,8 @@ class AccountTransferUpdate(BaseModel):
     allow_overdraw: bool = False
 
 
-class CashflowActionPayload(BaseModel):
+class CashflowActionPayload(BusinessDateDefaults):
+    business_date_fields = ('action_date',)
     action_date: str | None = None
     reason: str | None = None
 
@@ -141,7 +159,8 @@ class CashReconciliationCreate(BaseModel):
     lines: list[CashCountLineInput] = Field(default_factory=list)
 
 
-class ReceivableCreate(BaseModel):
+class ReceivableCreate(BusinessDateDefaults):
+    business_date_fields = ('transaction_date',)
     source_type: str | None = None
     source_id: int | None = None
     counterparty_name: str
@@ -159,7 +178,8 @@ class ReceivableCreate(BaseModel):
     reverses_source_id: int | None = None
 
 
-class ReceivableCollectPayload(BaseModel):
+class ReceivableCollectPayload(BusinessDateDefaults):
+    business_date_fields = ('collection_date',)
     amount: float
     collection_date: str | None = None
     financial_account_id: int
@@ -173,7 +193,8 @@ class ReceivableCollectPayload(BaseModel):
     auto_post_accounting: bool = False
 
 
-class PayableCreate(BaseModel):
+class PayableCreate(BusinessDateDefaults):
+    business_date_fields = ('bill_date',)
     source_type: str | None = None
     source_id: int | None = None
     supplier_name: str
@@ -187,7 +208,8 @@ class PayableCreate(BaseModel):
     bir_include: bool = False
 
 
-class PayablePayPayload(BaseModel):
+class PayablePayPayload(BusinessDateDefaults):
+    business_date_fields = ('payment_date',)
     amount: float
     payment_date: str | None = None
     financial_account_id: int
@@ -229,7 +251,8 @@ class CashflowTemplateUpdate(BaseModel):
     is_active: bool | None = None
 
 
-class CashflowSummaryQuery(BaseModel):
+class CashflowSummaryQuery(BusinessDateDefaults):
+    business_date_fields = ('date',)
     date: str | None = None
 
 
