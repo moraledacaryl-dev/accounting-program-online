@@ -1,5 +1,7 @@
 import { request } from './api';
 
+const memoryMutationKeys = new Map();
+
 function queryString(params = {}) {
   const q = new URLSearchParams();
   Object.entries(params).forEach(([key, value]) => {
@@ -8,6 +10,84 @@ function queryString(params = {}) {
   });
   const encoded = q.toString();
   return encoded ? `?${encoded}` : '';
+}
+
+function canonicalize(value) {
+  if (Array.isArray(value)) return value.map(canonicalize);
+  if (value && typeof value === 'object') {
+    return Object.fromEntries(
+      Object.keys(value).sort().map((key) => [key, canonicalize(value[key])]),
+    );
+  }
+  return value;
+}
+
+function stablePayload(payload) {
+  return JSON.stringify(canonicalize(payload));
+}
+
+function fingerprint(value) {
+  let hash = 2166136261;
+  for (let index = 0; index < value.length; index += 1) {
+    hash ^= value.charCodeAt(index);
+    hash = Math.imul(hash, 16777619);
+  }
+  return (hash >>> 0).toString(16).padStart(8, '0');
+}
+
+function randomMutationKey(scope) {
+  const uuid = typeof crypto !== 'undefined' && typeof crypto.randomUUID === 'function'
+    ? crypto.randomUUID()
+    : `${Date.now()}-${Math.random().toString(16).slice(2)}`;
+  return `${scope}:${uuid}`;
+}
+
+function mutationAttempt(scope, payload) {
+  const canonical = stablePayload(payload);
+  const storageKey = `hidden-oasis:idempotency:${scope}:${fingerprint(canonical)}`;
+
+  if (typeof sessionStorage !== 'undefined') {
+    try {
+      const saved = JSON.parse(sessionStorage.getItem(storageKey) || 'null');
+      if (saved?.canonical === canonical && saved?.key) {
+        return { key: saved.key, storageKey, canonical };
+      }
+      const key = randomMutationKey(scope);
+      sessionStorage.setItem(storageKey, JSON.stringify({ key, canonical }));
+      return { key, storageKey, canonical };
+    } catch {
+      // Fall back to process memory if storage is unavailable or corrupt.
+    }
+  }
+
+  const saved = memoryMutationKeys.get(storageKey);
+  if (saved?.canonical === canonical && saved?.key) return { ...saved, storageKey };
+  const attempt = { key: randomMutationKey(scope), canonical };
+  memoryMutationKeys.set(storageKey, attempt);
+  return { ...attempt, storageKey };
+}
+
+function clearMutationAttempt(attempt) {
+  memoryMutationKeys.delete(attempt.storageKey);
+  if (typeof sessionStorage !== 'undefined') {
+    try { sessionStorage.removeItem(attempt.storageKey); } catch { /* best effort */ }
+  }
+}
+
+async function idempotentMutation(path, scope, payload) {
+  const attempt = mutationAttempt(scope, payload);
+  try {
+    const result = await request(path, {
+      method: 'POST',
+      headers: { 'Idempotency-Key': attempt.key },
+      body: JSON.stringify(payload),
+    });
+    clearMutationAttempt(attempt);
+    return result;
+  } catch (error) {
+    // Keep the exact key so an ambiguous/network retry cannot duplicate money.
+    throw error;
+  }
 }
 
 export const fetchCashflowSummary = ({ date = '' } = {}) => request(`/cashflow/summary${queryString({ date })}`);
@@ -50,9 +130,9 @@ export const reopenReceivable = (id, payload = {}) => request(`/receivables/${id
 export const writeOffReceivable = (id, payload = {}) => request(`/receivables/${id}/write-off`, { method: 'POST', body: JSON.stringify(payload) });
 
 export const fetchPayables = (params = {}) => request(`/payables/${queryString(params)}`.replace('/?', '?'));
-export const createPayable = (payload) => request('/payables/', { method: 'POST', body: JSON.stringify(payload) });
+export const createPayable = (payload) => idempotentMutation('/payables/', 'payable-create', payload);
 export const updatePayable = (id, payload) => request(`/payables/${id}`, { method: 'PUT', body: JSON.stringify(payload) });
-export const payPayable = (id, payload) => request(`/payables/${id}/pay`, { method: 'POST', body: JSON.stringify(payload) });
+export const payPayable = (id, payload) => idempotentMutation(`/payables/${id}/pay`, `payable-payment-${id}`, payload);
 export const reversePayablePayment = (id, transactionId, payload = {}) => request(`/payables/${id}/payments/${transactionId}/reverse`, { method: 'POST', body: JSON.stringify(payload) });
 export const reopenPayable = (id, payload = {}) => request(`/payables/${id}/reopen`, { method: 'POST', body: JSON.stringify(payload) });
 export const writeOffPayable = (id, payload = {}) => request(`/payables/${id}/write-off`, { method: 'POST', body: JSON.stringify(payload) });
