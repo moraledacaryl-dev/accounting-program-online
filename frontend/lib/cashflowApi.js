@@ -50,9 +50,17 @@ export const reopenReceivable = (id, payload = {}) => request(`/receivables/${id
 export const writeOffReceivable = (id, payload = {}) => request(`/receivables/${id}/write-off`, { method: 'POST', body: JSON.stringify(payload) });
 
 export const fetchPayables = (params = {}) => request(`/payables/${queryString(params)}`.replace('/?', '?'));
-export const createPayable = (payload) => request('/payables/', { method: 'POST', body: JSON.stringify(payload) });
+export const createPayable = (payload, idempotencyKey) => request('/payables/', {
+  method: 'POST',
+  headers: { 'Idempotency-Key': idempotencyKey },
+  body: JSON.stringify(payload),
+});
 export const updatePayable = (id, payload) => request(`/payables/${id}`, { method: 'PUT', body: JSON.stringify(payload) });
-export const payPayable = (id, payload) => request(`/payables/${id}/pay`, { method: 'POST', body: JSON.stringify(payload) });
+export const payPayable = (id, payload, idempotencyKey) => request(`/payables/${id}/pay`, {
+  method: 'POST',
+  headers: { 'Idempotency-Key': idempotencyKey },
+  body: JSON.stringify(payload),
+});
 export const reversePayablePayment = (id, transactionId, payload = {}) => request(`/payables/${id}/payments/${transactionId}/reverse`, { method: 'POST', body: JSON.stringify(payload) });
 export const reopenPayable = (id, payload = {}) => request(`/payables/${id}/reopen`, { method: 'POST', body: JSON.stringify(payload) });
 export const writeOffPayable = (id, payload = {}) => request(`/payables/${id}/write-off`, { method: 'POST', body: JSON.stringify(payload) });
