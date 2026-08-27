@@ -67,16 +67,16 @@ test('payable retry reuses the same Idempotency-Key after an ambiguous failure',
   await page.goto('/cashflow/payables');
   await expect(page.getByRole('heading', { name: 'Bills to Pay', exact: true })).toBeVisible();
 
-  await page.getByLabel('Supplier').fill('Retry Safe Supplier');
-  await page.getByLabel('Bill Amount').fill('640');
+  await page.getByRole('textbox', { name: 'Supplier', exact: true }).fill('Retry Safe Supplier');
+  await page.getByRole('spinbutton', { name: 'Bill Amount', exact: true }).fill('640');
 
-  await page.getByRole('button', { name: 'Save Bill' }).click();
-  await expect(page.getByText('Simulated ambiguous network/server failure')).toBeVisible();
+  await page.getByRole('button', { name: 'Save Bill', exact: true }).click();
+  await expect(page.getByText('Simulated ambiguous network/server failure', { exact: true })).toBeVisible();
 
   // The exact same user action must reuse the original key rather than create
   // a second logical payable after an ambiguous first response.
-  await page.getByRole('button', { name: 'Save Bill' }).click();
-  await expect(page.getByText('Bill saved.')).toBeVisible();
+  await page.getByRole('button', { name: 'Save Bill', exact: true }).click();
+  await expect(page.getByText('Bill saved.', { exact: true })).toBeVisible();
 
   expect(keys).toHaveLength(2);
   expect(keys[0]).toBeTruthy();
