@@ -65,7 +65,7 @@ test('payable retry reuses the same Idempotency-Key after an ambiguous failure',
   });
 
   await page.goto('/cashflow/payables');
-  await expect(page.getByRole('heading', { name: 'Bills to Pay' })).toBeVisible();
+  await expect(page.getByRole('heading', { name: 'Bills to Pay', exact: true })).toBeVisible();
 
   await page.getByLabel('Supplier').fill('Retry Safe Supplier');
   await page.getByLabel('Bill Amount').fill('640');
