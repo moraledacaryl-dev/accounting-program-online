@@ -35,11 +35,9 @@ backend_helpers = [
     'backend/app/services/room_setup_service.py',
 ]
 for path in backend_helpers:
-    ensure_import(path, 'from sqlalchemy', 'from app.core.business_clock import business_today\n') if False else None
     target = ROOT / path
     text = target.read_text(encoding='utf-8')
     if 'from app.core.business_clock import business_today\n' not in text:
-        # Put the business-clock import immediately before the first app.* import.
         marker = '\nfrom app.'
         if marker not in text:
             raise SystemExit(f'{path}: app import anchor not found')
@@ -123,7 +121,7 @@ for path, import_path in frontend_today.items():
     text = target.read_text(encoding='utf-8')
     import_line = f"import {{ businessDateISO }} from '{import_path}';\n"
     if import_line not in text:
-        marker = "'use client';\n\n"
+        marker = "'use client';\n"
         if marker not in text:
             raise SystemExit(f'{path}: client import anchor not found')
         text = text.replace(marker, marker + import_line, 1)
@@ -161,7 +159,7 @@ target = ROOT / path
 text = target.read_text(encoding='utf-8')
 import_line = "import { businessDateISO } from '../../../lib/businessDate';\n"
 if import_line not in text:
-    marker = "'use client';\n\n"
+    marker = "'use client';\n"
     if marker not in text:
         raise SystemExit(f'{path}: client import anchor not found')
     text = text.replace(marker, marker + import_line, 1)
