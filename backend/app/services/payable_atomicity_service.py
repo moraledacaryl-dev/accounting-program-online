@@ -6,6 +6,7 @@ import json
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session
 
+from app.core.business_clock import business_today
 from app.models.entities import FinancialAccount, MoneyTransaction, Payable
 from app.models.mutation_idempotency import MutationIdempotency
 from app.schemas.cashflow import PayableCreate, PayablePayPayload
@@ -14,7 +15,6 @@ from app.services.cashflow_service import (
     _apply_money_effect,
     _as_float,
     _create_linked_record,
-    _safe_date,
     _serialize_money_transaction,
     _serialize_payable,
     _update_payable_balance,
@@ -45,6 +45,10 @@ def _fingerprint(payload: dict) -> str:
         default=str,
     )
     return hashlib.sha256(canonical.encode('utf-8')).hexdigest()
+
+
+def _business_date(value: str | None) -> str:
+    return (value or '').strip() or business_today()
 
 
 def _reserve(
@@ -134,17 +138,18 @@ def create_payable_idempotent(
     if amount_paid > gross_amount:
         raise ValueError('amount_paid cannot exceed gross_amount.')
 
+    bill_date = _business_date(payload.bill_date)
     row = Payable(
         source_type=(payload.source_type or '').strip() or None,
         source_id=payload.source_id,
         supplier_name=(payload.supplier_name or '').strip(),
         payable_type=(payload.payable_type or 'supplier_bill').strip() or 'supplier_bill',
-        bill_date=_safe_date(payload.bill_date),
+        bill_date=bill_date,
         due_date=(payload.due_date or '').strip() or None,
         gross_amount=gross_amount,
         amount_paid=amount_paid,
         status=(payload.status or 'open').strip() or 'open',
-        posted_at=_safe_date(payload.bill_date),
+        posted_at=bill_date,
         closed_at=None,
         notes=payload.notes,
         bir_include=bool(payload.bir_include),
@@ -214,7 +219,7 @@ def pay_payable_idempotent(
     if not account:
         raise ValueError('financial_account_id not found.')
 
-    tx_date = _safe_date(payload.payment_date)
+    tx_date = _business_date(payload.payment_date)
     ensure_date_unlocked(
         db,
         tx_date,
