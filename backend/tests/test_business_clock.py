@@ -3,6 +3,7 @@ from datetime import datetime, timezone
 from sqlalchemy import create_engine
 from sqlalchemy.orm import sessionmaker
 
+from app.api import cashflow as cashflow_api
 from app.core.business_clock import BUSINESS_TIMEZONE_NAME, business_now, business_today
 from app.db.database import Base
 from app.models.entities import FinancialAccount
@@ -61,6 +62,24 @@ def test_financial_request_models_replace_explicit_null_or_blank_dates(monkeypat
     assert AccountTransferCreate(transfer_date='', from_account_id=1, to_account_id=2, amount=10).transfer_date == '2026-08-27'
     assert ReceivableCreate(counterparty_name='Guest', gross_amount=10, transaction_date=' ').transaction_date == '2026-08-27'
     assert PayableCreate(supplier_name='Supplier', gross_amount=10, bill_date=None).bill_date == '2026-08-27'
+
+
+def test_cashflow_summary_api_defaults_to_business_day(monkeypatch):
+    captured = {}
+    monkeypatch.setattr(cashflow_api, 'business_today', lambda: '2026-08-27')
+
+    def fake_summary(db, *, target_date=None):
+        captured['db'] = db
+        captured['target_date'] = target_date
+        return {'target_date': target_date}
+
+    monkeypatch.setattr(cashflow_api, 'cashflow_summary', fake_summary)
+    db = object()
+
+    result = cashflow_api.get_summary(db=db, user=object(), date=None)
+
+    assert result == {'target_date': '2026-08-27'}
+    assert captured == {'db': db, 'target_date': '2026-08-27'}
 
 
 def test_payable_create_defaults_to_manila_business_date(monkeypatch):
