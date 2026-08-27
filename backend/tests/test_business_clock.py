@@ -6,7 +6,17 @@ from sqlalchemy.orm import sessionmaker
 from app.core.business_clock import BUSINESS_TIMEZONE_NAME, business_now, business_today
 from app.db.database import Base
 from app.models.entities import FinancialAccount
-from app.schemas.cashflow import PayableCreate, PayablePayPayload
+from app.schemas import cashflow as cashflow_schemas
+from app.schemas.cashflow import (
+    AccountTransferCreate,
+    CashflowActionPayload,
+    CashflowSummaryQuery,
+    MoneyTransactionCreate,
+    PayableCreate,
+    PayablePayPayload,
+    ReceivableCollectPayload,
+    ReceivableCreate,
+)
 from app.services import payable_atomicity_service
 
 
@@ -31,9 +41,32 @@ def test_business_clock_treats_injected_naive_datetime_as_utc():
     assert business_today(datetime(2026, 8, 26, 16, 30, 0)) == '2026-08-27'
 
 
+def test_financial_request_models_default_missing_dates_to_business_day(monkeypatch):
+    monkeypatch.setattr(cashflow_schemas, 'business_today', lambda: '2026-08-27')
+
+    assert MoneyTransactionCreate(direction='in', financial_account_id=1, amount=10).transaction_date == '2026-08-27'
+    assert AccountTransferCreate(from_account_id=1, to_account_id=2, amount=10).transfer_date == '2026-08-27'
+    assert CashflowActionPayload().action_date == '2026-08-27'
+    assert ReceivableCreate(counterparty_name='Guest', gross_amount=10).transaction_date == '2026-08-27'
+    assert ReceivableCollectPayload(amount=10, financial_account_id=1).collection_date == '2026-08-27'
+    assert PayableCreate(supplier_name='Supplier', gross_amount=10).bill_date == '2026-08-27'
+    assert PayablePayPayload(amount=10, financial_account_id=1).payment_date == '2026-08-27'
+    assert CashflowSummaryQuery().date == '2026-08-27'
+
+
+def test_financial_request_models_replace_explicit_null_or_blank_dates(monkeypatch):
+    monkeypatch.setattr(cashflow_schemas, 'business_today', lambda: '2026-08-27')
+
+    assert MoneyTransactionCreate(transaction_date=None, direction='out', financial_account_id=1, amount=10).transaction_date == '2026-08-27'
+    assert AccountTransferCreate(transfer_date='', from_account_id=1, to_account_id=2, amount=10).transfer_date == '2026-08-27'
+    assert ReceivableCreate(counterparty_name='Guest', gross_amount=10, transaction_date=' ').transaction_date == '2026-08-27'
+    assert PayableCreate(supplier_name='Supplier', gross_amount=10, bill_date=None).bill_date == '2026-08-27'
+
+
 def test_payable_create_defaults_to_manila_business_date(monkeypatch):
     db = make_session()
     monkeypatch.setattr(payable_atomicity_service, 'business_today', lambda: '2026-08-27')
+    monkeypatch.setattr(cashflow_schemas, 'business_today', lambda: '2026-08-27')
 
     item, replayed = payable_atomicity_service.create_payable_idempotent(
         db,
@@ -53,6 +86,7 @@ def test_payable_create_defaults_to_manila_business_date(monkeypatch):
 def test_payable_payment_defaults_to_manila_business_date(monkeypatch):
     db = make_session()
     monkeypatch.setattr(payable_atomicity_service, 'business_today', lambda: '2026-08-27')
+    monkeypatch.setattr(cashflow_schemas, 'business_today', lambda: '2026-08-27')
 
     account = FinancialAccount(
         name='Manila Clock Bank',
