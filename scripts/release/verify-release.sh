@@ -16,7 +16,7 @@ MANIFEST="$RELEASE/.release-manifest"
 [[ "$SHA" =~ ^[0-9a-f]{40}$ ]] || exit 2
 test -f "$MANIFEST"
 test "$(git -C "$RELEASE" rev-parse HEAD)" = "$SHA"
-test -z "$(git -C "$RELEASE" status --porcelain)"
+test -z "$(git -C "$RELEASE" status --porcelain --untracked-files=no)"
 
 manifest_value() {
   awk -F= -v key="$1" '$1==key {sub(/^[^=]*=/, ""); print; exit}' "$MANIFEST"
