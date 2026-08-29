@@ -80,16 +80,15 @@ textarea:disabled {
   background: color-mix(in srgb, var(--surface) 86%, var(--line) 14%);
 }
 
-input[aria-invalid='true'],
-select[aria-invalid='true'],
-textarea[aria-invalid='true'],
-input:invalid:not(:placeholder-shown) {
+/* Native :invalid fires on untouched required controls. Use :user-invalid where
+   supported, with explicit aria-invalid as the cross-browser/server-driven path. */
+:where(input, select, textarea)[aria-invalid='true'],
+:where(input, select, textarea):user-invalid {
   border-color: var(--danger, #b5433c);
 }
 
-input[aria-invalid='true']:focus-visible,
-select[aria-invalid='true']:focus-visible,
-textarea[aria-invalid='true']:focus-visible {
+:where(input, select, textarea)[aria-invalid='true']:focus-visible,
+:where(input, select, textarea):user-invalid:focus-visible {
   box-shadow: 0 0 0 3px color-mix(in srgb, var(--danger, #b5433c) 17%, transparent);
 }
 
