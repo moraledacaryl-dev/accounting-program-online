@@ -28,24 +28,36 @@ async function installOwnershipFixtures(page) {
   });
 }
 
-test('Inventory & Procurement workflow renders as visibly read-only', async ({ page }) => {
+test('Inventory & Procurement workflow renders as compact read-only handoff', async ({ page }) => {
   await installOwnershipFixtures(page);
   await page.goto('/inventory-items');
 
   await expect(page.getByRole('heading', { name: /Inventory & Procurement owns this operational workflow/i })).toBeVisible();
-  await expect(page.getByRole('button', { name: /Save item/i })).toBeDisabled();
-  await expect(page.getByRole('button', { name: /^Edit$/i })).toBeDisabled();
-  await expect(page.getByRole('button', { name: /^Delete$/i })).toBeDisabled();
-  await expect(page.getByLabel('Name')).toBeDisabled();
+  await expect(page.getByRole('link', { name: /Open Inventory & Procurement/i })).toBeVisible();
+  await expect(page.getByRole('link', { name: /Open Inventory & Procurement/i })).toHaveAttribute('href', 'https://inventory.hiddenoasis.app');
+
+  const mutationSections = page.locator('.ownership-mutation-section');
+  if (await mutationSections.count()) {
+    await expect(mutationSections.first()).toBeHidden();
+  }
+
+  const saveButton = page.getByRole('button', { name: /Save item/i });
+  if (await saveButton.count()) await expect(saveButton).toBeHidden();
+
+  await expect(page.getByText('Read Only Rice')).toBeVisible();
 });
 
-test('POS-owned workflow renders ownership notice', async ({ page }) => {
+test('POS-owned workflow renders authoritative handoff and hides mutation forms', async ({ page }) => {
   await installOwnershipFixtures(page);
   await page.goto('/menu-items');
 
   await expect(page.getByRole('heading', { name: /POS Cloud owns this operational workflow/i })).toBeVisible();
-  const forms = page.locator('.external-ownership-boundary form');
-  if (await forms.count()) {
-    await expect(forms.first().locator('input, select, textarea, button').first()).toBeDisabled();
+  await expect(page.getByRole('link', { name: /Open POS Cloud/i })).toHaveAttribute('href', 'https://pos.hiddenoasis.app');
+
+  const mutationSections = page.locator('.ownership-mutation-section');
+  if (await mutationSections.count()) {
+    await expect(mutationSections.first()).toBeHidden();
   }
+
+  await expect(page.getByText('Read Only Coffee')).toBeVisible();
 });
