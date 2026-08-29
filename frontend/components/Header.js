@@ -47,6 +47,7 @@ const titles = {
   '/attendance': ['Attendance', 'Attendance logs, import, and review'],
   '/payroll-periods': ['Payroll Periods', 'Payroll period input, import, and posting'],
   '/payroll': ['Payroll', 'Legacy payroll run view'],
+  '/integrations/payroll': ['Payroll Integration', 'Staff and payroll synchronization, status, and controls'],
   '/approvals': ['Approvals', 'Authorization queue for operational and financial actions'],
   '/workspace/finance': ['Finance & Accounting', 'Cashflow, journals, reports, assets, and BIR'],
   '/cashflow': ['Cash & Treasury', 'Money accounts, ledger, daily close, and reconciliation'],

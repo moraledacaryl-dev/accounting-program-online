@@ -136,6 +136,12 @@ jobs:
   frontend-build:
     name: Frontend build
     runs-on: ubuntu-latest
+    env:
+      NEXT_PUBLIC_API_BASE: /api
+      NEXT_PUBLIC_INVENTORY_APP_URL: https://inventory.hiddenoasis.app
+      NEXT_PUBLIC_POS_APP_URL: https://pos.hiddenoasis.app
+      NEXT_PUBLIC_STAFF_PAYROLL_APP_URL: https://staff.hiddenoasis.app
+      NEXT_PUBLIC_OPERATIONS_APP_URL: https://operations.hiddenoasis.app
     steps:
       - name: Check out repository without marketplace actions
         shell: bash
@@ -158,6 +164,32 @@ jobs:
       - name: Audit production frontend dependencies
         working-directory: frontend
         run: npm audit --omit=dev
+
+      - name: Validate public application handoff URLs
+        shell: bash
+        run: |
+          set -euo pipefail
+          python3 - <<'PY'
+          import os
+          from urllib.parse import urlparse
+
+          required = (
+              'NEXT_PUBLIC_INVENTORY_APP_URL',
+              'NEXT_PUBLIC_POS_APP_URL',
+              'NEXT_PUBLIC_STAFF_PAYROLL_APP_URL',
+              'NEXT_PUBLIC_OPERATIONS_APP_URL',
+          )
+          for key in required:
+              value = os.environ.get(key, '').strip()
+              parsed = urlparse(value)
+              if parsed.scheme != 'https' or not parsed.netloc:
+                  raise SystemExit(f'{key} must be an absolute https URL')
+          print('Public application handoff URLs: PASS')
+          PY
+
+      - name: Validate Pass 70 UX source contract
+        working-directory: frontend
+        run: node scripts/validate-pass70-source.js
 
       - name: Build frontend
         working-directory: frontend

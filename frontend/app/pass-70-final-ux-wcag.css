@@ -1,0 +1,93 @@
+/* Pass 70: final UX and WCAG closure. Keep corrections narrow and route-scoped. */
+
+/* Payroll detail: preserve normal document flow so tabs cannot cover the first KPI row. */
+.main[data-route^="/payroll-periods/"] > .stack > .section:first-child {
+  position: relative;
+  top: auto;
+  z-index: 1;
+  backdrop-filter: none;
+}
+
+.main[data-route^="/payroll-periods/"] > .stack > .section:first-child .tabs {
+  margin: 12px 0 0;
+  padding: 0;
+  overflow-x: auto;
+  overscroll-behavior-inline: contain;
+  scrollbar-width: thin;
+  scrollbar-gutter: stable;
+}
+
+.main[data-route^="/payroll-periods/"] > .stack > .section:first-child .tabs::after {
+  content: '';
+  flex: 0 0 8px;
+}
+
+/* Horizontal navigation and data regions must advertise that more content is available. */
+.context-nav-stack nav > [class$="__links"],
+.table-wrap {
+  scrollbar-width: thin;
+  scrollbar-gutter: stable;
+  overscroll-behavior-inline: contain;
+}
+
+.context-nav-stack nav > [class$="__links"] {
+  scroll-snap-type: x proximity;
+}
+
+.context-nav-stack nav > [class$="__links"] > a {
+  scroll-snap-align: start;
+}
+
+@media (max-width: 720px) {
+  .context-nav-stack {
+    position: relative;
+  }
+
+  .context-nav-stack::after {
+    content: 'Swipe for more';
+    display: block;
+    padding: 3px 12px 5px;
+    color: var(--muted);
+    background: var(--surface);
+    font-size: 10px;
+    line-height: 1.2;
+    text-align: right;
+  }
+
+  .table-wrap {
+    border-inline-end: 2px solid color-mix(in srgb, var(--accent) 24%, var(--line));
+  }
+
+  .main[data-route^="/payroll-periods/"] > .stack > .section:first-child .tabs {
+    margin-inline: 0;
+    padding-inline: 0;
+  }
+}
+
+/* Externally-owned modules show Accounting's read-only record/history, not disabled edit forms. */
+.external-ownership-boundary .ownership-mutation-section {
+  display: none;
+}
+
+.ownership-notice {
+  scroll-margin-top: 72px;
+}
+
+.ownership-notice .button-link {
+  min-height: 42px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+}
+
+/* WCAG 2.2 focus visibility: preserve a strong keyboard focus indicator on links and controls. */
+:where(a, button, [role='button'], [role='menuitem'], [role='option']):focus-visible {
+  outline: 3px solid color-mix(in srgb, var(--accent) 72%, #ffffff 28%);
+  outline-offset: 3px;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .context-nav-stack nav > [class$="__links"] {
+    scroll-behavior: auto;
+  }
+}

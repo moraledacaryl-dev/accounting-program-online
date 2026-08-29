@@ -11,10 +11,19 @@ function controlLabel(element) {
   return String(element?.getAttribute?.('aria-label') || element?.textContent || '').trim();
 }
 
+function markMutationSection(control) {
+  const form = control?.closest?.('form');
+  if (!form || form.dataset.ownershipSafe === 'true') return;
+  const section = form.closest('.section') || form;
+  section.classList.add('ownership-mutation-section');
+  section.setAttribute('aria-hidden', 'true');
+}
+
 function disableControl(control) {
   if (!control || control.dataset?.ownershipSafe === 'true' || control.disabled) return;
   control.disabled = true;
   control.dataset.ownershipDisabled = 'true';
+  markMutationSection(control);
 }
 
 function applyReadOnlyControls(root) {
@@ -35,6 +44,10 @@ function restoreReadOnlyControls(root) {
   root.querySelectorAll('[data-ownership-disabled="true"]').forEach((control) => {
     control.disabled = false;
     delete control.dataset.ownershipDisabled;
+  });
+  root.querySelectorAll('.ownership-mutation-section').forEach((section) => {
+    section.classList.remove('ownership-mutation-section');
+    section.removeAttribute('aria-hidden');
   });
 }
 
@@ -77,12 +90,18 @@ export default function ExternalOwnershipBoundary({ children }) {
     <div ref={rootRef} className="external-ownership-boundary" onSubmitCapture={blockMutation} onClickCapture={handleClickCapture}>
       <section className="section legacy-notice ownership-notice" aria-label="Authoritative application notice">
         <div>
-          <span className="badge">Read-only transition view</span>
+          <span className="badge">Read-only accounting view</span>
           <h2>{ownership.appName} owns this operational workflow</h2>
-          <p className="muted">Accounting retains historical records, financial references, and migration verification. Create, edit, approve, receive, or delete operational records in the authoritative application.</p>
+          <p className="muted">Accounting shows retained records, financial references, and history only. Create or change operational records in the authoritative application.</p>
           {!!blockedMessage && <p className="error-text" role="alert">{blockedMessage}</p>}
         </div>
-        {ownership.appUrl ? <Link className="button-link" href={ownership.appUrl}>Open {ownership.appName}</Link> : <span className="badge">Application URL not configured</span>}
+        {ownership.appUrl ? (
+          <Link className="button-link" href={ownership.appUrl} target="_blank" rel="noreferrer">
+            Open {ownership.appName}
+          </Link>
+        ) : (
+          <span className="error-text" role="status">Authoritative application link is unavailable. Contact an administrator.</span>
+        )}
       </section>
       {children}
     </div>
