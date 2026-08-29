@@ -913,9 +913,44 @@ def create_money_transaction(db: Session, payload: MoneyTransactionCreate, usern
     if amount <= 0:
         raise ValueError('amount must be greater than zero.')
 
-    row_account = db.get(FinancialAccount, int(payload.financial_account_id))
+    # Lock the cash account before inserting any transaction row that references it.
+    # PostgreSQL FK checks acquire key-share locks during INSERT; taking FOR UPDATE
+    # only after the insert allows concurrent writers to deadlock while upgrading
+    # those locks. Acquiring the authoritative balance row first also makes the
+    # balance validation below concurrency-safe.
+    row_account = (
+        db.query(FinancialAccount)
+        .filter(FinancialAccount.id == int(payload.financial_account_id))
+        .populate_existing()
+        .with_for_update()
+        .first()
+    )
     if not row_account:
         raise ValueError('financial_account_id not found.')
+
+    # Composite cashflow mutations always lock in account -> subledger order.
+    # This prevents event/AR/AP writers from taking the same rows in opposite
+    # order and makes the balance_due re-check in _apply_money_effect authoritative.
+    if payload.receivable_id:
+        linked_receivable = (
+            db.query(Receivable)
+            .filter(Receivable.id == int(payload.receivable_id))
+            .populate_existing()
+            .with_for_update()
+            .first()
+        )
+        if not linked_receivable:
+            raise ValueError('Linked receivable not found.')
+    if payload.payable_id:
+        linked_payable = (
+            db.query(Payable)
+            .filter(Payable.id == int(payload.payable_id))
+            .populate_existing()
+            .with_for_update()
+            .first()
+        )
+        if not linked_payable:
+            raise ValueError('Linked payable not found.')
 
     tx_date = _safe_date(payload.transaction_date)
     ensure_date_unlocked(db, tx_date, scope='bir', action='create cashflow transaction in locked period')
