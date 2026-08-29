@@ -27,6 +27,7 @@ done
 test ! -e deploy/systemd/hiddenoasis-accounting-backend.service
 test ! -e deploy/systemd/hiddenoasis-accounting-frontend.service
 
+grep -Fq 'ReadWritePaths=-/var/lib/hiddenoasis/accounting/uploads' deploy/systemd/accounting-backend.service
 grep -Fq 'sha256=' scripts/dr/backup-accounting.sh
 grep -Fq 'pg_restore --exit-on-error' scripts/dr/restore-rehearsal.sh
 grep -Fq 'merge-base --is-ancestor' scripts/release/prepare-release.sh
