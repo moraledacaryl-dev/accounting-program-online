@@ -1,7 +1,7 @@
 from types import SimpleNamespace
 
 import pytest
-from fastapi import BackgroundTasks, HTTPException
+from fastapi import HTTPException
 from sqlalchemy import create_engine
 from sqlalchemy.orm import sessionmaker
 
@@ -45,14 +45,12 @@ def test_payable_create_returns_success_after_commit_and_replay_does_not_duplica
 
     first = add_payable(
         payload=payable_payload(),
-        background_tasks=BackgroundTasks(),
         idempotency_key=key,
         db=db,
         user=USER,
     )
     replay = add_payable(
         payload=payable_payload(),
-        background_tasks=BackgroundTasks(),
         idempotency_key=key,
         db=db,
         user=USER,
@@ -70,7 +68,6 @@ def test_payable_create_same_key_different_payload_is_conflict():
 
     add_payable(
         payload=payable_payload(),
-        background_tasks=BackgroundTasks(),
         idempotency_key=key,
         db=db,
         user=USER,
@@ -79,7 +76,6 @@ def test_payable_create_same_key_different_payload_is_conflict():
     with pytest.raises(HTTPException) as exc_info:
         add_payable(
             payload=payable_payload(gross_amount=1250),
-            background_tasks=BackgroundTasks(),
             idempotency_key=key,
             db=db,
             user=USER,
@@ -134,7 +130,6 @@ def test_payable_payment_replay_applies_cash_and_balance_effect_once():
 
     payable = add_payable(
         payload=payable_payload(),
-        background_tasks=BackgroundTasks(),
         idempotency_key='pass64-payment-create-0001',
         db=db,
         user=USER,
@@ -199,7 +194,6 @@ def test_payable_payment_same_key_different_amount_is_conflict_without_second_ef
 
     payable = add_payable(
         payload=payable_payload(),
-        background_tasks=BackgroundTasks(),
         idempotency_key='pass64-payment-conflict-create',
         db=db,
         user=USER,
@@ -238,7 +232,6 @@ def test_payable_mutations_require_idempotency_key():
     with pytest.raises(HTTPException) as exc_info:
         add_payable(
             payload=payable_payload(),
-            background_tasks=BackgroundTasks(),
             idempotency_key=None,
             db=db,
             user=USER,
