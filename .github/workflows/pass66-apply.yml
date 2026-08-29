@@ -35,11 +35,22 @@ jobs:
           from pathlib import Path
           p = Path('scripts/pass66_apply.py')
           text = p.read_text()
-          old = '''patch(cash,\n"    _update_receivable_balance(db, row.id)\\n    db.commit()\\n    db.refresh(row)\\n    return _serialize_receivable(row)",\n"    _update_receivable_balance(db, row.id)\\n    db.flush()\\n    if commit:\\n        db.commit()\\n        db.refresh(row)\\n    return _serialize_receivable(row)",\ncount=1)'''
-          new = '''patch(cash,\n"        external_id=external_id,\\n    )\\n    db.add(row)\\n    db.flush()\\n    _update_receivable_balance(db, row.id)\\n    db.commit()\\n    db.refresh(row)\\n    return _serialize_receivable(row)",\n"        external_id=external_id,\\n    )\\n    db.add(row)\\n    db.flush()\\n    _update_receivable_balance(db, row.id)\\n    db.flush()\\n    if commit:\\n        db.commit()\\n        db.refresh(row)\\n    return _serialize_receivable(row)")'''
-          if text.count(old) != 1:
-              raise SystemExit('pass66 patcher receivable target drifted')
-          p.write_text(text.replace(old, new, 1))
+
+          replacements = [
+              (
+                  '''patch(cash,\n"    _update_receivable_balance(db, row.id)\\n    db.commit()\\n    db.refresh(row)\\n    return _serialize_receivable(row)",\n"    _update_receivable_balance(db, row.id)\\n    db.flush()\\n    if commit:\\n        db.commit()\\n        db.refresh(row)\\n    return _serialize_receivable(row)",\ncount=1)''',
+                  '''patch(cash,\n"        external_id=external_id,\\n    )\\n    db.add(row)\\n    db.flush()\\n    _update_receivable_balance(db, row.id)\\n    db.commit()\\n    db.refresh(row)\\n    return _serialize_receivable(row)",\n"        external_id=external_id,\\n    )\\n    db.add(row)\\n    db.flush()\\n    _update_receivable_balance(db, row.id)\\n    db.flush()\\n    if commit:\\n        db.commit()\\n        db.refresh(row)\\n    return _serialize_receivable(row)")'''
+              ),
+              (
+                  '''patch(cash,\n"    _update_payable_balance(db, row.id)\\n    db.commit()\\n    db.refresh(row)\\n    return _serialize_payable(row)",\n"    _update_payable_balance(db, row.id)\\n    db.flush()\\n    if commit:\\n        db.commit()\\n        db.refresh(row)\\n    return _serialize_payable(row)",\ncount=1)''',
+                  '''patch(cash,\n"        bir_include=bool(payload.bir_include),\\n    )\\n    db.add(row)\\n    db.flush()\\n    _update_payable_balance(db, row.id)\\n    db.commit()\\n    db.refresh(row)\\n    return _serialize_payable(row)",\n"        bir_include=bool(payload.bir_include),\\n    )\\n    db.add(row)\\n    db.flush()\\n    _update_payable_balance(db, row.id)\\n    db.flush()\\n    if commit:\\n        db.commit()\\n        db.refresh(row)\\n    return _serialize_payable(row)")'''
+              ),
+          ]
+          for old, new in replacements:
+              if text.count(old) != 1:
+                  raise SystemExit('pass66 patcher target drifted')
+              text = text.replace(old, new, 1)
+          p.write_text(text)
           PY
           python3 scripts/pass66_apply.py
           git diff --check
