@@ -7,11 +7,11 @@ Requires=postgresql.service
 Type=simple
 User=hiddenoasis
 Group=hiddenoasis
-WorkingDirectory=/opt/accounting-program-online/backend
+WorkingDirectory=/opt/accounting-current/backend
 EnvironmentFile=/etc/hiddenoasis/accounting-backend.env
 Environment=PYTHONDONTWRITEBYTECODE=1
-ExecStartPre=/opt/accounting-program-online/backend/.venv/bin/alembic -c alembic.ini upgrade head
-ExecStart=/opt/accounting-program-online/backend/.venv/bin/python -m app.workers.operations_outbox_worker
+ExecStartPre=/opt/accounting-current/backend/.venv/bin/alembic -c alembic.ini upgrade head
+ExecStart=/opt/accounting-current/backend/.venv/bin/python -m app.workers.operations_outbox_worker
 Restart=always
 RestartSec=5
 NoNewPrivileges=true
