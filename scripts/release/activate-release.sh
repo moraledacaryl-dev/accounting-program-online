@@ -12,7 +12,7 @@ CURRENT_LINK="${CURRENT_LINK:-/opt/accounting-current}"
 STATE_DIR="${STATE_DIR:-/var/lib/hiddenoasis/accounting-release}"
 RELEASE="$RELEASE_ROOT/$SHA"
 
-"$RELEASE/scripts/release/verify-release.sh" "$SHA"
+bash "$RELEASE/scripts/release/verify-release.sh" "$SHA"
 
 CURRENT_TARGET=""
 if [ -L "$CURRENT_LINK" ]; then
@@ -20,7 +20,7 @@ if [ -L "$CURRENT_LINK" ]; then
 fi
 PREVIOUS_SHA="$(basename "${CURRENT_TARGET:-none}")"
 
-ROOT="$RELEASE" "$RELEASE/scripts/dr/backup-accounting.sh"
+ROOT="$RELEASE" bash "$RELEASE/scripts/dr/backup-accounting.sh"
 
 OLD_PATH="$PATH"
 set -a
