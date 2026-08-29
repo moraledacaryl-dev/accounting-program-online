@@ -12,8 +12,11 @@ if [ -z "$TARGET_SHA" ]; then
 fi
 
 [[ "$TARGET_SHA" =~ ^[0-9a-f]{40}$ ]] || { echo "No valid rollback SHA available." >&2; exit 2; }
+test -L "$CURRENT_LINK" || { echo "No active immutable release is available to perform rollback." >&2; exit 1; }
+TOOL_ROOT="$(readlink -f "$CURRENT_LINK")"
 TARGET="$RELEASE_ROOT/$TARGET_SHA"
-bash "$TARGET/scripts/release/verify-release.sh" "$TARGET_SHA"
+test -f "$TOOL_ROOT/scripts/release/verify-release.sh"
+bash "$TOOL_ROOT/scripts/release/verify-release.sh" "$TARGET_SHA"
 
 OLD_PATH="$PATH"
 set -a
@@ -28,8 +31,7 @@ if [ "$CURRENT_ALEMBIC" != "$EXPECTED_ALEMBIC" ]; then
   exit 1
 fi
 
-CURRENT_SHA="none"
-if [ -L "$CURRENT_LINK" ]; then CURRENT_SHA="$(basename "$(readlink -f "$CURRENT_LINK")")"; fi
+CURRENT_SHA="$(basename "$TOOL_ROOT")"
 
 ln -sfn "$TARGET" "${CURRENT_LINK}.new"
 mv -Tf "${CURRENT_LINK}.new" "$CURRENT_LINK"
