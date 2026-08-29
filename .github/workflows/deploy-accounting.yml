@@ -2,18 +2,48 @@ name: Deploy Accounting
 
 on:
   workflow_dispatch:
+    inputs:
+      release_sha:
+        description: 'Exact 40-character commit SHA from main to deploy'
+        required: true
+        type: string
+
+permissions:
+  contents: read
 
 jobs:
   deploy:
     runs-on: ubuntu-latest
 
     steps:
-      - name: Run deploy script on server
+      - name: Validate release SHA input
+        shell: bash
+        env:
+          RELEASE_SHA: ${{ inputs.release_sha }}
+        run: |
+          set -euo pipefail
+          [[ "$RELEASE_SHA" =~ ^[0-9a-f]{40}$ ]]
+
+      - name: Prepare and activate exact release on server
         uses: appleboy/ssh-action@v1.0.3
         with:
           host: ${{ secrets.SERVER_HOST }}
           username: ${{ secrets.SERVER_USER }}
           key: ${{ secrets.SERVER_SSH_KEY }}
           port: ${{ secrets.SERVER_PORT }}
+          envs: RELEASE_SHA
           script: |
-            bash /root/deploy-accounting.sh
+            set -euo pipefail
+            export PATH="/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin"
+            ROOT=/opt/accounting-program-online
+            git -C "$ROOT" fetch --no-tags origin main
+            git -C "$ROOT" cat-file -e "$RELEASE_SHA^{commit}"
+            git -C "$ROOT" merge-base --is-ancestor "$RELEASE_SHA" origin/main
+            BOOTSTRAP=/tmp/accounting-prepare-release-$RELEASE_SHA.sh
+            git -C "$ROOT" show "$RELEASE_SHA:scripts/release/prepare-release.sh" > "$BOOTSTRAP"
+            chmod 700 "$BOOTSTRAP"
+            SOURCE_ROOT="$ROOT" bash "$BOOTSTRAP" "$RELEASE_SHA"
+            rm -f "$BOOTSTRAP"
+            /opt/accounting-releases/$RELEASE_SHA/scripts/release/activate-release.sh "$RELEASE_SHA"
+        env:
+          RELEASE_SHA: ${{ inputs.release_sha }}
