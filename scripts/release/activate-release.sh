@@ -10,6 +10,8 @@ SHA="$1"
 RELEASE_ROOT="${RELEASE_ROOT:-/opt/accounting-releases}"
 CURRENT_LINK="${CURRENT_LINK:-/opt/accounting-current}"
 STATE_DIR="${STATE_DIR:-/var/lib/hiddenoasis/accounting-release}"
+UPLOADS_DIR="${UPLOADS_DIR:-/var/lib/hiddenoasis/accounting/uploads}"
+LEGACY_UPLOADS_DIR="${LEGACY_UPLOADS_DIR:-/opt/accounting-program-online/backend/uploads}"
 RELEASE="$RELEASE_ROOT/$SHA"
 
 bash "$RELEASE/scripts/release/verify-release.sh" "$SHA"
@@ -33,6 +35,18 @@ cd "$RELEASE/backend"
 EXPECTED_ALEMBIC="$(awk -F= '$1=="alembic_head" {print $2}' "$RELEASE/.release-manifest")"
 CURRENT_ALEMBIC="$(./.venv/bin/alembic -c alembic.ini current 2>/dev/null | awk '{print $1}' | head -n1)"
 test "$CURRENT_ALEMBIC" = "$EXPECTED_ALEMBIC"
+
+install -d -o hiddenoasis -g hiddenoasis -m 0750 "$(dirname "$UPLOADS_DIR")"
+install -d -o hiddenoasis -g hiddenoasis -m 0750 "$UPLOADS_DIR"
+if [ -d "$LEGACY_UPLOADS_DIR" ]; then
+  find "$LEGACY_UPLOADS_DIR" -mindepth 1 -maxdepth 1 -type f -print0 \
+    | while IFS= read -r -d '' file; do
+        target="$UPLOADS_DIR/$(basename "$file")"
+        if [ ! -e "$target" ]; then
+          install -o hiddenoasis -g hiddenoasis -m 0600 "$file" "$target"
+        fi
+      done
+fi
 
 install -o root -g root -m 0644 "$RELEASE/deploy/systemd/accounting-backend.service" /etc/systemd/system/accounting-backend.service
 install -o root -g root -m 0644 "$RELEASE/deploy/systemd/accounting-frontend.service" /etc/systemd/system/accounting-frontend.service
@@ -69,4 +83,5 @@ chmod 600 "$STATE_DIR"/*.sha "$STATE_DIR"/*.utc
 echo "Previous release: $PREVIOUS_SHA"
 echo "Current release: $SHA"
 echo "Alembic: $CURRENT_ALEMBIC"
+echo "Persistent uploads: $UPLOADS_DIR"
 echo "ATOMIC RELEASE ACTIVATION: PASS"
