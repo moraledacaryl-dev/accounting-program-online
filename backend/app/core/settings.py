@@ -6,6 +6,8 @@ from pydantic_settings import BaseSettings, SettingsConfigDict
 
 BACKEND_ROOT = Path(__file__).resolve().parents[2]
 DEFAULT_SQLITE_PATH = BACKEND_ROOT / 'accounting.db'
+DEFAULT_UPLOADS_PATH = BACKEND_ROOT / 'uploads'
+PRODUCTION_UPLOADS_PATH = Path('/var/lib/hiddenoasis/accounting/uploads')
 MINIMUM_SECRET_LENGTH = 32
 
 
@@ -70,7 +72,7 @@ class Settings(BaseSettings):
     integration_secret: str = 'pos-integration-secret'
     integration_api_key: str = ''
     cors_origins: str = 'http://localhost:3000,http://127.0.0.1:3000,http://localhost:3001,http://127.0.0.1:3001'
-    uploads_dir: str = str(BACKEND_ROOT / 'uploads')
+    uploads_dir: str = str(DEFAULT_UPLOADS_PATH)
     public_uploads_enabled: bool = False
     auth_cookie_name: str = 'erp_session'
     auth_cookie_domain: str = ''
@@ -98,7 +100,10 @@ class Settings(BaseSettings):
 
     @property
     def uploads_path(self) -> Path:
-        return Path(self.uploads_dir).expanduser().resolve()
+        configured = Path(self.uploads_dir).expanduser().resolve()
+        if self.is_production and configured == DEFAULT_UPLOADS_PATH.resolve():
+            return PRODUCTION_UPLOADS_PATH
+        return configured
 
     @property
     def auth_cookie_secure_effective(self) -> bool:
