@@ -393,7 +393,7 @@ def list_purchase_orders(db: Session, *, status: str | None = None, supplier_id:
     return [_serialize_po(row) for row in rows]
 
 
-def create_purchase_order(db: Session, payload: PurchaseOrderCreate, username: str | None = None):
+def create_purchase_order(db: Session, payload: PurchaseOrderCreate, username: str | None = None, *, commit: bool = True):
     status = (payload.status or 'draft').strip()
     if status not in PO_STATUSES:
         raise ValueError(f'Invalid status: {status}.')
@@ -401,8 +401,25 @@ def create_purchase_order(db: Session, payload: PurchaseOrderCreate, username: s
         raise ValueError('supplier_id is required before issuing or receiving a PO.')
     if payload.supplier_id and not db.get(Supplier, int(payload.supplier_id)):
         raise ValueError('supplier_id not found.')
-    if payload.purchase_request_id and not db.get(PurchaseRequest, int(payload.purchase_request_id)):
-        raise ValueError('purchase_request_id not found.')
+    locked_pr = None
+    if payload.purchase_request_id:
+        locked_pr = (
+            db.query(PurchaseRequest)
+            .filter(PurchaseRequest.id == int(payload.purchase_request_id))
+            .populate_existing()
+            .with_for_update()
+            .first()
+        )
+        if not locked_pr:
+            raise ValueError('purchase_request_id not found.')
+        existing_po = (
+            db.query(PurchaseOrder)
+            .filter(PurchaseOrder.purchase_request_id == locked_pr.id)
+            .order_by(PurchaseOrder.id.asc())
+            .first()
+        )
+        if existing_po:
+            raise ValueError('Purchase request has already been converted to a purchase order.')
     row = PurchaseOrder(
         po_no=generate_code(db, 'purchase_order', requested_code=payload.po_no),
         po_date=_norm(payload.po_date) or _today(),
@@ -425,7 +442,9 @@ def create_purchase_order(db: Session, payload: PurchaseOrderCreate, username: s
             pr.status = 'converted_to_po'
             pr.approved_by = username if username else pr.approved_by
             db.add(pr)
-    db.commit()
+    db.flush()
+    if commit:
+        db.commit()
     row = (
         db.query(PurchaseOrder)
         .options(
@@ -683,6 +702,7 @@ def _maybe_create_payable_from_receiving(db: Session, receiving: ReceivingRecord
             notes=f'Auto-created from receiving {receiving.receiving_no}',
             bir_include=True,
         ),
+        commit=False,
     )
 
 
@@ -735,7 +755,13 @@ def create_receiving_record(db: Session, payload: ReceivingCreate, username: str
 
 
 def update_receiving_record(db: Session, receiving_id: int, payload: ReceivingUpdate, username: str | None = None):
-    row = db.get(ReceivingRecord, int(receiving_id))
+    row = (
+        db.query(ReceivingRecord)
+        .filter(ReceivingRecord.id == int(receiving_id))
+        .populate_existing()
+        .with_for_update()
+        .first()
+    )
     if not row:
         raise ValueError('Receiving record not found.')
     if row.status != 'draft':
@@ -801,7 +827,13 @@ def delete_receiving_record(db: Session, receiving_id: int):
 
 
 def set_receiving_status(db: Session, receiving_id: int, payload: ProcurementStatusAction, username: str | None = None):
-    row = db.get(ReceivingRecord, int(receiving_id))
+    row = (
+        db.query(ReceivingRecord)
+        .filter(ReceivingRecord.id == int(receiving_id))
+        .populate_existing()
+        .with_for_update()
+        .first()
+    )
     if not row:
         raise ValueError('Receiving record not found.')
     status = (payload.status or '').strip()
@@ -857,10 +889,29 @@ def create_purchase_order_from_request(db: Session, pr_id: int, username: str | 
         db.query(PurchaseRequest)
         .options(selectinload(PurchaseRequest.lines))
         .filter(PurchaseRequest.id == int(pr_id))
+        .populate_existing()
+        .with_for_update()
         .first()
     )
     if not pr:
         raise ValueError('Purchase request not found.')
+
+    if pr.status == 'converted_to_po':
+        existing = (
+            db.query(PurchaseOrder)
+            .options(
+                selectinload(PurchaseOrder.lines).selectinload(PurchaseOrderLine.inventory_item),
+                selectinload(PurchaseOrder.supplier),
+                selectinload(PurchaseOrder.purchase_request),
+            )
+            .filter(PurchaseOrder.purchase_request_id == pr.id)
+            .order_by(PurchaseOrder.id.asc())
+            .first()
+        )
+        if existing:
+            return _serialize_po(existing)
+        raise ValueError('Purchase request is marked converted but no purchase order exists.')
+
     if not (pr.lines or []):
         raise ValueError('Purchase request has no lines.')
     po_payload = PurchaseOrderCreate(
@@ -885,9 +936,6 @@ def create_purchase_order_from_request(db: Session, pr_id: int, username: str | 
             for line in sorted(pr.lines or [], key=lambda x: (x.sort_order, x.id))
         ],
     )
-    po = create_purchase_order(db, po_payload, username=username)
-    pr.status = 'converted_to_po'
-    pr.approved_by = username if username else pr.approved_by
-    db.add(pr)
+    po = create_purchase_order(db, po_payload, username=username, commit=False)
     db.commit()
     return po

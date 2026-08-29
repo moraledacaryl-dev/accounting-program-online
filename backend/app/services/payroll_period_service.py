@@ -317,6 +317,8 @@ def post_payroll_period(db: Session, period_id: int, username: str | None = None
         db.query(PayrollPeriod)
         .options(selectinload(PayrollPeriod.lines))
         .filter(PayrollPeriod.id == int(period_id))
+        .populate_existing()
+        .with_for_update()
         .first()
     )
     if not period:
