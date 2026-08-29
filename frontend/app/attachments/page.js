@@ -20,6 +20,8 @@ const ENTITY_TYPES = [
   'receivable',
   'payable',
 ];
+const HUMAN_UPLOAD_ENTITY_TYPES = ENTITY_TYPES.filter((type) => !['stock_movement', 'sale_order'].includes(type));
+const ATTACHMENT_ACCEPT = '.pdf,.jpg,.jpeg,.png,.csv,.xlsx,.docx';
 
 function currencyBytes(value) {
   const bytes = Number(value || 0);
@@ -37,7 +39,7 @@ export default function AttachmentsPage() {
     entity_id: '',
   });
   const [form, setForm] = useState({
-    entity_type: 'stock_movement',
+    entity_type: 'booking',
     entity_id: '',
     note: '',
   });
@@ -59,15 +61,13 @@ export default function AttachmentsPage() {
 
   const canManageAttachments = (
     can('bookings.edit')
-    || can('suppliers.manage')
-    || can('purchase_requests.create')
-    || can('purchase_orders.create')
-    || can('receiving.post')
     || can('cashflow.money_in')
     || can('cashflow.money_out')
+    || can('cashflow.transfers')
     || can('cashflow.reconcile')
     || can('payroll_periods.manage')
     || can('assets.manage')
+    || can('journals.post')
     || can('bir.manage')
   );
 
@@ -103,7 +103,7 @@ export default function AttachmentsPage() {
         entityId: Number(form.entity_id),
         note: form.note || '',
       });
-      setNotice('Attachment uploaded.');
+      setNotice('Attachment uploaded and security-scanned.');
       setForm((prev) => ({ ...prev, note: '' }));
       setFile(null);
       if (fileInputRef.current) fileInputRef.current.value = '';
@@ -149,7 +149,7 @@ export default function AttachmentsPage() {
     <div>
       <section className="section">
         <h1>Attachments</h1>
-        <p className="muted">Attach receipts and supporting documents to records and operational transactions.</p>
+        <p className="muted">Attach receipts and supporting documents to records you are authorized to access.</p>
         {!!notice && <p className="success-text">{notice}</p>}
         {!!error && <p className="error-text">{error}</p>}
       </section>
@@ -162,7 +162,7 @@ export default function AttachmentsPage() {
               <label>
                 Entity Type
                 <select value={form.entity_type} onChange={(e) => setForm((f) => ({ ...f, entity_type: e.target.value }))}>
-                  {ENTITY_TYPES.map((row) => (
+                  {HUMAN_UPLOAD_ENTITY_TYPES.map((row) => (
                     <option key={row} value={row}>{row}</option>
                   ))}
                 </select>
@@ -173,15 +173,16 @@ export default function AttachmentsPage() {
               </label>
               <label>
                 File
-                <input ref={fileInputRef} type="file" onChange={(e) => setFile(e.target.files?.[0] || null)} />
+                <input ref={fileInputRef} type="file" accept={ATTACHMENT_ACCEPT} onChange={(e) => setFile(e.target.files?.[0] || null)} />
               </label>
             </div>
+            <p className="small muted">Allowed: PDF, JPEG, PNG, CSV, XLSX, DOCX · 15 MB maximum · files are validated and malware-scanned before storage.</p>
             <label>
               Note
               <textarea value={form.note} onChange={(e) => setForm((f) => ({ ...f, note: e.target.value }))} />
             </label>
             <button type="submit" disabled={!canManageAttachments || !isSubmittable()}>Upload</button>
-            {!canManageAttachments && <p className="small muted">You can view files but cannot upload/delete with your current role.</p>}
+            {!canManageAttachments && <p className="small muted">Your current permissions do not allow attachment mutation.</p>}
           </form>
         </section>
 
@@ -191,7 +192,7 @@ export default function AttachmentsPage() {
             <label>
               Entity Type
               <select value={filters.entity_type} onChange={(e) => setFilters((f) => ({ ...f, entity_type: e.target.value }))}>
-                <option value="">All</option>
+                <option value="">All authorized files</option>
                 {ENTITY_TYPES.map((row) => (
                   <option key={row} value={row}>{row}</option>
                 ))}
@@ -226,7 +227,7 @@ export default function AttachmentsPage() {
                 </td>
               </tr>
             ))}
-            {!filteredRows.length && <tr><td colSpan="6" className="muted">No attachments found.</td></tr>}
+            {!filteredRows.length && <tr><td colSpan="6" className="muted">No authorized attachments found.</td></tr>}
           </tbody>
         </table>
       </section>
