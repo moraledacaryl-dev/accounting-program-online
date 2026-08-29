@@ -5,6 +5,7 @@ from app.core.settings import settings
 from app.db.database import get_db
 from app.models.entities import MenuItem, MenuSKU, User
 from app.services.cashflow_service import list_financial_accounts
+from app.services.operations_outbox_service import operations_outbox_status
 
 router = APIRouter()
 
@@ -20,6 +21,7 @@ def integration_status(
     integration_user_exists = db.query(User).filter(User.username == settings.integration_username).count() > 0
     financial_accounts = list_financial_accounts(db)
     security_warnings = settings.security_warnings
+    operations_outbox = operations_outbox_status(db)
 
     return {
         'ok': True,
@@ -29,6 +31,7 @@ def integration_status(
         'database_url': settings.database_url if settings.database_url.startswith('sqlite') else 'configured',
         'bootstrap_enabled': settings.bootstrap_enabled,
         'integration_enabled': settings.integration_enabled,
+        'operations_outbox': operations_outbox,
         'security': {
             'production_ready': not security_warnings,
             'warning_count': len(security_warnings),
