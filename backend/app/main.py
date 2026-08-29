@@ -1,5 +1,7 @@
 
 from contextlib import asynccontextmanager
+import shutil
+
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.staticfiles import StaticFiles
@@ -60,11 +62,19 @@ def healthz_details():
         migration = migration_status(engine)
     except Exception:
         db_ok = False
+    scanner_available = bool(shutil.which('clamscan'))
+    scanner_required = settings.is_production
+    scanner_ok = scanner_available or not scanner_required
     return {
-        'ok': db_ok and (not migration or bool(migration.get('ok', True))),
+        'ok': db_ok and (not migration or bool(migration.get('ok', True))) and scanner_ok,
         'database': 'ok' if db_ok else 'error',
         'migration': migration,
         'uploads': UPLOAD_ROOT.exists(),
+        'attachment_scanner': {
+            'required': scanner_required,
+            'available': scanner_available,
+            'ok': scanner_ok,
+        },
     }
 
 @app.get('/api/healthz/details')
