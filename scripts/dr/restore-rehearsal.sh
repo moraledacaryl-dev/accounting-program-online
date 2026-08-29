@@ -27,7 +27,7 @@ cleanup() {
 trap cleanup EXIT
 
 sudo -u postgres createdb "$REHEARSAL_DB"
-sudo -u postgres pg_restore --exit-on-error --no-owner --no-privileges --dbname "$REHEARSAL_DB" "$DUMP"
+cat "$DUMP" | sudo -u postgres pg_restore --exit-on-error --no-owner --no-privileges --dbname "$REHEARSAL_DB"
 
 RESTORED_ALEMBIC="$(sudo -u postgres psql -Atqc 'SELECT version_num FROM alembic_version' "$REHEARSAL_DB" | head -n1)"
 test -n "$RESTORED_ALEMBIC"
