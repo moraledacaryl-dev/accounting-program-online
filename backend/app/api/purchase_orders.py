@@ -1,10 +1,10 @@
-from fastapi import APIRouter, BackgroundTasks, Depends, HTTPException
+from fastapi import APIRouter, Depends, HTTPException
 from sqlalchemy.orm import Session
 
 from app.api.deps import require_permissions
 from app.db.database import get_db
 from app.schemas.procurement import ProcurementStatusAction, PurchaseOrderCreate, PurchaseOrderUpdate
-from app.services.operations_integration import publish_operations_event
+from app.services.operations_outbox_service import enqueue_operations_event
 from app.services.procurement_service import (
     create_purchase_order,
     delete_purchase_order,
@@ -29,31 +29,37 @@ def get_purchase_orders(
 @router.post('/')
 def add_purchase_order(
     payload: PurchaseOrderCreate,
-    background_tasks: BackgroundTasks,
     db: Session = Depends(get_db),
     user=Depends(require_permissions('purchase_orders.create')),
 ):
     try:
-        item = create_purchase_order(db, payload, username=getattr(user, 'username', None))
-        background_tasks.add_task(
-            publish_operations_event,
-            event_id=f'purchase-order:{item.id}:created',
+        item = create_purchase_order(
+            db,
+            payload,
+            username=getattr(user, 'username', None),
+            commit=False,
+        )
+        total_amount = float(item.get('total_amount') or 0)
+        enqueue_operations_event(
+            db,
+            event_id=f"purchase-order:{item['id']}:created",
             event_type='purchase_order.pending',
-            title=f'Purchase order {item.po_no} pending review',
-            summary=f'Purchase order total: {item.total_amount:,.2f}.',
-            priority='High' if (item.total_amount or 0) >= 50000 else 'Normal',
+            title=f"Purchase order {item['po_no']} pending review",
+            summary=f'Purchase order total: {total_amount:,.2f}.',
+            priority='High' if total_amount >= 50000 else 'Normal',
             subject_type='purchase_order',
-            subject_id=item.id,
+            subject_id=item['id'],
             payload={
-                'po_no': item.po_no,
-                'po_date': item.po_date,
-                'expected_delivery_date': item.expected_delivery_date,
-                'payment_terms': item.payment_terms,
-                'status': item.status,
-                'total_amount': item.total_amount,
-                'line_count': len(item.lines),
+                'po_no': item.get('po_no'),
+                'po_date': item.get('po_date'),
+                'expected_delivery_date': item.get('expected_delivery_date'),
+                'payment_terms': item.get('payment_terms'),
+                'status': item.get('status'),
+                'total_amount': total_amount,
+                'line_count': len(item.get('lines') or []),
             },
         )
+        db.commit()
         return item
     except ValueError as e:
         db.rollback()
