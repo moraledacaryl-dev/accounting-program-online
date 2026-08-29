@@ -1,0 +1,53 @@
+name: Pass 66 guarded lock fix
+
+on:
+  push:
+    branches:
+      - pass-66-transaction-integrity-concurrency
+    paths:
+      - scripts/pass66_fix_lock_order.py
+      - .github/workflows/pass66-lock-fix.yml
+
+permissions:
+  contents: write
+
+jobs:
+  apply:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Check out branch without marketplace actions
+        env:
+          GH_TOKEN: ${{ github.token }}
+          REPOSITORY: ${{ github.repository }}
+          BRANCH: ${{ github.ref_name }}
+        run: |
+          set -euo pipefail
+          AUTH="$(printf 'x-access-token:%s' "$GH_TOKEN" | base64 -w0)"
+          git init .
+          git remote add origin "https://github.com/${REPOSITORY}.git"
+          git -c http.extraheader="AUTHORIZATION: Basic ${AUTH}" fetch --depth=1 origin "$BRANCH"
+          git checkout -B "$BRANCH" FETCH_HEAD
+
+      - name: Apply lock-order correction
+        run: |
+          set -euo pipefail
+          python3 scripts/pass66_fix_lock_order.py
+          git diff --check
+
+      - name: Commit and push correction
+        env:
+          GH_TOKEN: ${{ github.token }}
+          REPOSITORY: ${{ github.repository }}
+          BRANCH: ${{ github.ref_name }}
+        run: |
+          set -euo pipefail
+          if git diff --quiet; then
+            echo "No changes produced."
+            exit 0
+          fi
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add backend/app/services/cashflow_service.py
+          git commit -m "Pass 66: lock balances before cashflow inserts"
+          AUTH="$(printf 'x-access-token:%s' "$GH_TOKEN" | base64 -w0)"
+          git -c http.extraheader="AUTHORIZATION: Basic ${AUTH}" push origin "HEAD:${BRANCH}"
