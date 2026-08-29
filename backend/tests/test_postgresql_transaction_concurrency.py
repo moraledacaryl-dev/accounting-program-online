@@ -53,7 +53,7 @@ def test_postgresql_concurrent_cash_out_cannot_double_spend_balance():
         account = FinancialAccount(
             name=f'Pass66 cash race {marker}',
             code=f'P66C-{marker}',
-            account_type='bank',
+            account_type='cash_drawer',
             subtype='ci',
             currency='PHP',
             is_active=True,
