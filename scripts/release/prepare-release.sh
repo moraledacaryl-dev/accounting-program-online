@@ -57,11 +57,14 @@ FRONTEND_ENV_SHA="$(sha256sum "$FRONTEND_ENV" | awk '{print $1}')"
 REQUIREMENTS_SHA="$(sha256sum backend/requirements.txt | awk '{print $1}')"
 LOCK_SHA="$(sha256sum frontend/package-lock.json | awk '{print $1}')"
 BUILD_ID="$(cat frontend/.next/BUILD_ID)"
+ALEMBIC_HEAD="$(cd backend && ./.venv/bin/alembic -c alembic.ini heads | awk '{print $1}' | head -n1)"
+test -n "$ALEMBIC_HEAD"
 
 cat > .release-manifest <<EOF
 release_sha=$SHA
 tree_sha=$TREE_SHA
 prepared_utc=$(date -u +%Y-%m-%dT%H:%M:%SZ)
+alembic_head=$ALEMBIC_HEAD
 backend_requirements_sha256=$REQUIREMENTS_SHA
 frontend_lock_sha256=$LOCK_SHA
 backend_env_sha256=$BACKEND_ENV_SHA
@@ -75,5 +78,6 @@ chmod 644 "$RELEASE/.release-manifest"
 echo "Release: $RELEASE"
 echo "SHA: $SHA"
 echo "Tree: $TREE_SHA"
+echo "Alembic head: $ALEMBIC_HEAD"
 echo "Build ID: $BUILD_ID"
 echo "IMMUTABLE RELEASE PREPARATION: PASS"
