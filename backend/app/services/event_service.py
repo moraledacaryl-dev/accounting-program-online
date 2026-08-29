@@ -414,6 +414,7 @@ def _sync_event_receivable(db: Session, event: EventBooking):
                 external_source='event_workflow',
                 external_id=event.event_no,
             ),
+            commit=False,
         )
         event = db.get(EventBooking, int(event.id))
         event.receivable_id = int(receivable_data['id'])
@@ -511,7 +512,7 @@ def update_event(db: Session, event_id: int, payload: EventBookingUpdate, userna
     return get_event(db, event.id)
 
 
-def confirm_event(db: Session, event_id: int, payload: EventActionPayload, username: str | None = None):
+def confirm_event(db: Session, event_id: int, payload: EventActionPayload, username: str | None = None, *, commit: bool = True):
     event = _event_query(db).filter(EventBooking.id == int(event_id)).first()
     if not event:
         raise ValueError('Event not found.')
@@ -526,7 +527,9 @@ def confirm_event(db: Session, event_id: int, payload: EventActionPayload, usern
     if payload.note:
         event.notes = f"{event.notes or ''}\nConfirmed: {payload.note}".strip()
     _sync_financial_links(db, event, username)
-    db.commit()
+    db.flush()
+    if commit:
+        db.commit()
     return get_event(db, event.id)
 
 
@@ -636,11 +639,11 @@ def record_event_payment(db: Session, event_id: int, payload: EventPaymentPayloa
         raise ValueError('Financial account not found.')
 
     if _norm(event.status) in {'draft', 'quoted'}:
-        confirm_event(db, event.id, EventActionPayload(action_date=payload.payment_date or _today(), note='Auto-confirmed by event payment.'), username=username)
+        confirm_event(db, event.id, EventActionPayload(action_date=payload.payment_date or _today(), note='Auto-confirmed by event payment.'), username=username, commit=False)
         event = _event_query(db).filter(EventBooking.id == int(event_id)).first()
     else:
         _sync_financial_links(db, event, username)
-        db.commit()
+        db.flush()
         event = _event_query(db).filter(EventBooking.id == int(event_id)).first()
 
     receivable = db.get(Receivable, int(event.receivable_id)) if event.receivable_id else None
@@ -666,6 +669,7 @@ def record_event_payment(db: Session, event_id: int, payload: EventPaymentPayloa
             auto_post_accounting=False,
         ),
         username=username,
+        commit=False,
     )
     tx_data = result.get('transaction') or {}
     event = _event_query(db).filter(EventBooking.id == int(event_id)).first()

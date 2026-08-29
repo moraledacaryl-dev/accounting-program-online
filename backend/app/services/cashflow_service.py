@@ -737,7 +737,13 @@ def _update_payable_balance(db: Session, payable_id: int):
 
 
 def _reverse_money_effect(db: Session, tx: MoneyTransaction):
-    account = db.get(FinancialAccount, int(tx.financial_account_id))
+    account = (
+        db.query(FinancialAccount)
+        .filter(FinancialAccount.id == int(tx.financial_account_id))
+        .populate_existing()
+        .with_for_update()
+        .first()
+    )
     if not account:
         raise ValueError('Linked financial account not found.')
     amount = float(tx.amount or 0)
@@ -767,7 +773,13 @@ def _reverse_money_effect(db: Session, tx: MoneyTransaction):
 
 
 def _apply_money_effect(db: Session, tx: MoneyTransaction, *, allow_overdraw: bool = False):
-    account = db.get(FinancialAccount, int(tx.financial_account_id))
+    account = (
+        db.query(FinancialAccount)
+        .filter(FinancialAccount.id == int(tx.financial_account_id))
+        .populate_existing()
+        .with_for_update()
+        .first()
+    )
     if not account:
         raise ValueError('Linked financial account not found.')
 
@@ -784,17 +796,33 @@ def _apply_money_effect(db: Session, tx: MoneyTransaction, *, allow_overdraw: bo
     db.add(account)
 
     if tx.receivable_id:
-        receivable = db.get(Receivable, int(tx.receivable_id))
+        receivable = (
+            db.query(Receivable)
+            .filter(Receivable.id == int(tx.receivable_id))
+            .populate_existing()
+            .with_for_update()
+            .first()
+        )
         if not receivable:
             raise ValueError('Linked receivable not found.')
+        if amount - float(receivable.balance_due or 0) > 0.0001:
+            raise ValueError('Collection amount cannot exceed receivable balance.')
         receivable.amount_collected = round(float(receivable.amount_collected or 0) + amount, 4)
         db.add(receivable)
         _update_receivable_balance(db, receivable.id)
 
     if tx.payable_id:
-        payable = db.get(Payable, int(tx.payable_id))
+        payable = (
+            db.query(Payable)
+            .filter(Payable.id == int(tx.payable_id))
+            .populate_existing()
+            .with_for_update()
+            .first()
+        )
         if not payable:
             raise ValueError('Linked payable not found.')
+        if amount - float(payable.balance_due or 0) > 0.0001:
+            raise ValueError('Payment amount cannot exceed payable balance.')
         payable.amount_paid = round(float(payable.amount_paid or 0) + amount, 4)
         db.add(payable)
         _update_payable_balance(db, payable.id)
@@ -865,7 +893,7 @@ def _create_linked_record(
     return linked, (journal.id if journal else None)
 
 
-def create_money_transaction(db: Session, payload: MoneyTransactionCreate, username: str | None = None):
+def create_money_transaction(db: Session, payload: MoneyTransactionCreate, username: str | None = None, *, commit: bool = True):
     ensure_default_financial_accounts(db)
     external_source = (payload.external_source or '').strip() or None
     external_id = (payload.external_id or '').strip() or None
@@ -958,14 +986,17 @@ def create_money_transaction(db: Session, payload: MoneyTransactionCreate, usern
 
     tx.journal_entry_id = linked_journal_id
     db.add(tx)
-    db.commit()
-
-    tx = (
-        db.query(MoneyTransaction)
-        .options(selectinload(MoneyTransaction.financial_account))
-        .filter(MoneyTransaction.id == tx.id)
-        .first()
-    )
+    db.flush()
+    if commit:
+        db.commit()
+        tx = (
+            db.query(MoneyTransaction)
+            .options(selectinload(MoneyTransaction.financial_account))
+            .filter(MoneyTransaction.id == tx.id)
+            .first()
+        )
+    else:
+        db.refresh(tx)
     return _serialize_money_transaction(tx)
 
 
@@ -1187,7 +1218,13 @@ def approve_money_transaction(db: Session, tx_id: int, payload: CashflowActionPa
 
 
 def reverse_money_transaction(db: Session, tx_id: int, payload: CashflowActionPayload, username: str | None = None):
-    row = db.get(MoneyTransaction, int(tx_id))
+    row = (
+        db.query(MoneyTransaction)
+        .filter(MoneyTransaction.id == int(tx_id))
+        .populate_existing()
+        .with_for_update()
+        .first()
+    )
     if not row:
         raise ValueError('Money transaction not found.')
     if bool(row.is_reversed) or _normalize(row.status) == 'reversed':
@@ -1300,8 +1337,18 @@ def create_transfer(db: Session, payload: AccountTransferCreate, username: str |
     if amount <= 0:
         raise ValueError('amount must be greater than zero.')
 
-    from_account = db.get(FinancialAccount, int(payload.from_account_id))
-    to_account = db.get(FinancialAccount, int(payload.to_account_id))
+    account_ids = sorted({int(payload.from_account_id), int(payload.to_account_id)})
+    locked_accounts = (
+        db.query(FinancialAccount)
+        .filter(FinancialAccount.id.in_(account_ids))
+        .order_by(FinancialAccount.id.asc())
+        .populate_existing()
+        .with_for_update()
+        .all()
+    )
+    account_by_id = {int(account.id): account for account in locked_accounts}
+    from_account = account_by_id.get(int(payload.from_account_id))
+    to_account = account_by_id.get(int(payload.to_account_id))
     if not from_account or not to_account:
         raise ValueError('Invalid from_account_id or to_account_id.')
     if int(from_account.id) == int(to_account.id):
@@ -1548,7 +1595,13 @@ def cancel_transfer(db: Session, transfer_id: int, payload: CashflowActionPayloa
 
 
 def reverse_transfer(db: Session, transfer_id: int, payload: CashflowActionPayload, username: str | None = None):
-    row = db.get(AccountTransfer, int(transfer_id))
+    row = (
+        db.query(AccountTransfer)
+        .filter(AccountTransfer.id == int(transfer_id))
+        .populate_existing()
+        .with_for_update()
+        .first()
+    )
     if not row:
         raise ValueError('Transfer not found.')
     if bool(row.is_reversed) or _normalize(row.status) == 'reversed':
@@ -1579,8 +1632,18 @@ def reverse_transfer(db: Session, transfer_id: int, payload: CashflowActionPaylo
         db.add(reversal)
         db.flush()
 
-        from_account = db.get(FinancialAccount, int(reversal.from_account_id))
-        to_account = db.get(FinancialAccount, int(reversal.to_account_id))
+        account_ids = sorted({int(reversal.from_account_id), int(reversal.to_account_id)})
+        locked_accounts = (
+            db.query(FinancialAccount)
+            .filter(FinancialAccount.id.in_(account_ids))
+            .order_by(FinancialAccount.id.asc())
+            .populate_existing()
+            .with_for_update()
+            .all()
+        )
+        account_by_id = {int(account.id): account for account in locked_accounts}
+        from_account = account_by_id.get(int(reversal.from_account_id))
+        to_account = account_by_id.get(int(reversal.to_account_id))
         if from_account and to_account:
             amount = float(reversal.amount or 0)
             from_account.current_balance = round(float(from_account.current_balance or 0) - amount, 4)
@@ -1886,7 +1949,7 @@ def reverse_cash_reconciliation(db: Session, reconciliation_id: int, payload: Ca
     )
 
 
-def create_receivable(db: Session, payload: ReceivableCreate):
+def create_receivable(db: Session, payload: ReceivableCreate, *, commit: bool = True):
     gross_amount = _as_float(payload.gross_amount)
     amount_collected = max(_as_float(payload.amount_collected), 0)
     source_type = (payload.source_type or '').strip() or None
@@ -1940,8 +2003,10 @@ def create_receivable(db: Session, payload: ReceivableCreate):
         db.add(adjustment)
         db.flush()
         _update_receivable_balance(db, original.id)
-        db.commit()
-        db.refresh(original)
+        db.flush()
+        if commit:
+            db.commit()
+            db.refresh(original)
         return _serialize_receivable(original)
 
     if gross_amount <= 0:
@@ -1969,8 +2034,10 @@ def create_receivable(db: Session, payload: ReceivableCreate):
     db.add(row)
     db.flush()
     _update_receivable_balance(db, row.id)
-    db.commit()
-    db.refresh(row)
+    db.flush()
+    if commit:
+        db.commit()
+        db.refresh(row)
     return _serialize_receivable(row)
 
 
@@ -2005,7 +2072,7 @@ def list_receivables(
     return [_serialize_receivable(row) for row in rows]
 
 
-def collect_receivable(db: Session, receivable_id: int, payload: ReceivableCollectPayload, username: str | None = None):
+def collect_receivable(db: Session, receivable_id: int, payload: ReceivableCollectPayload, username: str | None = None, *, commit: bool = True):
     receivable = db.get(Receivable, int(receivable_id))
     if not receivable:
         raise ValueError('Receivable not found.')
@@ -2042,7 +2109,11 @@ def collect_receivable(db: Session, receivable_id: int, payload: ReceivableColle
             allow_overdraw=False,
         ),
         username=username,
+        commit=False,
     )
+    db.flush()
+    if commit:
+        db.commit()
     receivable = db.get(Receivable, int(receivable_id))
     return {
         'receivable': _serialize_receivable(receivable),
@@ -2050,7 +2121,7 @@ def collect_receivable(db: Session, receivable_id: int, payload: ReceivableColle
     }
 
 
-def create_payable(db: Session, payload: PayableCreate):
+def create_payable(db: Session, payload: PayableCreate, *, commit: bool = True):
     gross_amount = _as_float(payload.gross_amount)
     amount_paid = max(_as_float(payload.amount_paid), 0)
     if gross_amount <= 0:
@@ -2076,8 +2147,10 @@ def create_payable(db: Session, payload: PayableCreate):
     db.add(row)
     db.flush()
     _update_payable_balance(db, row.id)
-    db.commit()
-    db.refresh(row)
+    db.flush()
+    if commit:
+        db.commit()
+        db.refresh(row)
     return _serialize_payable(row)
 
 

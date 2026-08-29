@@ -683,6 +683,7 @@ def _maybe_create_payable_from_receiving(db: Session, receiving: ReceivingRecord
             notes=f'Auto-created from receiving {receiving.receiving_no}',
             bir_include=True,
         ),
+        commit=False,
     )
 
 
