@@ -25,8 +25,8 @@ def replace_in_function(path: str, function_name: str, old: str, new: str, count
     end = len(text) if next_def < 0 else next_def + 1
     block = text[start:end]
     found = block.count(old)
-    if found != count:
-        raise SystemExit(f'{path}:{function_name}: expected {count} occurrence(s), found {found}: {old!r}')
+    if found < count:
+        raise SystemExit(f'{path}:{function_name}: expected at least {count} occurrence(s), found {found}: {old!r}')
     block = block.replace(old, new, count)
     target.write_text(text[:start] + block + text[end:], encoding='utf-8')
 
@@ -137,10 +137,6 @@ replace_in_function(
 # Event workflow roots: serialize all state mutations that can touch financial links.
 event_path = ROOT / 'backend/app/services/event_service.py'
 event_text = event_path.read_text(encoding='utf-8')
-helper_anchor = "def _event_query(db: Session):\n    return db.query(EventBooking).options(\n"
-if helper_anchor not in event_text:
-    raise SystemExit('event _event_query anchor not found')
-# Add helper after _event_query block, before _line_total.
 line_marker = '\n\ndef _line_total('
 idx = event_text.find(line_marker)
 if idx < 0:
@@ -169,11 +165,10 @@ for function_name in ('update_event', 'confirm_event', 'complete_event', 'cancel
     end = len(text) if next_def < 0 else next_def + 1
     block = text[start:end]
     old = "    event = _event_query(db).filter(EventBooking.id == int(event_id)).first()\n"
-    if block.count(old) != 1:
-        raise SystemExit(f'{function_name}: expected one initial event query, found {block.count(old)}')
+    if old not in block:
+        raise SystemExit(f'{function_name}: initial event query not found')
     new = "    locked_event = _lock_event(db, event_id)\n    if not locked_event:\n        raise ValueError('Event not found.')\n    event = _event_query(db).filter(EventBooking.id == int(event_id)).first()\n"
     block = block.replace(old, new, 1)
-    # Existing not-found check is now redundant but harmless; remove exactly once for clarity.
     redundant = "    if not event:\n        raise ValueError('Event not found.')\n"
     if redundant in block:
         block = block.replace(redundant, '', 1)
@@ -184,7 +179,7 @@ atomic_path = ROOT / 'backend/tests/test_transaction_atomicity_pass66.py'
 atomic = atomic_path.read_text(encoding='utf-8')
 atomic = atomic.replace(
     'from app.models.entities import EventPayment, FinancialAccount, JournalEntry, MoneyTransaction, Receivable\n',
-    'from app.models.entities import (\n    EventPayment, FinancialAccount, InventoryItem, JournalEntry, MoneyTransaction,\n    Payable, PurchaseOrder, PurchaseRequest, StockMovement, Supplier, Receivable,\n)\n',
+    'from app.models.entities import (\n    EventPayment, FinancialAccount, InventoryItem, JournalEntry, MoneyTransaction,\n    Payable, PurchaseOrder, PurchaseRequest, ReceivingRecord, StockMovement, Supplier, Receivable,\n)\n',
     1,
 )
 atomic = atomic.replace(
@@ -235,7 +230,7 @@ if 'def test_receiving_late_failure_rolls_back_stock_effects' not in atomic:
     db.rollback()
     db.expire_all()
     refreshed_item = db.get(InventoryItem, item.id)
-    refreshed_receiving = db.get(procurement_service.ReceivingRecord, receiving['id'])
+    refreshed_receiving = db.get(ReceivingRecord, receiving['id'])
     assert refreshed_receiving.status == 'draft'
     assert float(refreshed_item.quantity_on_hand or 0) == 10
     assert db.query(StockMovement).filter(StockMovement.receiving_record_id == receiving['id']).count() == 0
@@ -298,11 +293,6 @@ pg = pg_path.read_text(encoding='utf-8')
 pg = pg.replace(
     'from app.models.entities import FinancialAccount, MoneyTransaction, Receivable\n',
     'from app.models.entities import (\n    FinancialAccount, JournalEntry, MoneyTransaction, PayrollPeriod, PayrollPeriodLine,\n    PurchaseOrder, PurchaseRequest, PurchaseRequestLine, Receivable, Supplier,\n)\n',
-    1,
-)
-pg = pg.replace(
-    'from app.services.cashflow_service import (\n',
-    'from app.services.cashflow_service import (\n',
     1,
 )
 if 'from app.services.payroll_period_service import post_payroll_period' not in pg:
