@@ -1,0 +1,53 @@
+name: Pass 66 guarded transaction closure
+
+on:
+  push:
+    branches:
+      - pass-66-transaction-integrity-concurrency
+    paths:
+      - scripts/pass66_finish.py
+      - .github/workflows/pass66-finish.yml
+
+permissions:
+  contents: write
+
+jobs:
+  apply:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Check out branch without marketplace actions
+        env:
+          GH_TOKEN: ${{ github.token }}
+          REPOSITORY: ${{ github.repository }}
+          BRANCH: ${{ github.ref_name }}
+        run: |
+          set -euo pipefail
+          AUTH="$(printf 'x-access-token:%s' "$GH_TOKEN" | base64 -w0)"
+          git init .
+          git remote add origin "https://github.com/${REPOSITORY}.git"
+          git -c http.extraheader="AUTHORIZATION: Basic ${AUTH}" fetch --depth=1 origin "$BRANCH"
+          git checkout -B "$BRANCH" FETCH_HEAD
+
+      - name: Apply guarded Pass 66 closure
+        run: |
+          set -euo pipefail
+          python3 scripts/pass66_finish.py
+          git diff --check
+
+      - name: Commit and push closure
+        env:
+          GH_TOKEN: ${{ github.token }}
+          REPOSITORY: ${{ github.repository }}
+          BRANCH: ${{ github.ref_name }}
+        run: |
+          set -euo pipefail
+          if git diff --quiet; then
+            echo "No changes produced."
+            exit 0
+          fi
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add backend
+          git commit -m "Pass 66: close workflow-root atomicity and concurrency gaps"
+          AUTH="$(printf 'x-access-token:%s' "$GH_TOKEN" | base64 -w0)"
+          git -c http.extraheader="AUTHORIZATION: Basic ${AUTH}" push origin "HEAD:${BRANCH}"
