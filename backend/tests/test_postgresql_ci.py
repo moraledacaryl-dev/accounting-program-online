@@ -5,9 +5,11 @@ from uuid import uuid4
 import pytest
 from sqlalchemy import text
 
+from app.core.settings import settings
 from app.db.database import SessionLocal, engine
 from app.models.entities import FinancialAccount, MenuItem, MoneyTransaction, Payable, SaleOrder
 from app.models.mutation_idempotency import MutationIdempotency
+from app.models.operations_outbox import OperationsOutboxEvent
 from app.schemas.cashflow import MoneyTransactionCreate, PayableCreate, PayablePayPayload
 from app.schemas.common import SaleOrderCreate
 from app.services.auth_security_service import (
@@ -17,6 +19,7 @@ from app.services.auth_security_service import (
     record_login_failure,
 )
 from app.services.cashflow_service import create_money_transaction, ensure_default_financial_accounts
+from app.services.operations_outbox_service import enqueue_operations_event
 from app.services.payable_atomicity_service import (
     create_payable_idempotent,
     pay_payable_idempotent,
@@ -33,7 +36,7 @@ pytestmark = pytest.mark.skipif(
 def test_postgresql_migration_head_and_auth_security_tables_exist():
     with engine.connect() as connection:
         head = connection.execute(text('SELECT version_num FROM alembic_version')).scalar_one()
-        assert head == '0007_payable_idempotency'
+        assert head == '0008_operations_outbox'
 
         tables = set(
             connection.execute(
@@ -47,6 +50,7 @@ def test_postgresql_migration_head_and_auth_security_tables_exist():
     assert 'auth_login_failures' in tables
     assert 'revoked_access_tokens' in tables
     assert 'mutation_idempotency' in tables
+    assert 'operations_outbox_events' in tables
     assert 'money_transactions' in tables
     assert 'sale_orders' in tables
 
@@ -211,3 +215,42 @@ def test_postgresql_payable_create_and_payment_replays_are_idempotent_and_atomic
         assert db.query(MutationIdempotency).filter(
             MutationIdempotency.idempotency_key.in_([create_key, payment_key])
         ).count() == 2
+
+
+def test_postgresql_operations_outbox_event_id_is_idempotent(monkeypatch):
+    monkeypatch.setattr(settings, 'operations_integration_enabled', True)
+    marker = uuid4().hex[:12]
+    event_id = f'pass68-outbox-{marker}'
+
+    with SessionLocal() as db:
+        first = enqueue_operations_event(
+            db,
+            event_id=event_id,
+            event_type='pass68.test',
+            title='Pass 68 PostgreSQL outbox',
+            summary='first enqueue',
+            payload={'marker': marker},
+        )
+        assert first is not None
+        db.commit()
+        first_id = first.id
+
+    with SessionLocal() as db:
+        replay = enqueue_operations_event(
+            db,
+            event_id=event_id,
+            event_type='pass68.test',
+            title='Pass 68 PostgreSQL outbox',
+            summary='replay',
+            payload={'marker': marker},
+        )
+        assert replay is not None
+        db.commit()
+        assert replay.id == first_id
+        assert db.query(OperationsOutboxEvent).filter(
+            OperationsOutboxEvent.event_id == event_id
+        ).count() == 1
+        db.query(OperationsOutboxEvent).filter(
+            OperationsOutboxEvent.event_id == event_id
+        ).delete()
+        db.commit()

@@ -1,6 +1,5 @@
 from types import SimpleNamespace
 
-from fastapi import BackgroundTasks
 from sqlalchemy import create_engine
 from sqlalchemy.orm import sessionmaker
 
@@ -36,7 +35,6 @@ def test_purchase_request_create_returns_serialized_record_without_duplicate_com
 
     result = add_purchase_request(
         payload=payload,
-        background_tasks=BackgroundTasks(),
         db=db,
         user=SimpleNamespace(username='auditor'),
     )

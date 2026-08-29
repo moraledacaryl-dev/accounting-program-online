@@ -1,18 +1,18 @@
-from fastapi import APIRouter, BackgroundTasks, Depends, HTTPException, status
+from fastapi import APIRouter, Depends, HTTPException, status
 from sqlalchemy.orm import Session
 
 from app.api.deps import require_permissions
 from app.db.database import get_db
 from app.schemas.procurement import ProcurementStatusAction, PurchaseRequestCreate, PurchaseRequestUpdate
-from app.services.operations_integration import publish_operations_event
+from app.services.operations_outbox_service import enqueue_operations_event
 from app.services.procurement_service import (
     create_purchase_order_from_request,
-    create_purchase_request,
     delete_purchase_request,
     list_purchase_requests,
     set_purchase_request_status,
     update_purchase_request,
 )
+from app.services.purchase_request_atomicity_service import create_purchase_request_uncommitted
 
 router = APIRouter()
 
@@ -30,16 +30,19 @@ def get_purchase_requests(
 @router.post('/', status_code=status.HTTP_201_CREATED)
 def add_purchase_request(
     payload: PurchaseRequestCreate,
-    background_tasks: BackgroundTasks,
     db: Session = Depends(get_db),
     user=Depends(require_permissions('purchase_requests.create')),
 ):
     try:
-        item = create_purchase_request(db, payload, username=getattr(user, 'username', None))
+        item = create_purchase_request_uncommitted(
+            db,
+            payload,
+            username=getattr(user, 'username', None),
+        )
         lines = item.get('lines') or []
         estimated_total = float(item.get('estimated_total') or 0)
-        background_tasks.add_task(
-            publish_operations_event,
+        enqueue_operations_event(
+            db,
             event_id=f"purchase-request:{item['id']}:created",
             event_type='purchase_request.pending',
             title=f"Purchase request {item['request_no']} pending review",
@@ -56,6 +59,7 @@ def add_purchase_request(
                 'line_count': len(lines),
             },
         )
+        db.commit()
         return item
     except ValueError as e:
         db.rollback()
