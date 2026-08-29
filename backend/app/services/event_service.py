@@ -65,6 +65,16 @@ def _event_query(db: Session):
     )
 
 
+def _lock_event(db: Session, event_id: int):
+    return (
+        db.query(EventBooking)
+        .filter(EventBooking.id == int(event_id))
+        .populate_existing()
+        .with_for_update()
+        .first()
+    )
+
+
 def _line_total(payload: EventLinePayload) -> float:
     qty = _as_float(payload.quantity, 1)
     unit_price = _as_float(payload.unit_price)
@@ -460,9 +470,10 @@ def _sync_financial_links(db: Session, event: EventBooking, username: str | None
 
 
 def update_event(db: Session, event_id: int, payload: EventBookingUpdate, username: str | None = None):
-    event = _event_query(db).filter(EventBooking.id == int(event_id)).first()
-    if not event:
+    locked_event = _lock_event(db, event_id)
+    if not locked_event:
         raise ValueError('Event not found.')
+    event = _event_query(db).filter(EventBooking.id == int(event_id)).first()
     if _norm(event.status) == 'cancelled':
         raise ValueError('Cancelled events cannot be edited.')
 
@@ -513,9 +524,10 @@ def update_event(db: Session, event_id: int, payload: EventBookingUpdate, userna
 
 
 def confirm_event(db: Session, event_id: int, payload: EventActionPayload, username: str | None = None, *, commit: bool = True):
-    event = _event_query(db).filter(EventBooking.id == int(event_id)).first()
-    if not event:
+    locked_event = _lock_event(db, event_id)
+    if not locked_event:
         raise ValueError('Event not found.')
+    event = _event_query(db).filter(EventBooking.id == int(event_id)).first()
     if _norm(event.status) == 'cancelled':
         raise ValueError('Cancelled events cannot be confirmed.')
     if _norm(event.status) == 'completed':
@@ -534,9 +546,10 @@ def confirm_event(db: Session, event_id: int, payload: EventActionPayload, usern
 
 
 def complete_event(db: Session, event_id: int, payload: EventActionPayload, username: str | None = None):
-    event = _event_query(db).filter(EventBooking.id == int(event_id)).first()
-    if not event:
+    locked_event = _lock_event(db, event_id)
+    if not locked_event:
         raise ValueError('Event not found.')
+    event = _event_query(db).filter(EventBooking.id == int(event_id)).first()
     if _norm(event.status) == 'cancelled':
         raise ValueError('Cancelled events cannot be completed.')
     if _norm(event.status) == 'draft':
@@ -552,9 +565,10 @@ def complete_event(db: Session, event_id: int, payload: EventActionPayload, user
 
 
 def cancel_event(db: Session, event_id: int, payload: EventActionPayload, username: str | None = None):
-    event = _event_query(db).filter(EventBooking.id == int(event_id)).first()
-    if not event:
+    locked_event = _lock_event(db, event_id)
+    if not locked_event:
         raise ValueError('Event not found.')
+    event = _event_query(db).filter(EventBooking.id == int(event_id)).first()
     if _norm(event.status) == 'completed':
         raise ValueError('Completed events cannot be cancelled.')
     receivable = db.get(Receivable, int(event.receivable_id)) if event.receivable_id else None
@@ -624,9 +638,10 @@ def _post_event_payment_journal(db: Session, event: EventBooking, payment: Event
 
 
 def record_event_payment(db: Session, event_id: int, payload: EventPaymentPayload, username: str | None = None):
-    event = _event_query(db).filter(EventBooking.id == int(event_id)).first()
-    if not event:
+    locked_event = _lock_event(db, event_id)
+    if not locked_event:
         raise ValueError('Event not found.')
+    event = _event_query(db).filter(EventBooking.id == int(event_id)).first()
     if _norm(event.status) == 'cancelled':
         raise ValueError('Cancelled events cannot receive payments.')
 

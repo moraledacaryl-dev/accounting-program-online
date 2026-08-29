@@ -7,7 +7,10 @@ from uuid import uuid4
 import pytest
 
 from app.db.database import SessionLocal, engine
-from app.models.entities import FinancialAccount, MoneyTransaction, Receivable
+from app.models.entities import (
+    FinancialAccount, JournalEntry, MoneyTransaction, PayrollPeriod, PayrollPeriodLine,
+    PurchaseOrder, PurchaseRequest, PurchaseRequestLine, Receivable, Supplier,
+)
 from app.schemas.cashflow import MoneyTransactionCreate, ReceivableCollectPayload, ReceivableCreate
 from app.services.cashflow_service import (
     collect_receivable,
@@ -15,6 +18,8 @@ from app.services.cashflow_service import (
     create_receivable,
     ensure_default_financial_accounts,
 )
+from app.services.payroll_period_service import post_payroll_period
+from app.services.procurement_service import create_purchase_order_from_request
 
 
 pytestmark = pytest.mark.skipif(
@@ -191,3 +196,77 @@ def test_postgresql_concurrent_receivable_collection_cannot_overcollect():
         assert db.query(MoneyTransaction).filter(
             MoneyTransaction.receivable_id == receivable_id
         ).count() == 1
+
+
+def test_postgresql_concurrent_pr_conversion_creates_one_po():
+    marker = uuid4().hex[:10]
+    with SessionLocal() as db:
+        supplier = Supplier(name=f'Pass66 supplier {marker}', code=f'P66S-{marker}', is_active=True)
+        db.add(supplier)
+        db.flush()
+        pr = PurchaseRequest(
+            request_no=f'P66PR-{marker}', request_date='2026-08-29', supplier_id=supplier.id,
+            status='approved', requested_by='pass66-ci', approved_by='pass66-ci',
+        )
+        db.add(pr)
+        db.flush()
+        db.add(PurchaseRequestLine(
+            purchase_request_id=pr.id, description='Concurrent conversion', quantity=2,
+            unit='pc', estimated_unit_cost=100, sort_order=0,
+        ))
+        db.commit()
+        pr_id = pr.id
+
+    def convert():
+        with SessionLocal() as db:
+            try:
+                return create_purchase_order_from_request(db, pr_id, username='pass66-ci')
+            except Exception:
+                db.rollback()
+                raise
+
+    results = _run_concurrently(convert, convert)
+    assert [kind for kind, _ in results].count('ok') == 2
+    ids = {value['id'] for kind, value in results if kind == 'ok'}
+    assert len(ids) == 1
+
+    with SessionLocal() as db:
+        pr = db.get(PurchaseRequest, pr_id)
+        assert pr.status == 'converted_to_po'
+        assert db.query(PurchaseOrder).filter(PurchaseOrder.purchase_request_id == pr_id).count() == 1
+
+
+def test_postgresql_concurrent_payroll_posting_creates_one_journal():
+    marker = uuid4().hex[:10]
+    with SessionLocal() as db:
+        period = PayrollPeriod(
+            name=f'Pass66 payroll {marker}', period_start='2026-08-01', period_end='2026-08-15',
+            release_date='2026-08-16', status='reviewed', source_type='manual',
+        )
+        db.add(period)
+        db.flush()
+        db.add(PayrollPeriodLine(
+            payroll_period_id=period.id, employee_name='Pass66 Employee', department='Test',
+            gross_pay=1000, net_pay=900, deductions=100, employer_contribution=50,
+        ))
+        db.commit()
+        period_id = period.id
+
+    def post():
+        with SessionLocal() as db:
+            try:
+                return post_payroll_period(db, period_id, username='pass66-ci', post_date='2026-08-29')
+            except Exception:
+                db.rollback()
+                raise
+
+    results = _run_concurrently(post, post)
+    assert [kind for kind, _ in results].count('ok') == 2
+    journal_ids = {value['journal']['id'] for kind, value in results if kind == 'ok'}
+    assert len(journal_ids) == 1
+
+    with SessionLocal() as db:
+        period = db.get(PayrollPeriod, period_id)
+        assert period.status == 'posted'
+        assert period.generated_journal_entry_id in journal_ids
+        assert db.query(JournalEntry).filter(JournalEntry.reference_no == f'PPR-{period_id}').count() == 1
