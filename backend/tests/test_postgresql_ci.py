@@ -33,7 +33,7 @@ pytestmark = pytest.mark.skipif(
 def test_postgresql_migration_head_and_auth_security_tables_exist():
     with engine.connect() as connection:
         head = connection.execute(text('SELECT version_num FROM alembic_version')).scalar_one()
-        assert head == '0007_payable_idempotency'
+        assert head == '0008_operations_outbox'
 
         tables = set(
             connection.execute(
@@ -47,6 +47,7 @@ def test_postgresql_migration_head_and_auth_security_tables_exist():
     assert 'auth_login_failures' in tables
     assert 'revoked_access_tokens' in tables
     assert 'mutation_idempotency' in tables
+    assert 'operations_outbox_events' in tables
     assert 'money_transactions' in tables
     assert 'sale_orders' in tables
 
