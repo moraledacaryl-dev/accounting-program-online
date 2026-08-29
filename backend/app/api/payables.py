@@ -1,10 +1,11 @@
-from fastapi import APIRouter, BackgroundTasks, Depends, Header, HTTPException, Query
+from fastapi import APIRouter, Depends, Header, HTTPException, Query
 from sqlalchemy.orm import Session
 
 from app.api.deps import require_permissions
 from app.db.database import get_db
 from app.schemas.cashflow import CashflowActionPayload, PayableCreate, PayablePayPayload
-from app.services.operations_integration import is_due_or_overdue, publish_operations_event
+from app.services.operations_integration import is_due_or_overdue
+from app.services.operations_outbox_service import enqueue_operations_event
 from app.services.cashflow_service import (
     list_payables,
     reopen_payable,
@@ -44,20 +45,18 @@ def get_payables(
 @router.post('/')
 def add_payable(
     payload: PayableCreate,
-    background_tasks: BackgroundTasks,
     idempotency_key: str | None = Header(default=None, alias='Idempotency-Key'),
     db: Session = Depends(get_db),
     user=Depends(require_permissions('cashflow.money_out')),
 ):
     try:
         item, replayed = create_payable_idempotent(db, payload, idempotency_key)
-        db.commit()
 
         balance_due = float(item.get('balance_due') or 0)
         due_date = item.get('due_date')
         if not replayed and balance_due > 0 and is_due_or_overdue(due_date):
-            background_tasks.add_task(
-                publish_operations_event,
+            enqueue_operations_event(
+                db,
                 event_id=f"payable:{item['id']}:due:{due_date}",
                 event_type='payable.due',
                 title=f"Payable due: {item.get('supplier_name') or 'Unspecified supplier'}",
@@ -75,6 +74,8 @@ def add_payable(
                     'status': item.get('status'),
                 },
             )
+
+        db.commit()
         return item
     except IdempotencyConflict as e:
         db.rollback()
