@@ -187,6 +187,10 @@ jobs:
           print('Public application handoff URLs: PASS')
           PY
 
+      - name: Validate Pass 70 UX source contract
+        working-directory: frontend
+        run: node scripts/validate-pass70-source.js
+
       - name: Build frontend
         working-directory: frontend
         run: |
