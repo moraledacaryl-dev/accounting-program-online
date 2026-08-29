@@ -58,19 +58,23 @@ test('payroll detail header and tabs stay in normal flow without negative bottom
       </div>`;
     document.body.appendChild(host);
 
-    const headerStyle = getComputedStyle(document.getElementById('payroll-header'));
-    const tabsStyle = getComputedStyle(document.getElementById('payroll-tabs'));
-    const headerRect = document.getElementById('payroll-header').getBoundingClientRect();
-    const kpiRect = document.getElementById('payroll-kpis').getBoundingClientRect();
-
-    host.remove();
-    return {
+    const header = document.getElementById('payroll-header');
+    const tabs = document.getElementById('payroll-tabs');
+    const kpis = document.getElementById('payroll-kpis');
+    const headerStyle = getComputedStyle(header);
+    const tabsStyle = getComputedStyle(tabs);
+    const headerRect = header.getBoundingClientRect();
+    const kpiRect = kpis.getBoundingClientRect();
+    const snapshot = {
       position: headerStyle.position,
       top: headerStyle.top,
       marginBottom: Number.parseFloat(tabsStyle.marginBottom || '0'),
       headerBottom: headerRect.bottom,
       kpiTop: kpiRect.top,
     };
+
+    host.remove();
+    return snapshot;
   });
 
   expect(layout.position).toBe('relative');
