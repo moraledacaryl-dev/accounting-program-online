@@ -1,0 +1,20 @@
+[Unit]
+Description=Accounting Program Frontend
+After=network.target accounting-backend.service
+
+[Service]
+Type=simple
+User=hiddenoasis
+Group=hiddenoasis
+WorkingDirectory=/opt/accounting-current/frontend
+Environment=NODE_ENV=production
+EnvironmentFile=/etc/hiddenoasis/accounting-frontend.env
+ExecStart=/usr/bin/npm run start -- -H 127.0.0.1 -p 3000
+Restart=always
+RestartSec=5
+NoNewPrivileges=true
+PrivateTmp=true
+ProtectSystem=full
+
+[Install]
+WantedBy=multi-user.target
