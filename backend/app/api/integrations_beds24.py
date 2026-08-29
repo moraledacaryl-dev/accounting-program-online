@@ -259,9 +259,14 @@ def beds24_reset_execute(
 @router.post('/webhook')
 async def beds24_webhook(
     request: Request,
-    secret: str | None = None,
     db: Session = Depends(get_db),
 ):
+    if 'secret' in request.query_params:
+        raise HTTPException(
+            status_code=400,
+            detail='Webhook credentials must be sent in a supported request header.',
+        )
+
     try:
         payload = await request.json()
     except Exception:
@@ -272,7 +277,7 @@ async def beds24_webhook(
             db,
             payload,
             headers={k.lower(): v for k, v in request.headers.items()},
-            query_secret=secret,
+            query_secret=None,
             triggered_by='beds24_webhook',
         )
         return {'ok': True, 'result': result}
@@ -280,5 +285,5 @@ async def beds24_webhook(
         raise HTTPException(status_code=400, detail=str(exc))
     except ValueError as exc:
         raise HTTPException(status_code=400, detail=str(exc))
-    except Exception as exc:
-        raise HTTPException(status_code=500, detail=str(exc))
+    except Exception:
+        raise HTTPException(status_code=500, detail='Beds24 webhook processing failed.')
