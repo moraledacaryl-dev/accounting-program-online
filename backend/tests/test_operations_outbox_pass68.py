@@ -68,10 +68,13 @@ def test_outbox_enqueue_is_idempotent_by_event_id(monkeypatch):
 def test_claim_retry_and_delivery_lifecycle(monkeypatch):
     monkeypatch.setattr(settings, 'operations_integration_enabled', True)
     db = make_session()
-    enqueue_sample(db)
+    row = enqueue_sample(db)
+    fixed_now = datetime(2026, 8, 29, 10, 0, tzinfo=timezone.utc)
+    row.next_attempt_at = fixed_now
+    db.add(row)
     db.commit()
 
-    claimed = claim_next_operations_event(db, now=datetime(2026, 8, 29, 10, 0, tzinfo=timezone.utc))
+    claimed = claim_next_operations_event(db, now=fixed_now)
     assert claimed is not None
     assert claimed.status == 'processing'
     assert claimed.attempt_count == 1
@@ -81,13 +84,13 @@ def test_claim_retry_and_delivery_lifecycle(monkeypatch):
         claimed.id,
         error_message='temporary outage',
         http_status=503,
-        now=datetime(2026, 8, 29, 10, 0, tzinfo=timezone.utc),
+        now=fixed_now,
     )
     assert failed.status == 'retry'
     assert failed.next_attempt_at is not None
     assert failed.last_http_status == 503
 
-    failed.next_attempt_at = datetime(2026, 8, 29, 10, 0, tzinfo=timezone.utc)
+    failed.next_attempt_at = fixed_now
     db.add(failed)
     db.commit()
 
@@ -164,9 +167,13 @@ def test_best_effort_background_publisher_cannot_reappear():
 
     assert offenders == []
 
-    payables = (app_root / 'api/payables.py').read_text(encoding='utf-8')
-    reconciliations = (app_root / 'api/reconciliations.py').read_text(encoding='utf-8')
-    assert 'BackgroundTasks' not in payables
-    assert 'BackgroundTasks' not in reconciliations
-    assert 'enqueue_operations_event' in payables
-    assert 'enqueue_operations_event' in reconciliations
+    producer_paths = [
+        app_root / 'api/payables.py',
+        app_root / 'api/reconciliations.py',
+        app_root / 'api/purchase_requests.py',
+        app_root / 'api/purchase_orders.py',
+    ]
+    for path in producer_paths:
+        text = path.read_text(encoding='utf-8')
+        assert 'BackgroundTasks' not in text
+        assert 'enqueue_operations_event' in text
