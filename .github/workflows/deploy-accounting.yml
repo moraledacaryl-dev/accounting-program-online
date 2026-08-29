@@ -44,6 +44,6 @@ jobs:
             chmod 700 "$BOOTSTRAP"
             SOURCE_ROOT="$ROOT" bash "$BOOTSTRAP" "$RELEASE_SHA"
             rm -f "$BOOTSTRAP"
-            /opt/accounting-releases/$RELEASE_SHA/scripts/release/activate-release.sh "$RELEASE_SHA"
+            bash "/opt/accounting-releases/$RELEASE_SHA/scripts/release/activate-release.sh" "$RELEASE_SHA"
         env:
           RELEASE_SHA: ${{ inputs.release_sha }}
