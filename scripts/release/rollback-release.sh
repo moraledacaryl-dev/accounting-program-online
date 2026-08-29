@@ -13,7 +13,7 @@ fi
 
 [[ "$TARGET_SHA" =~ ^[0-9a-f]{40}$ ]] || { echo "No valid rollback SHA available." >&2; exit 2; }
 TARGET="$RELEASE_ROOT/$TARGET_SHA"
-"$TARGET/scripts/release/verify-release.sh" "$TARGET_SHA"
+bash "$TARGET/scripts/release/verify-release.sh" "$TARGET_SHA"
 
 OLD_PATH="$PATH"
 set -a
