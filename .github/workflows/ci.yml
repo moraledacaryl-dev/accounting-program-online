@@ -129,9 +129,9 @@ jobs:
           python3 -m alembic upgrade head
           python3 -m alembic current
 
-      - name: Run PostgreSQL workflow tests
+      - name: Run PostgreSQL workflow and concurrency tests
         working-directory: backend
-        run: python3 -m pytest tests/test_postgresql_ci.py -q
+        run: python3 -m pytest tests/test_postgresql_ci.py tests/test_postgresql_transaction_concurrency.py -q
 
   frontend-build:
     name: Frontend build
