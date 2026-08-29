@@ -155,10 +155,18 @@ def test_due_date_uses_manila_business_clock(monkeypatch):
 
 def test_best_effort_background_publisher_cannot_reappear():
     backend_root = Path(__file__).resolve().parents[1]
-    payables = (backend_root / 'app/api/payables.py').read_text(encoding='utf-8')
-    integration = (backend_root / 'app/services/operations_integration.py').read_text(encoding='utf-8')
+    app_root = backend_root / 'app'
+    offenders = []
+    for path in app_root.rglob('*.py'):
+        text = path.read_text(encoding='utf-8')
+        if 'publish_operations_event' in text:
+            offenders.append(str(path.relative_to(backend_root)))
 
+    assert offenders == []
+
+    payables = (app_root / 'api/payables.py').read_text(encoding='utf-8')
+    reconciliations = (app_root / 'api/reconciliations.py').read_text(encoding='utf-8')
     assert 'BackgroundTasks' not in payables
-    assert 'publish_operations_event' not in payables
-    assert 'publish_operations_event' not in integration
+    assert 'BackgroundTasks' not in reconciliations
     assert 'enqueue_operations_event' in payables
+    assert 'enqueue_operations_event' in reconciliations
