@@ -1,0 +1,50 @@
+name: Pass 66 guarded transaction patch
+
+on:
+  push:
+    branches:
+      - pass-66-transaction-integrity-concurrency
+    paths:
+      - scripts/pass66_apply.py
+      - .github/workflows/pass66-apply.yml
+
+permissions:
+  contents: write
+
+jobs:
+  apply:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Check out branch
+        env:
+          GH_TOKEN: ${{ github.token }}
+          REPOSITORY: ${{ github.repository }}
+          BRANCH: ${{ github.ref_name }}
+        run: |
+          set -euo pipefail
+          AUTH="$(printf 'x-access-token:%s' "$GH_TOKEN" | base64 -w0)"
+          git init .
+          git remote add origin "https://github.com/${REPOSITORY}.git"
+          git -c http.extraheader="AUTHORIZATION: Basic ${AUTH}" fetch --depth=1 origin "$BRANCH"
+          git checkout -B "$BRANCH" FETCH_HEAD
+
+      - name: Apply guarded transaction patch
+        run: |
+          set -euo pipefail
+          python3 scripts/pass66_apply.py
+          git diff --check
+          python3 -m compileall -q backend/app
+
+      - name: Commit and push
+        env:
+          GH_TOKEN: ${{ github.token }}
+          REPOSITORY: ${{ github.repository }}
+          BRANCH: ${{ github.ref_name }}
+        run: |
+          set -euo pipefail
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add backend/app
+          git commit -m "Pass 66: enforce atomic money workflows and row locks"
+          AUTH="$(printf 'x-access-token:%s' "$GH_TOKEN" | base64 -w0)"
+          git -c http.extraheader="AUTHORIZATION: Basic ${AUTH}" push origin "HEAD:${BRANCH}"
