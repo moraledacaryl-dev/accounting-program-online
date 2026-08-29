@@ -34,7 +34,7 @@ META="$BACKUP_DIR/accounting-$STAMP.meta"
 TMP="$DUMP.tmp"
 
 trap 'rm -f "$TMP"' EXIT
-sudo -u postgres pg_dump -Fc --dbname "$DB_NAME" --file "$TMP"
+sudo -u postgres pg_dump -Fc --dbname "$DB_NAME" > "$TMP"
 pg_restore --list "$TMP" >/dev/null
 mv "$TMP" "$DUMP"
 trap - EXIT
