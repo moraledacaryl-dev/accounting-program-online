@@ -1,0 +1,49 @@
+name: Pass 71 DR Contract
+
+on:
+  pull_request:
+    paths:
+      - 'scripts/dr/**'
+      - 'scripts/release/**'
+      - 'scripts/validate-pass71-source.sh'
+      - 'deploy/systemd/**'
+      - '.github/workflows/deploy-accounting.yml'
+      - '.github/workflows/pass71-contract.yml'
+  push:
+    branches:
+      - main
+      - 'pass-*'
+    paths:
+      - 'scripts/dr/**'
+      - 'scripts/release/**'
+      - 'scripts/validate-pass71-source.sh'
+      - 'deploy/systemd/**'
+      - '.github/workflows/deploy-accounting.yml'
+      - '.github/workflows/pass71-contract.yml'
+
+permissions:
+  contents: read
+
+jobs:
+  dr-release-contract:
+    name: DR and immutable release contract
+    runs-on: ubuntu-latest
+    steps:
+      - name: Check out exact commit without marketplace actions
+        shell: bash
+        run: |
+          set -euo pipefail
+          git init .
+          git remote add origin "https://github.com/${GITHUB_REPOSITORY}.git"
+          git fetch --no-tags --depth=1 origin "${GITHUB_SHA}"
+          git checkout --detach FETCH_HEAD
+          test "$(git rev-parse HEAD)" = "${GITHUB_SHA}"
+
+      - name: Validate Pass 71 contract
+        run: bash scripts/validate-pass71-source.sh
+
+      - name: Reject mutable production paths in canonical units
+        run: |
+          set -euo pipefail
+          ! grep -R '/opt/accounting-program-online/' deploy/systemd/accounting-*.service
+          grep -R '/opt/accounting-current/' deploy/systemd/accounting-*.service
