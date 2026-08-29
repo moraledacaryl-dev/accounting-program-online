@@ -30,6 +30,24 @@ from app.services.beds24_sync_service import (
 )
 
 router = APIRouter()
+BEDS24_CREDENTIAL_FIELDS = ('access_token', 'refresh_token', 'invite_code', 'webhook_secret')
+
+
+def _credential_safe_settings(raw: dict) -> dict:
+    safe = dict(raw or {})
+    for key in BEDS24_CREDENTIAL_FIELDS:
+        configured = bool(str(safe.get(key) or '').strip())
+        safe[key] = ''
+        safe[f'{key}_configured'] = configured
+    return safe
+
+
+def _preserve_blank_credentials(data: dict) -> dict:
+    sanitized = dict(data or {})
+    for key in BEDS24_CREDENTIAL_FIELDS:
+        if key in sanitized and not str(sanitized.get(key) or '').strip():
+            sanitized.pop(key, None)
+    return sanitized
 
 
 @router.get('/settings')
@@ -38,7 +56,7 @@ def get_beds24_settings(
     user=Depends(require_permissions('integrations.view')),
 ):
     return {
-        'settings': load_beds24_settings(db),
+        'settings': _credential_safe_settings(load_beds24_settings(db)),
     }
 
 
@@ -48,11 +66,11 @@ def update_beds24_settings(
     db: Session = Depends(get_db),
     user=Depends(require_permissions('integrations.manage')),
 ):
-    data = payload.model_dump(exclude_unset=True)
+    data = _preserve_blank_credentials(payload.model_dump(exclude_unset=True))
     try:
         settings = save_beds24_settings(db, data, updated_by=getattr(user, 'username', None))
         return {
-            'settings': settings,
+            'settings': _credential_safe_settings(settings),
             'message': 'Beds24 settings saved.',
         }
     except Exception as exc:
