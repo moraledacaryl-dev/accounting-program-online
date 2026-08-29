@@ -6,7 +6,6 @@ from typing import Any
 from urllib import error, request
 
 from sqlalchemy import func, or_
-from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session
 
 from app.core.settings import settings
@@ -110,19 +109,14 @@ def enqueue_operations_event(
         attempt_count=0,
         next_attempt_at=datetime.now(timezone.utc),
     )
-
-    try:
-        with db.begin_nested():
-            db.add(row)
-            db.flush()
-        return row
-    except IntegrityError:
-        existing = db.query(OperationsOutboxEvent).filter(
-            OperationsOutboxEvent.event_id == normalized_id
-        ).first()
-        if existing:
-            return existing
-        raise
+    # Deliberately flush in the caller's transaction.  A SAVEPOINT here can
+    # become the outermost SQLite transaction and survive db.rollback(), which
+    # violates the defining outbox invariant.  The unique event_id constraint
+    # remains the final database-level duplicate guard; callers roll back the
+    # whole business mutation if a true concurrent uniqueness conflict occurs.
+    db.add(row)
+    db.flush()
+    return row
 
 
 def _claimable_filter(now: datetime):
