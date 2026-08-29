@@ -3,6 +3,7 @@ from __future__ import annotations
 import logging
 from pathlib import Path
 
+from app.api.integrations_beds24 import _credential_safe_settings, _preserve_blank_credentials
 from app.core.logging_security import SensitiveQueryAccessLogFilter, redact_sensitive_query
 
 
@@ -49,6 +50,43 @@ def test_beds24_webhook_no_longer_authenticates_query_secret():
     assert 'secret: str | None = None' not in source
     assert 'query_secret=secret' not in source
     assert "detail='Beds24 webhook processing failed.'" in source
+
+
+def test_beds24_settings_never_return_stored_credentials():
+    safe = _credential_safe_settings(
+        {
+            'enabled': True,
+            'access_token': 'access-secret',
+            'refresh_token': 'refresh-secret',
+            'invite_code': 'invite-secret',
+            'webhook_secret': 'webhook-secret',
+        }
+    )
+
+    for key in ('access_token', 'refresh_token', 'invite_code', 'webhook_secret'):
+        assert safe[key] == ''
+        assert safe[f'{key}_configured'] is True
+    rendered = repr(safe)
+    assert 'access-secret' not in rendered
+    assert 'refresh-secret' not in rendered
+    assert 'invite-secret' not in rendered
+    assert 'webhook-secret' not in rendered
+
+
+def test_blank_beds24_credentials_preserve_existing_values_on_save():
+    payload = _preserve_blank_credentials(
+        {
+            'enabled': True,
+            'access_token': '',
+            'refresh_token': '   ',
+            'webhook_secret': 'replacement-secret',
+        }
+    )
+
+    assert 'access_token' not in payload
+    assert 'refresh_token' not in payload
+    assert payload['webhook_secret'] == 'replacement-secret'
+    assert payload['enabled'] is True
 
 
 def test_detailed_health_requires_privileged_auth_and_includes_outbox_health():
