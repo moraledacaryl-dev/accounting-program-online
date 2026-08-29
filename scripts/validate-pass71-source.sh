@@ -27,7 +27,11 @@ done
 test ! -e deploy/systemd/hiddenoasis-accounting-backend.service
 test ! -e deploy/systemd/hiddenoasis-accounting-frontend.service
 
+grep -Fq 'Environment=UPLOADS_DIR=/var/lib/hiddenoasis/accounting/uploads' deploy/systemd/accounting-backend.service
 grep -Fq 'ReadWritePaths=-/var/lib/hiddenoasis/accounting/uploads' deploy/systemd/accounting-backend.service
+grep -Fq "PRODUCTION_UPLOADS_PATH = Path('/var/lib/hiddenoasis/accounting/uploads')" backend/app/core/settings.py
+grep -Fq 'install -d -o hiddenoasis -g hiddenoasis -m 0750 "$UPLOADS_DIR"' scripts/release/activate-release.sh
+grep -Fq 'LEGACY_UPLOADS_DIR="${LEGACY_UPLOADS_DIR:-/opt/accounting-program-online/backend/uploads}"' scripts/release/activate-release.sh
 grep -Fq 'sha256=' scripts/dr/backup-accounting.sh
 grep -Fq 'pg_restore --exit-on-error' scripts/dr/restore-rehearsal.sh
 grep -Fq 'merge-base --is-ancestor' scripts/release/prepare-release.sh
