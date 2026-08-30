@@ -4,6 +4,7 @@ from datetime import datetime
 
 from sqlalchemy.orm import Session
 
+from app.core.business_clock import business_now
 from app.models.entities import (
     BookingChannel,
     ChartAccount,
@@ -52,7 +53,7 @@ def code_exists(db: Session, entity_key: str, code: str, *, exclude_id: int | No
 
 
 def _build_stem(rule: dict, now: datetime | None = None) -> tuple[str, str]:
-    now = now or datetime.utcnow()
+    now = business_now(now)
     prefix = normalize_code_value(rule.get('prefix') or '')
     if not prefix:
         prefix = 'DOC'
