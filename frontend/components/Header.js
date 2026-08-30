@@ -3,7 +3,7 @@
 import Link from 'next/link';
 import { useEffect, useRef, useState } from 'react';
 import { usePathname, useRouter } from 'next/navigation';
-import { clearToken, globalSearch, logout } from '../lib/api';
+import { globalSearch, logout } from '../lib/api';
 import { useAppShell } from './app-shell/AppShellContext';
 import NavIcon from './app-shell/NavIcon';
 
@@ -201,9 +201,8 @@ export default function Header() {
     try {
       await logout();
     } catch {
-      // Local logout still completes if the server session is already unavailable.
+      // Local navigation still completes if the server session is already unavailable.
     }
-    clearToken();
     if (typeof window !== 'undefined') window.location.href = '/login';
   }
 
