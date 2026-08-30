@@ -32,6 +32,10 @@ grep -Fq 'ReadWritePaths=-/var/lib/hiddenoasis/accounting/uploads' deploy/system
 grep -Fq "PRODUCTION_UPLOADS_PATH = Path('/var/lib/hiddenoasis/accounting/uploads')" backend/app/core/settings.py
 grep -Fq 'install -d -o hiddenoasis -g hiddenoasis -m 0750 "$UPLOADS_DIR"' scripts/release/activate-release.sh
 grep -Fq 'LEGACY_UPLOADS_DIR="${LEGACY_UPLOADS_DIR:-/opt/accounting-program-online/backend/uploads}"' scripts/release/activate-release.sh
+grep -Fq 'DEPLOY_UPLOADS_DIR="$UPLOADS_DIR"' scripts/release/activate-release.sh
+grep -Fq 'DEPLOY_LEGACY_UPLOADS_DIR="$LEGACY_UPLOADS_DIR"' scripts/release/activate-release.sh
+grep -Fq 'UPLOADS_DIR="$DEPLOY_UPLOADS_DIR"' scripts/release/activate-release.sh
+grep -Fq 'LEGACY_UPLOADS_DIR="$DEPLOY_LEGACY_UPLOADS_DIR"' scripts/release/activate-release.sh
 grep -Fq 'sha256=' scripts/dr/backup-accounting.sh
 grep -Fq 'pg_restore --exit-on-error' scripts/dr/restore-rehearsal.sh
 grep -Fq 'merge-base --is-ancestor' scripts/release/prepare-release.sh

@@ -14,6 +14,11 @@ UPLOADS_DIR="${UPLOADS_DIR:-/var/lib/hiddenoasis/accounting/uploads}"
 LEGACY_UPLOADS_DIR="${LEGACY_UPLOADS_DIR:-/opt/accounting-program-online/backend/uploads}"
 RELEASE="$RELEASE_ROOT/$SHA"
 
+# Deployment-controlled filesystem paths must not be overridden by application
+# environment values sourced below (for example, a legacy UPLOADS_DIR=./uploads).
+DEPLOY_UPLOADS_DIR="$UPLOADS_DIR"
+DEPLOY_LEGACY_UPLOADS_DIR="$LEGACY_UPLOADS_DIR"
+
 bash "$RELEASE/scripts/release/verify-release.sh" "$SHA"
 
 CURRENT_TARGET=""
@@ -29,6 +34,8 @@ set -a
 . /etc/hiddenoasis/accounting-backend.env
 set +a
 export PATH="$OLD_PATH"
+UPLOADS_DIR="$DEPLOY_UPLOADS_DIR"
+LEGACY_UPLOADS_DIR="$DEPLOY_LEGACY_UPLOADS_DIR"
 
 cd "$RELEASE/backend"
 ./.venv/bin/alembic -c alembic.ini upgrade head
