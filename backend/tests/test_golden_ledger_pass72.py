@@ -21,6 +21,9 @@ def _record(module_slug, module_name, direction, amount, payment_method, name):
     return Record(
         module_slug=module_slug,
         module_name=module_name,
+        category='Pass 72 Certification',
+        bucket='certification',
+        item=name,
         direction=direction,
         workflow_status='approved',
         amount=amount,
