@@ -53,10 +53,12 @@ class SecuritySettingsTests(unittest.TestCase):
             _enforce_cookie_csrf(request, bearer_token=None, cookie_token='session')
         self.assertEqual(caught.exception.status_code, 403)
 
-    def test_bearer_auth_skips_cookie_csrf_enforcement(self):
+    def test_bearer_header_does_not_bypass_cookie_csrf_enforcement(self):
         request = SimpleNamespace(method='POST', cookies={}, headers={})
 
-        _enforce_cookie_csrf(request, bearer_token='api-token', cookie_token='session')
+        with self.assertRaises(HTTPException) as caught:
+            _enforce_cookie_csrf(request, bearer_token='api-token', cookie_token='session')
+        self.assertEqual(caught.exception.status_code, 403)
 
     def test_csrf_token_comparison(self):
         self.assertTrue(_csrf_tokens_match('same', 'same'))
