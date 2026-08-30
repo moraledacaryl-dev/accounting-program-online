@@ -17,6 +17,19 @@ def make_session():
     return TestingSession()
 
 
+def _record(module_slug, module_name, direction, amount, payment_method, name):
+    return Record(
+        module_slug=module_slug,
+        module_name=module_name,
+        direction=direction,
+        workflow_status='approved',
+        amount=amount,
+        transaction_date='2026-08-29',
+        payment_method=payment_method,
+        name=name,
+    )
+
+
 def _totals(db):
     debit, credit = db.query(
         func.coalesce(func.sum(JournalLine.debit), 0),
@@ -30,10 +43,10 @@ def _totals(db):
 def test_golden_ledger_autopost_trial_balance_and_financial_statements_reconcile():
     db = make_session()
     fixtures = [
-        Record(module_slug='rooms', direction='income', workflow_status='approved', amount=5000, transaction_date='2026-08-29', payment_method='cash', name='Room revenue'),
-        Record(module_slug='restaurant', direction='income', workflow_status='approved', amount=1500, transaction_date='2026-08-29', payment_method='bank_transfer', name='Restaurant revenue'),
-        Record(module_slug='restaurant', direction='expense', workflow_status='approved', amount=600, transaction_date='2026-08-29', payment_method='cash', name='Restaurant expense'),
-        Record(module_slug='assets', direction='asset', workflow_status='approved', amount=2000, transaction_date='2026-08-29', payment_method='bank_transfer', name='Equipment purchase'),
+        _record('rooms', 'Rooms', 'income', 5000, 'cash', 'Room revenue'),
+        _record('restaurant', 'Restaurant', 'income', 1500, 'bank_transfer', 'Restaurant revenue'),
+        _record('restaurant', 'Restaurant', 'expense', 600, 'cash', 'Restaurant expense'),
+        _record('assets', 'Assets', 'asset', 2000, 'bank_transfer', 'Equipment purchase'),
     ]
     db.add_all(fixtures)
     db.flush()
@@ -61,15 +74,7 @@ def test_golden_ledger_autopost_trial_balance_and_financial_statements_reconcile
 
 def test_golden_ledger_reversal_preserves_balance_and_neutralizes_economic_effect():
     db = make_session()
-    record = Record(
-        module_slug='rooms',
-        direction='income',
-        workflow_status='approved',
-        amount=2500,
-        transaction_date='2026-08-29',
-        payment_method='cash',
-        name='Reversible room revenue',
-    )
+    record = _record('rooms', 'Rooms', 'income', 2500, 'cash', 'Reversible room revenue')
     db.add(record)
     db.flush()
     original = autopost_record(db, record, commit=False)
