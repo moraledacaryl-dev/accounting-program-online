@@ -10,9 +10,8 @@ Group=hiddenoasis
 WorkingDirectory=/opt/accounting-current/backend
 EnvironmentFile=/etc/hiddenoasis/accounting-backend.env
 Environment=PYTHONDONTWRITEBYTECODE=1
-Environment=UPLOADS_DIR=/var/lib/hiddenoasis/accounting/uploads
-ExecStartPre=/opt/accounting-current/backend/.venv/bin/alembic -c alembic.ini upgrade head
-ExecStart=/opt/accounting-current/backend/.venv/bin/uvicorn app.main:app --host 127.0.0.1 --port 8000 --proxy-headers --forwarded-allow-ips=127.0.0.1
+ExecStartPre=/usr/bin/env UPLOADS_DIR=/var/lib/hiddenoasis/accounting/uploads /opt/accounting-current/backend/.venv/bin/alembic -c alembic.ini upgrade head
+ExecStart=/usr/bin/env UPLOADS_DIR=/var/lib/hiddenoasis/accounting/uploads /opt/accounting-current/backend/.venv/bin/uvicorn app.main:app --host 127.0.0.1 --port 8000 --proxy-headers --forwarded-allow-ips=127.0.0.1
 Restart=always
 RestartSec=5
 NoNewPrivileges=true

@@ -27,7 +27,8 @@ done
 test ! -e deploy/systemd/hiddenoasis-accounting-backend.service
 test ! -e deploy/systemd/hiddenoasis-accounting-frontend.service
 
-grep -Fq 'Environment=UPLOADS_DIR=/var/lib/hiddenoasis/accounting/uploads' deploy/systemd/accounting-backend.service
+grep -Fq 'ExecStartPre=/usr/bin/env UPLOADS_DIR=/var/lib/hiddenoasis/accounting/uploads /opt/accounting-current/backend/.venv/bin/alembic' deploy/systemd/accounting-backend.service
+grep -Fq 'ExecStart=/usr/bin/env UPLOADS_DIR=/var/lib/hiddenoasis/accounting/uploads /opt/accounting-current/backend/.venv/bin/uvicorn' deploy/systemd/accounting-backend.service
 grep -Fq 'ReadWritePaths=-/var/lib/hiddenoasis/accounting/uploads' deploy/systemd/accounting-backend.service
 grep -Fq "PRODUCTION_UPLOADS_PATH = Path('/var/lib/hiddenoasis/accounting/uploads')" backend/app/core/settings.py
 grep -Fq 'DEPLOY_UPLOADS_DIR="${DEPLOY_UPLOADS_DIR:-/var/lib/hiddenoasis/accounting/uploads}"' scripts/release/activate-release.sh
