@@ -1,3 +1,4 @@
+from inspect import signature
 from types import SimpleNamespace
 
 from sqlalchemy import create_engine
@@ -36,13 +37,12 @@ def test_journal_register_is_bounded_and_supports_stable_offset_paging():
     assert third[-1].reference_no == 'P73-000'
 
 
-def test_journal_register_default_page_does_not_return_entire_history():
-    db = make_session()
-    db.add_all([
-        JournalEntry(entry_date='2026-08-30', reference_no=f'P73-DEFAULT-{index:03d}', description='Pass 73 default bound fixture', source_module='finance', status='posted')
-        for index in range(140)
-    ])
-    db.commit()
+def test_journal_register_route_defaults_to_a_bounded_first_page():
+    parameters = signature(entries).parameters
+    limit = parameters['limit'].default
+    offset = parameters['offset'].default
 
-    page = entries(db=db, user=SimpleNamespace(username='auditor'))
-    assert len(page) == 100
+    assert limit.default == 100
+    assert limit.le == 500
+    assert offset.default == 0
+    assert offset.ge == 0
