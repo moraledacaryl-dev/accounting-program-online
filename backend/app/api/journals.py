@@ -1,4 +1,4 @@
-from fastapi import APIRouter, Depends, HTTPException
+from fastapi import APIRouter, Depends, HTTPException, Query
 from sqlalchemy.orm import Session, selectinload
 from sqlalchemy import func
 from app.db.database import get_db
@@ -16,8 +16,20 @@ def _entry(db, entry_id):
     return row
 
 @router.get('/entries')
-def entries(db: Session = Depends(get_db), user=Depends(require_permissions('journals.view'))):
-    return db.query(JournalEntry).options(selectinload(JournalEntry.lines)).order_by(JournalEntry.id.desc()).all()
+def entries(
+    db: Session = Depends(get_db),
+    user=Depends(require_permissions('journals.view')),
+    limit: int = Query(100, ge=1, le=500),
+    offset: int = Query(0, ge=0),
+):
+    return (
+        db.query(JournalEntry)
+        .options(selectinload(JournalEntry.lines))
+        .order_by(JournalEntry.id.desc())
+        .offset(offset)
+        .limit(limit)
+        .all()
+    )
 
 @router.get('/entries/{entry_id}')
 def entry_detail(entry_id:int, db:Session=Depends(get_db), user=Depends(require_permissions('journals.view'))):
