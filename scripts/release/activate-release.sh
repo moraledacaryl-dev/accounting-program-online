@@ -10,14 +10,9 @@ SHA="$1"
 RELEASE_ROOT="${RELEASE_ROOT:-/opt/accounting-releases}"
 CURRENT_LINK="${CURRENT_LINK:-/opt/accounting-current}"
 STATE_DIR="${STATE_DIR:-/var/lib/hiddenoasis/accounting-release}"
-UPLOADS_DIR="${UPLOADS_DIR:-/var/lib/hiddenoasis/accounting/uploads}"
-LEGACY_UPLOADS_DIR="${LEGACY_UPLOADS_DIR:-/opt/accounting-program-online/backend/uploads}"
+DEPLOY_UPLOADS_DIR="${DEPLOY_UPLOADS_DIR:-/var/lib/hiddenoasis/accounting/uploads}"
+DEPLOY_LEGACY_UPLOADS_DIR="${DEPLOY_LEGACY_UPLOADS_DIR:-/opt/accounting-program-online/backend/uploads}"
 RELEASE="$RELEASE_ROOT/$SHA"
-
-# Deployment-controlled filesystem paths must not be overridden by application
-# environment values sourced below (for example, a legacy UPLOADS_DIR=./uploads).
-DEPLOY_UPLOADS_DIR="$UPLOADS_DIR"
-DEPLOY_LEGACY_UPLOADS_DIR="$LEGACY_UPLOADS_DIR"
 
 bash "$RELEASE/scripts/release/verify-release.sh" "$SHA"
 
@@ -36,6 +31,7 @@ set +a
 export PATH="$OLD_PATH"
 UPLOADS_DIR="$DEPLOY_UPLOADS_DIR"
 LEGACY_UPLOADS_DIR="$DEPLOY_LEGACY_UPLOADS_DIR"
+export UPLOADS_DIR
 
 cd "$RELEASE/backend"
 ./.venv/bin/alembic -c alembic.ini upgrade head
@@ -43,12 +39,12 @@ EXPECTED_ALEMBIC="$(awk -F= '$1=="alembic_head" {print $2}' "$RELEASE/.release-m
 CURRENT_ALEMBIC="$(./.venv/bin/alembic -c alembic.ini current 2>/dev/null | awk '{print $1}' | head -n1)"
 test "$CURRENT_ALEMBIC" = "$EXPECTED_ALEMBIC"
 
-install -d -o hiddenoasis -g hiddenoasis -m 0750 "$(dirname "$UPLOADS_DIR")"
-install -d -o hiddenoasis -g hiddenoasis -m 0750 "$UPLOADS_DIR"
-if [ -d "$LEGACY_UPLOADS_DIR" ]; then
-  find "$LEGACY_UPLOADS_DIR" -mindepth 1 -maxdepth 1 -type f -print0 \
+install -d -o hiddenoasis -g hiddenoasis -m 0750 "$(dirname "$DEPLOY_UPLOADS_DIR")"
+install -d -o hiddenoasis -g hiddenoasis -m 0750 "$DEPLOY_UPLOADS_DIR"
+if [ -d "$DEPLOY_LEGACY_UPLOADS_DIR" ]; then
+  find "$DEPLOY_LEGACY_UPLOADS_DIR" -mindepth 1 -maxdepth 1 -type f -print0 \
     | while IFS= read -r -d '' file; do
-        target="$UPLOADS_DIR/$(basename "$file")"
+        target="$DEPLOY_UPLOADS_DIR/$(basename "$file")"
         if [ ! -e "$target" ]; then
           install -o hiddenoasis -g hiddenoasis -m 0600 "$file" "$target"
         fi
@@ -90,5 +86,5 @@ chmod 600 "$STATE_DIR"/*.sha "$STATE_DIR"/*.utc
 echo "Previous release: $PREVIOUS_SHA"
 echo "Current release: $SHA"
 echo "Alembic: $CURRENT_ALEMBIC"
-echo "Persistent uploads: $UPLOADS_DIR"
+echo "Persistent uploads: $DEPLOY_UPLOADS_DIR"
 echo "ATOMIC RELEASE ACTIVATION: PASS"
