@@ -35,8 +35,13 @@ def _csrf_tokens_match(cookie_token: str | None, header_token: str | None) -> bo
     return compare_digest(str(cookie_token), str(header_token))
 
 
+def _select_auth_token(cookie_token: str | None, bearer_token: str | None) -> str | None:
+    """Prefer the browser session cookie when both credential forms are present."""
+    return cookie_token or bearer_token
+
+
 def _enforce_cookie_csrf(request: Request, bearer_token: str | None, cookie_token: str | None):
-    if bearer_token or not cookie_token or request.method.upper() in SAFE_METHODS:
+    if not cookie_token or request.method.upper() in SAFE_METHODS:
         return
     csrf_cookie = request.cookies.get(settings.csrf_cookie_name)
     csrf_header = request.headers.get(settings.csrf_header_name)
@@ -86,7 +91,7 @@ def get_current_user(
 ):
     credentials_exception = HTTPException(status_code=401, detail="Could not validate credentials")
     _enforce_cookie_csrf(request, bearer_token, cookie_token)
-    token = bearer_token or cookie_token
+    token = _select_auth_token(cookie_token, bearer_token)
     if not token:
         raise credentials_exception
     if is_access_token_revoked(db, token):
