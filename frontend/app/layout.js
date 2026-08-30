@@ -59,6 +59,7 @@ import './visual-closure.css';
 import './pass-70-final-ux-wcag.css';
 import ConfirmActionProvider from '../components/ConfirmActionProvider';
 import InputActionProvider from '../components/InputActionProvider';
+import LegacyBrowserCredentialPurge from '../components/LegacyBrowserCredentialPurge';
 import AppFrame from '../components/app-shell/AppFrame';
 import { AppShellProvider } from '../components/app-shell/AppShellContext';
 import { CurrentUserProvider } from '../lib/useCurrentUser';
@@ -69,6 +70,7 @@ export default function RootLayout({ children }) {
   return (
     <html lang="en">
       <body>
+        <LegacyBrowserCredentialPurge />
         <CurrentUserProvider>
           <AppShellProvider>
             <ConfirmActionProvider>

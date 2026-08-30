@@ -4,19 +4,6 @@ const CSRF_HEADER_NAME = 'X-CSRF-Token';
 const CSRF_EXEMPT_PATHS = new Set(['/auth/login', '/auth/integration/token', '/auth/csrf']);
 const UNSAFE_METHODS = new Set(['POST', 'PUT', 'PATCH', 'DELETE']);
 
-function getToken() {
-  if (typeof window === 'undefined') return '';
-  return localStorage.getItem('erp_token') || '';
-}
-
-function setToken(token) {
-  if (typeof window !== 'undefined') localStorage.setItem('erp_token', token);
-}
-
-function clearToken() {
-  if (typeof window !== 'undefined') localStorage.removeItem('erp_token');
-}
-
 function getCookie(name) {
   if (typeof document === 'undefined') return '';
   const prefix = `${encodeURIComponent(name)}=`;
@@ -45,8 +32,6 @@ async function ensureCsrfHeader(path, method, headers) {
 
 async function request(path, init = {}) {
   const headers = { ...(init.headers || {}) };
-  const token = getToken();
-  if (token) headers['Authorization'] = `Bearer ${token}`;
   if (!(init.body instanceof FormData) && init.body && !headers['Content-Type']) headers['Content-Type'] = 'application/json';
   await ensureCsrfHeader(path, init.method, headers);
   const res = await fetch(`${API_BASE}${path}`, { cache: 'no-store', credentials: 'include', ...init, headers });
@@ -68,7 +53,7 @@ function readApiMessage(value) {
   return String(value);
 }
 
-export { API_BASE, getToken, setToken, clearToken, request, readApiMessage };
+export { API_BASE, request, readApiMessage };
 
 export const bootstrap = () => request('/auth/bootstrap', { method: 'POST' });
 export const login = (payload) => request('/auth/login', { method: 'POST', body: JSON.stringify(payload) });
@@ -246,11 +231,8 @@ export const cancelEvent = (id, payload = {}) => request(`/events/${id}/cancel`,
 export const recordEventPayment = (id, payload) => request(`/events/${id}/payments`, { method: 'POST', body: JSON.stringify(payload) });
 
 export async function fetchManagementCsv({ startDate = '', endDate = '' } = {}) {
-  const token = getToken();
-  const headers = {};
-  if (token) headers['Authorization'] = `Bearer ${token}`;
   const query = `${startDate || endDate ? '?' : ''}${startDate ? `start_date=${encodeURIComponent(startDate)}` : ''}${startDate && endDate ? '&' : ''}${endDate ? `end_date=${encodeURIComponent(endDate)}` : ''}`;
-  const res = await fetch(`${API_BASE}/reports/management.csv${query}`, { cache: 'no-store', credentials: 'include', headers });
+  const res = await fetch(`${API_BASE}/reports/management.csv${query}`, { cache: 'no-store', credentials: 'include' });
   if (!res.ok) {
     let data = null;
     try { data = await res.json(); } catch { data = null; }
@@ -260,10 +242,7 @@ export async function fetchManagementCsv({ startDate = '', endDate = '' } = {}) 
 }
 
 export async function downloadSetupImportTemplate(scope = 'all') {
-  const token = getToken();
-  const headers = {};
-  if (token) headers['Authorization'] = `Bearer ${token}`;
-  const res = await fetch(`${API_BASE}/setup-imports/template?scope=${encodeURIComponent(scope)}`, { cache: 'no-store', credentials: 'include', headers });
+  const res = await fetch(`${API_BASE}/setup-imports/template?scope=${encodeURIComponent(scope)}`, { cache: 'no-store', credentials: 'include' });
   if (!res.ok) {
     let data = null;
     try { data = await res.json(); } catch { data = null; }
@@ -292,10 +271,7 @@ function readFilenameFromDisposition(value) {
 }
 
 export async function downloadAttachment(id) {
-  const token = getToken();
-  const headers = {};
-  if (token) headers['Authorization'] = `Bearer ${token}`;
-  const res = await fetch(`${API_BASE}/attachments/${encodeURIComponent(id)}/download`, { cache: 'no-store', credentials: 'include', headers });
+  const res = await fetch(`${API_BASE}/attachments/${encodeURIComponent(id)}/download`, { cache: 'no-store', credentials: 'include' });
   if (!res.ok) {
     let data = null;
     try { data = await res.json(); } catch { data = null; }
