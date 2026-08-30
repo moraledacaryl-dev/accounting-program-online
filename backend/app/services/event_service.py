@@ -5,7 +5,7 @@ from datetime import datetime
 from sqlalchemy import func, or_
 from sqlalchemy.orm import Session, selectinload
 
-from app.core.business_clock import business_today
+from app.core.business_clock import business_now, business_today
 from app.models.entities import (
     EventBooking,
     EventBookingLine,
@@ -214,8 +214,12 @@ def _serialize_event(row: EventBooking) -> dict:
     }
 
 
+def _event_no_prefix(now: datetime | None = None) -> str:
+    return f'EVT-{business_now(now).strftime("%Y%m%d")}'
+
+
 def generate_event_no(db: Session) -> str:
-    prefix = f'EVT-{datetime.utcnow().strftime("%Y%m%d")}'
+    prefix = _event_no_prefix()
     existing = (
         db.query(EventBooking.event_no)
         .filter(EventBooking.event_no.like(f'{prefix}-%'))
