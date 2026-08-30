@@ -1,7 +1,7 @@
 'use client';
 
 import { useState } from 'react';
-import { clearToken, login } from '../../lib/api';
+import { login } from '../../lib/api';
 
 export default function LoginPage() {
   const [username, setUsername] = useState('');
@@ -23,7 +23,6 @@ export default function LoginPage() {
     setBusy(true);
     try {
       await login({ username: username.trim(), password });
-      clearToken();
       const searchParams = new URLSearchParams(window.location.search);
       const next = searchParams.get('next') || '/';
       window.location.href = next.startsWith('/') && !next.startsWith('//') ? next : '/';
