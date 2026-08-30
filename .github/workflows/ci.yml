@@ -40,6 +40,9 @@ jobs:
           python3 --version
           python3 -m pip --version
 
+      - name: Validate Pass 72 final certification source contract
+        run: bash scripts/validate-pass72-source.sh
+
       - name: Install locked backend dependencies
         working-directory: backend
         run: python3 -m pip install --upgrade pip && python3 -m pip install -r requirements.txt pytest==9.1.1
@@ -129,9 +132,9 @@ jobs:
           python3 -m alembic upgrade head
           python3 -m alembic current
 
-      - name: Run PostgreSQL workflow and concurrency tests
+      - name: Run PostgreSQL workflow, concurrency, and scale certification tests
         working-directory: backend
-        run: python3 -m pytest tests/test_postgresql_ci.py tests/test_postgresql_transaction_concurrency.py -q
+        run: python3 -m pytest tests/test_postgresql_ci.py tests/test_postgresql_transaction_concurrency.py tests/test_postgresql_pass72_certification.py -q
 
   frontend-build:
     name: Frontend build
