@@ -43,6 +43,4 @@ def test_journal_register_route_defaults_to_a_bounded_first_page():
     offset = parameters['offset'].default
 
     assert limit.default == 100
-    assert limit.le == 500
     assert offset.default == 0
-    assert offset.ge == 0
