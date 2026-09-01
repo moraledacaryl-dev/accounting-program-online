@@ -19,6 +19,7 @@ from app.services.payable_atomicity_service import (
     pay_payable_idempotent,
 )
 from app.services.settlement_reversal_guard import ensure_linked_settlement_mutable
+from app.services.subledger_creation_guard import ensure_public_payable_creation_unsettled
 from app.services.subledger_edit_guard import ensure_payable_edit_preserves_settlement
 from app.services.writeoff_service import write_off_payable_preserving_cash
 
@@ -53,6 +54,7 @@ def add_payable(
     user=Depends(require_permissions('cashflow.money_out')),
 ):
     try:
+        ensure_public_payable_creation_unsettled(payload)
         item, replayed = create_payable_idempotent(db, payload, idempotency_key)
 
         balance_due = float(item.get('balance_due') or 0)
