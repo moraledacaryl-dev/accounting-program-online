@@ -81,7 +81,7 @@ export default function PayablesPage() {
         setNotice('Bill updated.');
       } else {
         await createPayable(payload);
-        setNotice('Bill saved. Use Pay to record money leaving a financial account.');
+        setNotice('Bill saved.');
       }
       setForm({ ...EMPTY_FORM, bill_date: form.bill_date });
       setEditingId(null);
