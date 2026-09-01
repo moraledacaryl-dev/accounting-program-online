@@ -11,13 +11,13 @@ from app.services.cashflow_service import (
     reopen_payable,
     reverse_payable_payment,
     update_payable,
-    write_off_payable,
 )
 from app.services.payable_atomicity_service import (
     IdempotencyConflict,
     create_payable_idempotent,
     pay_payable_idempotent,
 )
+from app.services.writeoff_service import write_off_payable_preserving_cash
 
 router = APIRouter()
 
@@ -162,7 +162,7 @@ def write_off_payable_entry(
     user=Depends(require_permissions('cashflow.money_out')),
 ):
     try:
-        return write_off_payable(db, payable_id, payload)
+        return write_off_payable_preserving_cash(db, payable_id, payload)
     except ValueError as e:
         db.rollback()
         raise HTTPException(status_code=400, detail=str(e))
