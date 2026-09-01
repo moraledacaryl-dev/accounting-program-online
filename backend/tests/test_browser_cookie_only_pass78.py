@@ -1,4 +1,5 @@
 from pathlib import Path
+import subprocess
 
 
 ROOT = Path(__file__).resolve().parents[2]
@@ -10,8 +11,14 @@ def _read(relative_path: str) -> str:
 
 
 def _frontend_sources():
-    for path in FRONTEND.rglob('*'):
-        if path.is_file() and path.suffix in {'.js', '.jsx', '.ts', '.tsx'}:
+    tracked = subprocess.check_output(
+        ['git', '-C', str(ROOT), 'ls-files', '-z', '--', 'frontend'],
+    ).decode('utf-8').split('\0')
+    for relative_path in tracked:
+        if not relative_path:
+            continue
+        path = ROOT / relative_path
+        if path.suffix in {'.js', '.jsx', '.ts', '.tsx'}:
             yield path
 
 
