@@ -81,7 +81,7 @@ export default function ReceivablesPage() {
         setNotice('Balance updated.');
       } else {
         await createReceivable(payload);
-        setNotice('Balance saved. Use Collect to record money received.');
+        setNotice('Balance saved.');
       }
       setForm({ ...EMPTY_FORM, transaction_date: form.transaction_date });
       setEditingId(null);
