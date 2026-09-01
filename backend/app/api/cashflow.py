@@ -4,6 +4,7 @@ from sqlalchemy.orm import Session
 from app.api.deps import require_any_permissions, require_permissions
 from app.core.business_clock import business_today
 from app.db.database import get_db
+from app.models.entities import MoneyTransaction
 from app.schemas.cashflow import CashflowActionPayload, MoneyTransactionCreate, MoneyTransactionUpdate
 from app.services.cashflow_service import (
     approve_money_transaction,
@@ -17,8 +18,38 @@ from app.services.cashflow_service import (
     reverse_money_transaction,
     update_money_transaction,
 )
+from app.services.permission_service import get_user_permission_keys
 
 router = APIRouter()
+
+
+_DIRECTION_PERMISSION = {
+    'in': 'cashflow.money_in',
+    'out': 'cashflow.money_out',
+}
+
+
+def _normalize_direction(value: str | None) -> str:
+    return (value or '').strip().lower()
+
+
+def _authorize_cashflow_direction(db: Session, user, direction: str | None):
+    normalized = _normalize_direction(direction)
+    permission = _DIRECTION_PERMISSION.get(normalized)
+    if not permission:
+        raise HTTPException(status_code=400, detail='direction must be "in" or "out".')
+    if getattr(user, 'role', None) in {'owner', 'admin'}:
+        return
+    effective = get_user_permission_keys(db, user)
+    if permission not in effective:
+        raise HTTPException(status_code=403, detail=f'Missing permission: {permission}')
+
+
+def _transaction_for_direction_auth(db: Session, transaction_id: int) -> MoneyTransaction:
+    row = db.query(MoneyTransaction).filter(MoneyTransaction.id == int(transaction_id)).first()
+    if not row:
+        raise HTTPException(status_code=404, detail='Money transaction not found.')
+    return row
 
 
 @router.get('/summary')
@@ -62,6 +93,7 @@ def add_transaction(
     db: Session = Depends(get_db),
     user=Depends(require_any_permissions('cashflow.money_in', 'cashflow.money_out')),
 ):
+    _authorize_cashflow_direction(db, user, payload.direction)
     try:
         return create_money_transaction(db, payload, username=getattr(user, 'username', None))
     except ValueError as e:
@@ -76,6 +108,10 @@ def edit_transaction(
     db: Session = Depends(get_db),
     user=Depends(require_any_permissions('cashflow.money_in', 'cashflow.money_out')),
 ):
+    current = _transaction_for_direction_auth(db, transaction_id)
+    _authorize_cashflow_direction(db, user, current.direction)
+    if payload.direction is not None and _normalize_direction(payload.direction) != _normalize_direction(current.direction):
+        _authorize_cashflow_direction(db, user, payload.direction)
     try:
         return update_money_transaction(db, transaction_id, payload, username=getattr(user, 'username', None))
     except ValueError as e:
@@ -89,6 +125,8 @@ def remove_transaction(
     db: Session = Depends(get_db),
     user=Depends(require_any_permissions('cashflow.money_in', 'cashflow.money_out')),
 ):
+    current = _transaction_for_direction_auth(db, transaction_id)
+    _authorize_cashflow_direction(db, user, current.direction)
     try:
         return delete_money_transaction(db, transaction_id)
     except ValueError as e:
@@ -103,6 +141,8 @@ def approve_transaction(
     db: Session = Depends(get_db),
     user=Depends(require_any_permissions('cashflow.money_in', 'cashflow.money_out')),
 ):
+    current = _transaction_for_direction_auth(db, transaction_id)
+    _authorize_cashflow_direction(db, user, current.direction)
     try:
         return approve_money_transaction(db, transaction_id, payload, username=getattr(user, 'username', None))
     except ValueError as e:
@@ -117,6 +157,8 @@ def cancel_transaction(
     db: Session = Depends(get_db),
     user=Depends(require_any_permissions('cashflow.money_in', 'cashflow.money_out')),
 ):
+    current = _transaction_for_direction_auth(db, transaction_id)
+    _authorize_cashflow_direction(db, user, current.direction)
     try:
         return cancel_money_transaction(db, transaction_id, payload, username=getattr(user, 'username', None))
     except ValueError as e:
@@ -131,6 +173,8 @@ def reverse_transaction(
     db: Session = Depends(get_db),
     user=Depends(require_any_permissions('cashflow.money_in', 'cashflow.money_out')),
 ):
+    current = _transaction_for_direction_auth(db, transaction_id)
+    _authorize_cashflow_direction(db, user, current.direction)
     try:
         return reverse_money_transaction(db, transaction_id, payload, username=getattr(user, 'username', None))
     except ValueError as e:
