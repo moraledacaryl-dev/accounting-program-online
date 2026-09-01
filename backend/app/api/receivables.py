@@ -14,6 +14,7 @@ from app.services.cashflow_service import (
     update_receivable,
 )
 from app.services.settlement_reversal_guard import ensure_linked_settlement_mutable
+from app.services.subledger_edit_guard import ensure_receivable_edit_preserves_settlement
 from app.services.writeoff_service import write_off_receivable_preserving_cash
 
 router = APIRouter()
@@ -60,6 +61,7 @@ def edit_receivable(
     user=Depends(require_permissions('cashflow.money_in')),
 ):
     try:
+        ensure_receivable_edit_preserves_settlement(db, receivable_id, payload)
         return update_receivable(db, receivable_id, payload)
     except ValueError as e:
         db.rollback()
