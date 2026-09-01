@@ -16,6 +16,10 @@ RELEASE="$RELEASE_ROOT/$SHA"
 
 bash "$RELEASE/scripts/release/verify-release.sh" "$SHA"
 
+test -d "$RELEASE/frontend/.next/cache/images"
+test "$(stat -c '%U:%G' "$RELEASE/frontend/.next/cache/images")" = "hiddenoasis:hiddenoasis"
+sudo -u hiddenoasis test -w "$RELEASE/frontend/.next/cache/images"
+
 CURRENT_TARGET=""
 if [ -L "$CURRENT_LINK" ]; then
   CURRENT_TARGET="$(readlink -f "$CURRENT_LINK")"
