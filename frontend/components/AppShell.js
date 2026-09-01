@@ -2,7 +2,6 @@
 
 import { useEffect } from 'react';
 import { usePathname } from 'next/navigation';
-import { clearToken } from '../lib/api';
 import { useCurrentUser } from '../lib/useCurrentUser';
 import ExternalOwnershipBoundary from './ExternalOwnershipBoundary';
 import Header from './Header';
@@ -16,7 +15,6 @@ export default function AppShell({ children }) {
 
   useEffect(() => {
     if (isLogin || !loaded || user) return;
-    clearToken();
     const next = pathname && pathname !== '/' ? `?next=${encodeURIComponent(pathname)}` : '';
     window.location.replace(`/login${next}`);
   }, [isLogin, loaded, pathname, user]);
