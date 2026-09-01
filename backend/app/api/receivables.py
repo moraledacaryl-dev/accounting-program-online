@@ -3,6 +3,7 @@ from sqlalchemy.orm import Session
 
 from app.api.deps import require_permissions
 from app.db.database import get_db
+from app.models.entities import MoneyTransaction
 from app.schemas.cashflow import CashflowActionPayload, ReceivableCollectPayload, ReceivableCreate
 from app.services.cashflow_service import (
     collect_receivable,
@@ -12,6 +13,7 @@ from app.services.cashflow_service import (
     reverse_receivable_collection,
     update_receivable,
 )
+from app.services.settlement_reversal_guard import ensure_linked_settlement_mutable
 from app.services.writeoff_service import write_off_receivable_preserving_cash
 
 router = APIRouter()
@@ -87,6 +89,9 @@ def reverse_receivable_collection_payment(
     user=Depends(require_permissions('cashflow.money_in')),
 ):
     try:
+        tx = db.get(MoneyTransaction, int(transaction_id))
+        if tx:
+            ensure_linked_settlement_mutable(db, tx)
         return reverse_receivable_collection(db, receivable_id, transaction_id, payload, username=getattr(user, 'username', None))
     except ValueError as e:
         db.rollback()
