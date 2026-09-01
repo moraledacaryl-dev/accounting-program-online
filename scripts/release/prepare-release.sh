@@ -75,6 +75,13 @@ EOF
 chown -R root:root "$RELEASE"
 chmod 644 "$RELEASE/.release-manifest"
 
+# Next.js image optimization writes runtime cache entries. Keep the release
+# immutable except for this narrowly-scoped cache directory owned by the
+# frontend service account.
+install -d -o hiddenoasis -g hiddenoasis -m 0750 "$RELEASE/frontend/.next/cache/images"
+test "$(stat -c '%U:%G' "$RELEASE/frontend/.next/cache/images")" = "hiddenoasis:hiddenoasis"
+sudo -u hiddenoasis test -w "$RELEASE/frontend/.next/cache/images"
+
 echo "Release: $RELEASE"
 echo "SHA: $SHA"
 echo "Tree: $TREE_SHA"
