@@ -14,6 +14,7 @@ from app.services.cashflow_service import (
     update_receivable,
 )
 from app.services.settlement_reversal_guard import ensure_linked_settlement_mutable
+from app.services.subledger_creation_guard import ensure_public_receivable_creation_unsettled
 from app.services.subledger_edit_guard import ensure_receivable_edit_preserves_settlement
 from app.services.writeoff_service import write_off_receivable_preserving_cash
 
@@ -47,6 +48,7 @@ def add_receivable(
     user=Depends(require_permissions('cashflow.money_in')),
 ):
     try:
+        ensure_public_receivable_creation_unsettled(payload)
         return create_receivable(db, payload)
     except ValueError as e:
         db.rollback()
