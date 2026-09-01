@@ -71,8 +71,8 @@ export default function ReceivablesPage() {
         transaction_date: form.transaction_date,
         due_date: form.due_date || null,
         gross_amount: Number(form.gross_amount || 0),
-        amount_collected: Number(form.amount_collected || 0),
-        status: form.status,
+        amount_collected: editingId ? Number(form.amount_collected || 0) : 0,
+        status: editingId ? form.status : 'open',
         notes: form.notes || null,
         bir_include: !!form.bir_include,
       };
@@ -215,14 +215,12 @@ export default function ReceivablesPage() {
             <label>Date<input type="date" value={form.transaction_date} onChange={(e) => setForm((f) => ({ ...f, transaction_date: e.target.value }))} /></label>
             <label>Due Date<input type="date" value={form.due_date} onChange={(e) => setForm((f) => ({ ...f, due_date: e.target.value }))} /></label>
             <label>Total Amount<input required type="number" min="0.01" step="0.01" value={form.gross_amount} onChange={(e) => setForm((f) => ({ ...f, gross_amount: e.target.value }))} /></label>
-            <label>Already Collected<input type="number" min="0" step="0.01" value={form.amount_collected} onChange={(e) => setForm((f) => ({ ...f, amount_collected: e.target.value }))} /></label>
-            <label>Status
-              <select value={form.status} onChange={(e) => setForm((f) => ({ ...f, status: e.target.value }))}>
-                <option value="open">Open</option>
-                <option value="partial">Partially paid</option>
-                <option value="settled">Paid</option>
-              </select>
-            </label>
+            {editingId ? (
+              <>
+                <label>Collected to Date<input readOnly value={form.amount_collected} /></label>
+                <label>Status<input readOnly value={form.status} /></label>
+              </>
+            ) : null}
             <label>Include in BIR
               <select value={String(form.bir_include)} onChange={(e) => setForm((f) => ({ ...f, bir_include: e.target.value === 'true' }))}>
                 <option value="false">No</option>
@@ -230,6 +228,7 @@ export default function ReceivablesPage() {
               </select>
             </label>
           </div>
+          {!editingId ? <p className="small muted">New balances start unpaid. Use Collect after saving to record money received into a financial account.</p> : null}
           <label>Notes<textarea value={form.notes} onChange={(e) => setForm((f) => ({ ...f, notes: e.target.value }))} /></label>
           <div className="row wrap">
             <button type="submit">{editingId ? 'Update Balance' : 'Save Balance'}</button>
