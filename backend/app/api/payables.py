@@ -3,6 +3,7 @@ from sqlalchemy.orm import Session
 
 from app.api.deps import require_permissions
 from app.db.database import get_db
+from app.models.entities import MoneyTransaction
 from app.schemas.cashflow import CashflowActionPayload, PayableCreate, PayablePayPayload
 from app.services.operations_integration import is_due_or_overdue
 from app.services.operations_outbox_service import enqueue_operations_event
@@ -17,6 +18,7 @@ from app.services.payable_atomicity_service import (
     create_payable_idempotent,
     pay_payable_idempotent,
 )
+from app.services.settlement_reversal_guard import ensure_linked_settlement_mutable
 from app.services.writeoff_service import write_off_payable_preserving_cash
 
 router = APIRouter()
@@ -134,6 +136,9 @@ def reverse_payable_payment_entry(
     user=Depends(require_permissions('cashflow.money_out')),
 ):
     try:
+        tx = db.get(MoneyTransaction, int(transaction_id))
+        if tx:
+            ensure_linked_settlement_mutable(db, tx)
         return reverse_payable_payment(db, payable_id, transaction_id, payload, username=getattr(user, 'username', None))
     except ValueError as e:
         db.rollback()

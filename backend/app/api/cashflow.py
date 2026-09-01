@@ -19,6 +19,7 @@ from app.services.cashflow_service import (
     update_money_transaction,
 )
 from app.services.permission_service import get_user_permission_keys
+from app.services.settlement_reversal_guard import ensure_linked_settlement_mutable
 
 router = APIRouter()
 
@@ -113,6 +114,7 @@ def edit_transaction(
     if payload.direction is not None and _normalize_direction(payload.direction) != _normalize_direction(current.direction):
         _authorize_cashflow_direction(db, user, payload.direction)
     try:
+        ensure_linked_settlement_mutable(db, current)
         return update_money_transaction(db, transaction_id, payload, username=getattr(user, 'username', None))
     except ValueError as e:
         db.rollback()
@@ -160,6 +162,7 @@ def cancel_transaction(
     current = _transaction_for_direction_auth(db, transaction_id)
     _authorize_cashflow_direction(db, user, current.direction)
     try:
+        ensure_linked_settlement_mutable(db, current)
         return cancel_money_transaction(db, transaction_id, payload, username=getattr(user, 'username', None))
     except ValueError as e:
         db.rollback()
@@ -176,6 +179,7 @@ def reverse_transaction(
     current = _transaction_for_direction_auth(db, transaction_id)
     _authorize_cashflow_direction(db, user, current.direction)
     try:
+        ensure_linked_settlement_mutable(db, current)
         return reverse_money_transaction(db, transaction_id, payload, username=getattr(user, 'username', None))
     except ValueError as e:
         db.rollback()
