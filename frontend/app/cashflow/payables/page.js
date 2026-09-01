@@ -71,8 +71,8 @@ export default function PayablesPage() {
         bill_date: form.bill_date,
         due_date: form.due_date || null,
         gross_amount: Number(form.gross_amount || 0),
-        amount_paid: Number(form.amount_paid || 0),
-        status: form.status,
+        amount_paid: editingId ? Number(form.amount_paid || 0) : 0,
+        status: editingId ? form.status : 'open',
         notes: form.notes || null,
         bir_include: !!form.bir_include,
       };
@@ -81,7 +81,7 @@ export default function PayablesPage() {
         setNotice('Bill updated.');
       } else {
         await createPayable(payload);
-        setNotice('Bill saved.');
+        setNotice('Bill saved. Use Pay to record money leaving a financial account.');
       }
       setForm({ ...EMPTY_FORM, bill_date: form.bill_date });
       setEditingId(null);
@@ -216,14 +216,12 @@ export default function PayablesPage() {
             <label>Bill Date<input type="date" value={form.bill_date} onChange={(e) => setForm((f) => ({ ...f, bill_date: e.target.value }))} /></label>
             <label>Due Date<input type="date" value={form.due_date} onChange={(e) => setForm((f) => ({ ...f, due_date: e.target.value }))} /></label>
             <label>Bill Amount<input required type="number" min="0.01" step="0.01" value={form.gross_amount} onChange={(e) => setForm((f) => ({ ...f, gross_amount: e.target.value }))} /></label>
-            <label>Already Paid<input type="number" min="0" step="0.01" value={form.amount_paid} onChange={(e) => setForm((f) => ({ ...f, amount_paid: e.target.value }))} /></label>
-            <label>Status
-              <select value={form.status} onChange={(e) => setForm((f) => ({ ...f, status: e.target.value }))}>
-                <option value="open">Open</option>
-                <option value="partial">Partially paid</option>
-                <option value="settled">Paid</option>
-              </select>
-            </label>
+            {editingId ? (
+              <>
+                <label>Paid to Date<input readOnly value={form.amount_paid} /></label>
+                <label>Status<input readOnly value={form.status} /></label>
+              </>
+            ) : null}
             <label>Include in BIR
               <select value={String(form.bir_include)} onChange={(e) => setForm((f) => ({ ...f, bir_include: e.target.value === 'true' }))}>
                 <option value="false">No</option>
@@ -231,6 +229,7 @@ export default function PayablesPage() {
               </select>
             </label>
           </div>
+          {!editingId ? <p className="small muted">New bills start unpaid. Use Pay after saving to record money leaving a financial account.</p> : null}
           <label>Notes<textarea value={form.notes} onChange={(e) => setForm((f) => ({ ...f, notes: e.target.value }))} /></label>
           <div className="row wrap">
             <button type="submit">{editingId ? 'Update Bill' : 'Save Bill'}</button>
