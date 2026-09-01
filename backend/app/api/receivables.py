@@ -11,8 +11,8 @@ from app.services.cashflow_service import (
     reopen_receivable,
     reverse_receivable_collection,
     update_receivable,
-    write_off_receivable,
 )
+from app.services.writeoff_service import write_off_receivable_preserving_cash
 
 router = APIRouter()
 
@@ -115,7 +115,7 @@ def write_off_receivable_entry(
     user=Depends(require_permissions('cashflow.money_in')),
 ):
     try:
-        return write_off_receivable(db, receivable_id, payload)
+        return write_off_receivable_preserving_cash(db, receivable_id, payload)
     except ValueError as e:
         db.rollback()
         raise HTTPException(status_code=400, detail=str(e))
