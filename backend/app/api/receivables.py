@@ -9,9 +9,9 @@ from app.services.cashflow_service import (
     create_receivable,
     list_receivables,
     reopen_receivable,
-    reverse_receivable_collection,
     update_receivable,
 )
+from app.services.settlement_reversal_service import reverse_receivable_collection_with_state_guard
 from app.services.writeoff_service import write_off_receivable_preserving_cash
 
 router = APIRouter()
@@ -87,7 +87,13 @@ def reverse_receivable_collection_payment(
     user=Depends(require_permissions('cashflow.money_in')),
 ):
     try:
-        return reverse_receivable_collection(db, receivable_id, transaction_id, payload, username=getattr(user, 'username', None))
+        return reverse_receivable_collection_with_state_guard(
+            db,
+            receivable_id,
+            transaction_id,
+            payload,
+            username=getattr(user, 'username', None),
+        )
     except ValueError as e:
         db.rollback()
         raise HTTPException(status_code=400, detail=str(e))
