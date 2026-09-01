@@ -9,7 +9,6 @@ from app.services.operations_outbox_service import enqueue_operations_event
 from app.services.cashflow_service import (
     list_payables,
     reopen_payable,
-    reverse_payable_payment,
     update_payable,
 )
 from app.services.payable_atomicity_service import (
@@ -17,6 +16,7 @@ from app.services.payable_atomicity_service import (
     create_payable_idempotent,
     pay_payable_idempotent,
 )
+from app.services.settlement_reversal_service import reverse_payable_payment_with_state_guard
 from app.services.writeoff_service import write_off_payable_preserving_cash
 
 router = APIRouter()
@@ -134,7 +134,13 @@ def reverse_payable_payment_entry(
     user=Depends(require_permissions('cashflow.money_out')),
 ):
     try:
-        return reverse_payable_payment(db, payable_id, transaction_id, payload, username=getattr(user, 'username', None))
+        return reverse_payable_payment_with_state_guard(
+            db,
+            payable_id,
+            transaction_id,
+            payload,
+            username=getattr(user, 'username', None),
+        )
     except ValueError as e:
         db.rollback()
         raise HTTPException(status_code=400, detail=str(e))
