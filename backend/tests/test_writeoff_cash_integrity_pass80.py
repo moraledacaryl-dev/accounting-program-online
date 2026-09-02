@@ -9,12 +9,39 @@ from app.services import writeoff_service
 ROOT = Path(__file__).resolve().parents[2]
 
 
+class FakeQuery:
+    def __init__(self, db, model):
+        self.db = db
+        self.model = model
+        self.locked = False
+
+    def filter(self, *_args, **_kwargs):
+        return self
+
+    def populate_existing(self):
+        return self
+
+    def with_for_update(self):
+        self.locked = True
+        self.db.locked_models.append(self.model)
+        return self
+
+    def first(self):
+        if self.model is self.db.model:
+            return self.db.row
+        return None
+
+
 class FakeDb:
     def __init__(self, model, row):
         self.model = model
         self.row = row
         self.commits = 0
         self.refreshed = []
+        self.locked_models = []
+
+    def query(self, model):
+        return FakeQuery(self, model)
 
     def get(self, model, row_id):
         if model is self.model and int(row_id) == int(self.row.id):
@@ -56,6 +83,7 @@ def test_receivable_writeoff_preserves_actual_collection(monkeypatch):
     assert 'Write-off: Uncollectible remainder' in row.notes
     assert db.commits == 1
     assert db.refreshed == [row]
+    assert db.locked_models == [Receivable]
 
 
 def test_payable_writeoff_preserves_actual_payment(monkeypatch):
@@ -86,6 +114,7 @@ def test_payable_writeoff_preserves_actual_payment(monkeypatch):
     assert 'Write-off: Forgiven remainder' in row.notes
     assert db.commits == 1
     assert db.refreshed == [row]
+    assert db.locked_models == [Payable]
 
 
 def test_writeoff_rejects_zero_balance_without_mutation(monkeypatch):
@@ -115,6 +144,7 @@ def test_writeoff_rejects_zero_balance_without_mutation(monkeypatch):
     assert receivable.status == 'closed'
     assert receivable.amount_collected == 500.0
     assert db.commits == 0
+    assert db.locked_models == [Receivable]
 
 
 def test_public_writeoff_routes_use_cash_preserving_service_only():
