@@ -10,10 +10,37 @@ from app.services.settlement_reversal_guard import ensure_linked_settlement_muta
 ROOT = Path(__file__).resolve().parents[2]
 
 
+class FakeQuery:
+    def __init__(self, db, model):
+        self.db = db
+        self.model = model
+
+    def filter(self, *_args, **_kwargs):
+        return self
+
+    def populate_existing(self):
+        return self
+
+    def with_for_update(self):
+        self.db.locked_models.append(self.model)
+        return self
+
+    def first(self):
+        if self.model is Receivable:
+            return self.db.receivable
+        if self.model is Payable:
+            return self.db.payable
+        return None
+
+
 class FakeDb:
     def __init__(self, *, receivable=None, payable=None):
         self.receivable = receivable
         self.payable = payable
+        self.locked_models = []
+
+    def query(self, model):
+        return FakeQuery(self, model)
 
     def get(self, model, row_id):
         if model is Receivable:
@@ -40,6 +67,8 @@ def test_written_off_receivable_blocks_posted_collection_mutation():
     with pytest.raises(ValueError, match='Reopen the receivable'):
         ensure_linked_settlement_mutable(db, tx)
 
+    assert db.locked_models == [Receivable]
+
 
 def test_written_off_payable_blocks_posted_payment_mutation():
     db = FakeDb(payable=SimpleNamespace(id=20, status='written_off'))
@@ -47,6 +76,8 @@ def test_written_off_payable_blocks_posted_payment_mutation():
 
     with pytest.raises(ValueError, match='Reopen the payable'):
         ensure_linked_settlement_mutable(db, tx)
+
+    assert db.locked_models == [Payable]
 
 
 def test_reopened_parent_allows_settlement_mutation():
@@ -56,10 +87,14 @@ def test_reopened_parent_allows_settlement_mutation():
     ensure_linked_settlement_mutable(receivable_db, _tx(receivable_id=10))
     ensure_linked_settlement_mutable(payable_db, _tx(payable_id=20))
 
+    assert receivable_db.locked_models == [Receivable]
+    assert payable_db.locked_models == [Payable]
+
 
 def test_non_posting_transaction_does_not_need_parent_reopen():
     db = FakeDb(receivable=SimpleNamespace(id=10, status='written_off'))
     ensure_linked_settlement_mutable(db, _tx(status='draft', receivable_id=10))
+    assert db.locked_models == []
 
 
 def test_public_mutation_routes_all_use_guard():
