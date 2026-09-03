@@ -5,14 +5,12 @@ from app.api.deps import require_permissions
 from app.db.database import get_db
 from app.schemas.cashflow import AccountTransferCreate, AccountTransferUpdate, CashflowActionPayload
 from app.services.cashflow_service import (
-    approve_transfer,
-    cancel_transfer,
     create_transfer,
     delete_transfer,
     list_transfers,
     reverse_transfer,
-    update_transfer,
 )
+from app.services.transfer_mutation_service import approve_transfer, cancel_transfer, update_transfer
 
 router = APIRouter()
 
