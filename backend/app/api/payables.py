@@ -11,7 +11,6 @@ from app.services.cashflow_service import (
     list_payables,
     reopen_payable,
     reverse_payable_payment,
-    update_payable,
 )
 from app.services.payable_atomicity_service import (
     IdempotencyConflict,
@@ -20,7 +19,7 @@ from app.services.payable_atomicity_service import (
 )
 from app.services.settlement_reversal_guard import ensure_linked_settlement_mutable
 from app.services.subledger_creation_guard import ensure_payable_starts_unsettled
-from app.services.subledger_edit_guard import ensure_payable_edit_preserves_settlement
+from app.services.subledger_edit_service import update_payable_safely
 from app.services.writeoff_service import write_off_payable_preserving_cash
 
 router = APIRouter()
@@ -98,8 +97,7 @@ def edit_payable(
     user=Depends(require_permissions('cashflow.money_out')),
 ):
     try:
-        ensure_payable_edit_preserves_settlement(db, payable_id, payload)
-        return update_payable(db, payable_id, payload)
+        return update_payable_safely(db, payable_id, payload)
     except ValueError as e:
         db.rollback()
         raise HTTPException(status_code=400, detail=str(e))
