@@ -11,11 +11,10 @@ from app.services.cashflow_service import (
     list_receivables,
     reopen_receivable,
     reverse_receivable_collection,
-    update_receivable,
 )
 from app.services.settlement_reversal_guard import ensure_linked_settlement_mutable
 from app.services.subledger_creation_guard import ensure_receivable_starts_unsettled
-from app.services.subledger_edit_guard import ensure_receivable_edit_preserves_settlement
+from app.services.subledger_edit_service import update_receivable_safely
 from app.services.writeoff_service import write_off_receivable_preserving_cash
 
 router = APIRouter()
@@ -63,8 +62,7 @@ def edit_receivable(
     user=Depends(require_permissions('cashflow.money_in')),
 ):
     try:
-        ensure_receivable_edit_preserves_settlement(db, receivable_id, payload)
-        return update_receivable(db, receivable_id, payload)
+        return update_receivable_safely(db, receivable_id, payload)
     except ValueError as e:
         db.rollback()
         raise HTTPException(status_code=400, detail=str(e))
