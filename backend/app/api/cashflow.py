@@ -7,15 +7,17 @@ from app.db.database import get_db
 from app.models.entities import MoneyTransaction
 from app.schemas.cashflow import CashflowActionPayload, MoneyTransactionCreate, MoneyTransactionUpdate
 from app.services.cashflow_service import (
-    approve_money_transaction,
     account_ledger,
-    cancel_money_transaction,
     cashflow_summary,
     create_money_transaction,
     delete_money_transaction,
     get_money_transaction,
     list_money_transactions,
     reverse_money_transaction,
+)
+from app.services.money_transaction_mutation_service import (
+    approve_money_transaction,
+    cancel_money_transaction,
     update_money_transaction,
 )
 from app.services.permission_service import get_user_permission_keys
