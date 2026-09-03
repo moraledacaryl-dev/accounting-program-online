@@ -134,7 +134,7 @@ jobs:
 
       - name: Run PostgreSQL workflow, concurrency, and scale certification tests
         working-directory: backend
-        run: python3 -m pytest tests/test_postgresql_ci.py tests/test_postgresql_transaction_concurrency.py tests/test_postgresql_transfer_mutation_concurrency_pass85.py tests/test_postgresql_subledger_edit_concurrency_pass86.py tests/test_postgresql_pass72_certification.py -q
+        run: python3 -m pytest tests/test_postgresql_ci.py tests/test_postgresql_transaction_concurrency.py tests/test_postgresql_transfer_mutation_concurrency_pass85.py tests/test_postgresql_subledger_edit_concurrency_pass86.py tests/test_postgresql_money_transaction_mutation_concurrency_pass87.py tests/test_postgresql_pass72_certification.py -q
 
   frontend-build:
     name: Frontend build
