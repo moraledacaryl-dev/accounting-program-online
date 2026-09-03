@@ -15,8 +15,18 @@ def _as_float(value) -> float:
         return 0.0
 
 
+def _lock_subledger_row(db: Session, model, row_id: int):
+    return (
+        db.query(model)
+        .filter(model.id == int(row_id))
+        .populate_existing()
+        .with_for_update()
+        .first()
+    )
+
+
 def ensure_receivable_edit_preserves_settlement(db: Session, receivable_id: int, payload) -> None:
-    row = db.get(Receivable, int(receivable_id))
+    row = _lock_subledger_row(db, Receivable, receivable_id)
     if not row:
         raise ValueError('Receivable not found.')
 
@@ -40,7 +50,7 @@ def ensure_receivable_edit_preserves_settlement(db: Session, receivable_id: int,
 
 
 def ensure_payable_edit_preserves_settlement(db: Session, payable_id: int, payload) -> None:
-    row = db.get(Payable, int(payable_id))
+    row = _lock_subledger_row(db, Payable, payable_id)
     if not row:
         raise ValueError('Payable not found.')
 
