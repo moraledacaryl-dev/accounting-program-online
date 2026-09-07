@@ -7,6 +7,7 @@ BACKUP_DIR="${BACKUP_DIR:-/var/backups/hiddenoasis/accounting}"
 ENV_FILE="${ENV_FILE:-/etc/hiddenoasis/accounting-backend.env}"
 RETENTION_DAYS="${RETENTION_DAYS:-14}"
 STAMP="$(date -u +%Y%m%dT%H%M%SZ)"
+BACKUP_EVIDENCE_DIR="${BACKUP_UPLOADS_DIR:-/var/lib/hiddenoasis/accounting/uploads}"
 
 mkdir -p "$BACKUP_DIR"
 chmod 700 "$BACKUP_DIR"
@@ -35,7 +36,7 @@ META="$BACKUP_DIR/accounting-$STAMP.meta"
 TMP="$DUMP.tmp"
 EVIDENCE="$BACKUP_DIR/accounting-$STAMP.uploads.tar.gz"
 EVIDENCE_TMP="$EVIDENCE.tmp"
-UPLOADS_DIR="${UPLOADS_DIR:-/var/lib/hiddenoasis/accounting/uploads}"
+UPLOADS_DIR="$BACKUP_EVIDENCE_DIR"
 test -d "$UPLOADS_DIR"
 
 trap 'rm -f "$TMP" "$EVIDENCE_TMP"' EXIT
