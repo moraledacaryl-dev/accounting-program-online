@@ -2,6 +2,7 @@
 
 import { useEffect, useMemo, useState } from 'react';
 import { approveRecord, createRecord, deleteRecord, fetchModuleTaxonomy, getModuleRecords, updateRecord } from '../lib/api';
+import { useCurrentUser } from '../lib/useCurrentUser';
 import { useConfirmAction } from './ConfirmActionProvider';
 
 function scopeTaxonomy(rawTaxonomy, categoryFilter) {
@@ -30,6 +31,7 @@ export default function ClientModulePage({
   defaultBucket = '',
 }) {
   const confirmAction = useConfirmAction();
+  const { can } = useCurrentUser();
   const [taxonomy, setTaxonomy] = useState({});
   const [records, setRecords] = useState([]);
   const [search, setSearch] = useState('');
@@ -188,7 +190,7 @@ export default function ClientModulePage({
             <label>Date<input type="date" value={form.transaction_date} onChange={(e)=>setForm(f=>({...f, transaction_date:e.target.value}))} /></label>
             <label>Due<input type="date" value={form.due_date} onChange={(e)=>setForm(f=>({...f, due_date:e.target.value}))} /></label>
             <label>Reference<input value={form.document_ref} onChange={(e)=>setForm(f=>({...f, document_ref:e.target.value}))} /></label>
-            <label>Status<select value={form.workflow_status} onChange={(e)=>setForm(f=>({...f, workflow_status:e.target.value}))}><option value="draft">Draft</option><option value="pending_review">For review</option><option value="approved">Approved</option><option value="posted">Posted</option></select></label>
+            <label>Status<select value={form.workflow_status} onChange={(e)=>setForm(f=>({...f, workflow_status:e.target.value}))}><option value="draft">Draft</option><option value="pending_review">For review</option>{can('approvals.act') && <option value="approved">Approved</option>}</select></label>
             <label>BIR<select value={form.bir_status} onChange={(e)=>setForm(f=>({...f, bir_status:e.target.value}))}><option value="internal_only">Internal only</option><option value="ready_for_bir">Ready for BIR</option><option value="needs_review">Needs review</option><option value="posted_to_bir">Posted to BIR</option></select></label>
           </div>
           <label>Notes<textarea value={form.notes} onChange={(e)=>setForm(f=>({...f, notes:e.target.value}))} /></label>

@@ -27,8 +27,8 @@ const EXTERNAL_OWNERSHIP = [
 ];
 
 function environmentUrl(key) {
-  if (key === 'NEXT_PUBLIC_INVENTORY_APP_URL') return process.env.NEXT_PUBLIC_INVENTORY_APP_URL || '';
-  if (key === 'NEXT_PUBLIC_POS_APP_URL') return process.env.NEXT_PUBLIC_POS_APP_URL || '';
+  if (key === 'NEXT_PUBLIC_INVENTORY_APP_URL') return process.env.NEXT_PUBLIC_INVENTORY_APP_URL || 'https://inventory.hiddenoasis.app';
+  if (key === 'NEXT_PUBLIC_POS_APP_URL') return process.env.NEXT_PUBLIC_POS_APP_URL || 'https://pos.hiddenoasis.app';
   return '';
 }
 

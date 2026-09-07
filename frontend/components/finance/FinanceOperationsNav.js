@@ -1,6 +1,7 @@
 'use client';
 
 import Link from 'next/link';
+import { useCurrentUser } from '../../lib/useCurrentUser';
 import { usePathname } from 'next/navigation';
 
 const links = [
@@ -27,6 +28,7 @@ function activeFor(pathname, href) {
 
 export default function FinanceOperationsNav() {
   const pathname = usePathname();
+  const { can } = useCurrentUser();
   if (!prefixes.some((prefix) => pathname === prefix || pathname.startsWith(`${prefix}/`))) return null;
 
   return (
@@ -43,9 +45,9 @@ export default function FinanceOperationsNav() {
         })}
       </div>
       <div className="finance-context-nav__actions" aria-label="Common finance actions">
-        <Link href="/cashflow?action=money-in" className="finance-action finance-action--in">Money in</Link>
-        <Link href="/cashflow?action=money-out" className="finance-action">Money out</Link>
-        <Link href="/cashflow?action=transfer" className="finance-action">Transfer</Link>
+        {can('cashflow.money_in') && <Link href="/cashflow?action=money-in" className="finance-action finance-action--in">Money in</Link>}
+        {can('cashflow.money_out') && <Link href="/cashflow?action=money-out" className="finance-action">Money out</Link>}
+        {can('cashflow.transfers') && <Link href="/cashflow?action=transfer" className="finance-action">Transfer</Link>}
       </div>
     </nav>
   );

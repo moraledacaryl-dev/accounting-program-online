@@ -410,3 +410,9 @@
     flex-direction: column;
   }
 }
+
+/* Accountant view puts actionable finance work ahead of hospitality context. */
+.dashboard-main-grid--finance > .dashboard-action-center { order: -1; }
+@media (min-width: 1000px) {
+  .dashboard-main-grid--finance { grid-template-columns: minmax(320px, 1fr) minmax(0, 1.5fr); }
+}

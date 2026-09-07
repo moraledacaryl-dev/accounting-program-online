@@ -2,6 +2,8 @@ from __future__ import annotations
 
 import csv
 import io
+from types import SimpleNamespace
+from decimal import Decimal
 from datetime import datetime
 
 from fastapi import APIRouter, Depends, HTTPException, Query, Response
@@ -46,6 +48,8 @@ from app.models.entities import (
 from app.schemas.common import RecordSettlementCreate
 from app.services.cashflow_service import cashflow_summary
 
+from app.services.journal_integrity_service import posted_journal_filter, money
+
 router = APIRouter()
 
 
@@ -82,7 +86,7 @@ def _parse_iso_date(value: str | None) -> datetime | None:
 
 
 def _round_money(value) -> float:
-    return round(float(value or 0), 4)
+    return float(money(value))
 
 
 def _account_family(account_code: str | None, account_type: str | None = None) -> str:
@@ -126,7 +130,7 @@ def _posted_journal_rows(
     query = (
         db.query(JournalEntry, JournalLine)
         .join(JournalLine, JournalLine.journal_entry_id == JournalEntry.id)
-        .filter(JournalEntry.status.notin_(['draft', 'cancelled', 'voided', 'reversed']))
+        .filter(posted_journal_filter())
     )
     if as_of_date:
         query = query.filter(JournalEntry.entry_date <= as_of_date)
@@ -150,20 +154,20 @@ def _group_lines(rows: list[tuple[JournalEntry, JournalLine]], chart_map: dict[s
                 'account_name': (account.name if account else line.account_name) or 'Unmapped',
                 'account_type': account.account_type if account else None,
                 'family': _account_family(line.account_code, account.account_type if account else None),
-                'debit': 0.0,
-                'credit': 0.0,
+                'debit': Decimal(0),
+                'credit': Decimal(0),
             },
         )
-        item['debit'] += float(line.debit or 0)
-        item['credit'] += float(line.credit or 0)
+        item['debit'] += Decimal(str(line.debit or 0))
+        item['credit'] += Decimal(str(line.credit or 0))
 
     result = []
     for item in grouped.values():
         family = item['family']
         if family in {'assets', 'expenses'}:
-            balance = float(item['debit']) - float(item['credit'])
+            balance = item['debit'] - item['credit']
         else:
-            balance = float(item['credit']) - float(item['debit'])
+            balance = item['credit'] - item['debit']
         result.append({
             **item,
             'debit': _round_money(item['debit']),
@@ -178,8 +182,8 @@ def _sum_family(items: list[dict], family: str) -> float:
 
 
 def _build_profit_and_loss(period_items: list[dict]) -> dict:
-    revenue = [row for row in period_items if row.get('family') == 'revenue' and abs(float(row.get('balance') or 0)) > 0.0001]
-    expenses = [row for row in period_items if row.get('family') == 'expenses' and abs(float(row.get('balance') or 0)) > 0.0001]
+    revenue = [row for row in period_items if row.get('family') == 'revenue' and abs(money(row.get('balance'))) > 0]
+    expenses = [row for row in period_items if row.get('family') == 'expenses' and abs(money(row.get('balance'))) > 0]
     revenue_total = _round_money(sum(float(row['balance']) for row in revenue))
     expense_total = _round_money(sum(float(row['balance']) for row in expenses))
     return {
@@ -195,9 +199,9 @@ def _build_profit_and_loss(period_items: list[dict]) -> dict:
 
 
 def _build_balance_sheet(as_of_items: list[dict]) -> dict:
-    assets = [row for row in as_of_items if row.get('family') == 'assets' and abs(float(row.get('balance') or 0)) > 0.0001]
-    liabilities = [row for row in as_of_items if row.get('family') == 'liabilities' and abs(float(row.get('balance') or 0)) > 0.0001]
-    equity = [row for row in as_of_items if row.get('family') == 'equity' and abs(float(row.get('balance') or 0)) > 0.0001]
+    assets = [row for row in as_of_items if row.get('family') == 'assets' and abs(money(row.get('balance'))) > 0]
+    liabilities = [row for row in as_of_items if row.get('family') == 'liabilities' and abs(money(row.get('balance'))) > 0]
+    equity = [row for row in as_of_items if row.get('family') == 'equity' and abs(money(row.get('balance'))) > 0]
     current_earnings = _round_money(_sum_family(as_of_items, 'revenue') - _sum_family(as_of_items, 'expenses'))
     if abs(current_earnings) > 0.0001:
         equity.append({
@@ -236,7 +240,7 @@ def _build_trial_balance(as_of_items: list[dict]) -> dict:
             'debit': debit_total,
             'credit': credit_total,
             'variance': _round_money(debit_total - credit_total),
-            'is_balanced': abs(debit_total - credit_total) <= 0.01,
+            'is_balanced': money(debit_total) == money(credit_total),
         },
     }
 
@@ -347,14 +351,28 @@ def _build_operational_supplement(db: Session) -> dict:
     }
 
 
+def _ledger_summary(db, chart_map, *, start_date=None, end_date=None, as_of_date=None):
+    query = db.query(JournalLine).join(JournalEntry, JournalEntry.id == JournalLine.journal_entry_id).filter(posted_journal_filter())
+    if as_of_date:
+        query = query.filter(JournalEntry.entry_date <= as_of_date)
+    else:
+        if start_date:
+            query = query.filter(JournalEntry.entry_date >= start_date)
+        if end_date:
+            query = query.filter(JournalEntry.entry_date <= end_date)
+    # Materialize one row per account, not every historical journal line.
+    grouped = query.with_entities(JournalLine.account_code, func.min(JournalLine.account_name), func.sum(JournalLine.debit), func.sum(JournalLine.credit)).group_by(JournalLine.account_code).all()
+    entries, lines = query.with_entities(func.count(func.distinct(JournalEntry.id)), func.count(JournalLine.id)).one()
+    items = _group_lines([(None, SimpleNamespace(account_code=code, account_name=name, debit=debit, credit=credit)) for code, name, debit, credit in grouped], chart_map)
+    return items, int(entries), int(lines)
+
+
 def _build_financial_statements(db: Session, start_date: str | None = None, end_date: str | None = None, as_of_date: str | None = None):
     as_of = as_of_date or end_date or _today()
     chart_map = _chart_account_map(db)
-    period_rows = _posted_journal_rows(db, start_date=start_date, end_date=end_date)
-    as_of_rows = _posted_journal_rows(db, as_of_date=as_of)
-    period_items = _group_lines(period_rows, chart_map)
-    as_of_items = _group_lines(as_of_rows, chart_map)
-    unposted_count = int(db.query(JournalEntry).filter(JournalEntry.status.in_(['draft', 'cancelled', 'voided', 'reversed'])).count() or 0)
+    period_items, period_entries, period_lines = _ledger_summary(db, chart_map, start_date=start_date, end_date=end_date)
+    as_of_items, as_of_entries, as_of_lines = _ledger_summary(db, chart_map, as_of_date=as_of)
+    unposted_count = int(db.query(JournalEntry).filter(JournalEntry.status != 'posted').count() or 0)
 
     return {
         'period': {
@@ -368,14 +386,14 @@ def _build_financial_statements(db: Session, start_date: str | None = None, end_
         'trial_balance': _build_trial_balance(as_of_items),
         'operational_supplement': _build_operational_supplement(db),
         'ledger_coverage': {
-            'posted_journal_entries_in_period': len({entry.id for entry, _line in period_rows}),
-            'posted_journal_lines_in_period': len(period_rows),
-            'posted_journal_entries_as_of': len({entry.id for entry, _line in as_of_rows}),
-            'posted_journal_lines_as_of': len(as_of_rows),
+            'posted_journal_entries_in_period': period_entries,
+            'posted_journal_lines_in_period': period_lines,
+            'posted_journal_entries_as_of': as_of_entries,
+            'posted_journal_lines_as_of': as_of_lines,
             'excluded_unposted_or_reversed_entries': unposted_count,
         },
         'notes': [
-            'Profit & Loss, Balance Sheet, and Trial Balance are generated from non-draft journal entries.',
+            'Profit & Loss, Balance Sheet, and Trial Balance are generated from posted journal entries.',
             'Cash Flow uses posted money-in and money-out transactions, with transfers shown separately at zero net cash effect.',
             'Operational supplement shows live subledger values for cash accounts, receivables, payables, inventory, and assets where legacy rows may not yet be fully journalized.',
         ],

@@ -1,5 +1,5 @@
 from __future__ import annotations
-from sqlalchemy import Integer, String, Float, Text, DateTime, ForeignKey, Boolean, UniqueConstraint
+from sqlalchemy import Integer, String, Float, Numeric, Text, DateTime, ForeignKey, Boolean, UniqueConstraint
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 from sqlalchemy.sql import func
 from app.db.database import Base
@@ -1386,8 +1386,8 @@ class JournalLine(Base):
     journal_entry_id: Mapped[int] = mapped_column(ForeignKey('journal_entries.id'), index=True)
     account_code: Mapped[str] = mapped_column(String(50))
     account_name: Mapped[str] = mapped_column(String(255))
-    debit: Mapped[float] = mapped_column(Float, default=0)
-    credit: Mapped[float] = mapped_column(Float, default=0)
+    debit: Mapped[float] = mapped_column(Numeric(20, 4), default=0)
+    credit: Mapped[float] = mapped_column(Numeric(20, 4), default=0)
     memo: Mapped[str | None] = mapped_column(String(255), nullable=True)
     entry: Mapped['JournalEntry'] = relationship(back_populates='lines')
 

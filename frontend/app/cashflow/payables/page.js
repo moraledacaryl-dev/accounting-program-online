@@ -1,7 +1,6 @@
 'use client';
 
-import { useEffect, useState } from 'react';
-import CashflowTabs from '../../../components/cashflow/CashflowTabs';
+import { useEffect, useRef, useState } from 'react';
 import InputActionModal from '../../../components/InputActionModal';
 import PayablesTable from '../../../components/cashflow/PayablesTable';
 import SettlementModal from '../../../components/cashflow/SettlementModal';
@@ -35,6 +34,9 @@ const EMPTY_FORM = {
 
 export default function PayablesPage() {
   const { can } = useCurrentUser();
+  const [showForm, setShowForm] = useState(false);
+  const [saving, setSaving] = useState(false);
+  const savingRef = useRef(false);
   const [accounts, setAccounts] = useState([]);
   const [rows, setRows] = useState([]);
   const [form, setForm] = useState({ ...EMPTY_FORM });
@@ -60,6 +62,8 @@ export default function PayablesPage() {
 
   async function submit(e) {
     e.preventDefault();
+    if (savingRef.current) return;
+    savingRef.current = true; setSaving(true);
     setError('');
     setNotice('');
     try {
@@ -85,10 +89,11 @@ export default function PayablesPage() {
       }
       setForm({ ...EMPTY_FORM, bill_date: form.bill_date });
       setEditingId(null);
+      setShowForm(false);
       await load();
     } catch (err) {
       setError(err.message || 'Failed to save bill.');
-    }
+    } finally { savingRef.current = false; setSaving(false); }
   }
 
   function onPay(row) {
@@ -138,6 +143,7 @@ export default function PayablesPage() {
   }
 
   function editRow(row) {
+    setShowForm(true);
     setEditingId(row.id);
     setForm({
       source_type: row.source_type || '',
@@ -189,21 +195,21 @@ export default function PayablesPage() {
 
   return (
     <div className="stack">
-      <CashflowTabs />
+
 
       <section className="section">
-        <h1>Bills to Pay</h1>
+        <div className="row wrap" style={{ justifyContent: 'space-between' }}><h1>Bills to Pay</h1>{can('cashflow.money_out') && <button disabled={showForm} onClick={() => { setEditingId(null); setForm({ ...EMPTY_FORM, bill_date: todayISO() }); setShowForm(true); }}>Add Bill</button>}</div>
         <p className="muted">Track supplier bills and pay them directly from cash, bank, or e-wallet accounts.</p>
         {editingId ? <p className="small muted">Editing bill #{editingId}</p> : null}
-        {!!notice && <p className="success-text">{notice}</p>}
-        {!!error && <p className="error-text">{error}</p>}
+        {!!notice && <p role="status" className="success-text">{notice}</p>}
+        {!!error && <p role="alert" className="error-text">{error}</p>}
       </section>
 
-      <section className="section">
+      {showForm && can('cashflow.money_out') && <section className="section">
         <h2>{editingId ? 'Edit Bill' : 'Add Bill to Pay'}</h2>
-        <form onSubmit={submit} onKeyDown={(event) => shouldPreventEnterSubmit(event, isSubmittable)}>
+        <form aria-busy={saving} onSubmit={submit} onKeyDown={(event) => shouldPreventEnterSubmit(event, isSubmittable)}>
           <div className="form-grid">
-            <label>Supplier<input required value={form.supplier_name} onChange={(e) => setForm((f) => ({ ...f, supplier_name: e.target.value }))} /></label>
+            <label>Supplier<input autoFocus required value={form.supplier_name} onChange={(e) => setForm((f) => ({ ...f, supplier_name: e.target.value }))} /></label>
             <label>Type
               <select value={form.payable_type} onChange={(e) => setForm((f) => ({ ...f, payable_type: e.target.value }))}>
                 <option value="supplier_bill">Supplier bill</option>
@@ -213,7 +219,7 @@ export default function PayablesPage() {
                 <option value="service_provider_bill">Service provider bill</option>
               </select>
             </label>
-            <label>Bill Date<input type="date" value={form.bill_date} onChange={(e) => setForm((f) => ({ ...f, bill_date: e.target.value }))} /></label>
+            <label>Bill Date<input required type="date" value={form.bill_date} onChange={(e) => setForm((f) => ({ ...f, bill_date: e.target.value }))} /></label>
             <label>Due Date<input type="date" value={form.due_date} onChange={(e) => setForm((f) => ({ ...f, due_date: e.target.value }))} /></label>
             <label>Bill Amount<input required type="number" min="0.01" step="0.01" value={form.gross_amount} onChange={(e) => setForm((f) => ({ ...f, gross_amount: e.target.value }))} /></label>
             {editingId ? (
@@ -232,12 +238,14 @@ export default function PayablesPage() {
           {!editingId ? <p className="small muted">New bills start unpaid. Use Pay after saving to record money leaving a financial account.</p> : null}
           <label>Notes<textarea value={form.notes} onChange={(e) => setForm((f) => ({ ...f, notes: e.target.value }))} /></label>
           <div className="row wrap">
-            <button type="submit">{editingId ? 'Update Bill' : 'Save Bill'}</button>
+            <button type="submit" disabled={saving}>{saving ? 'Saving…' : editingId ? 'Update Bill' : 'Save Bill'}</button>
+            {!editingId && <button type="button" className="secondary" disabled={saving} onClick={() => setShowForm(false)}>Cancel</button>}
             {editingId && (
               <button
                 type="button"
                 className="secondary"
                 onClick={() => {
+                  setShowForm(false);
                   setEditingId(null);
                   setForm({ ...EMPTY_FORM, bill_date: todayISO() });
                 }}
@@ -247,7 +255,7 @@ export default function PayablesPage() {
             )}
           </div>
         </form>
-      </section>
+      </section>}
 
       <section className="section">
         <h2>Open Bills to Pay</h2>

@@ -1,5 +1,9 @@
 from __future__ import annotations
 from sqlalchemy.orm import Session
+from app.services.account_mapping_service import resolve_record_accounts
+from app.services.journal_integrity_service import money
+from app.core.business_clock import business_today
+from app.services.bir_service import ensure_date_unlocked
 from app.models.entities import JournalEntry, JournalLine, Record
 
 DEFAULT_ACCOUNT_MAP = {
@@ -42,11 +46,14 @@ def autopost_record(db: Session, record: Record, commit: bool = True):
         return None
     if record.workflow_status != 'approved':
         return None
+    # Serialize all callers, including integrations, on the source row.
+    db.flush()
+    db.query(Record).filter(Record.id == record.id).with_for_update().first()
     # Avoid double posting by reference
     existing = db.query(JournalEntry).filter(JournalEntry.reference_no == f"REC-{record.id}").first()
     if existing:
         return existing
-    raw_amount = float(record.amount or 0)
+    raw_amount = money(record.amount)
     if abs(raw_amount) <= 0:
         return None
     amount = abs(raw_amount)
@@ -68,25 +75,18 @@ def autopost_record(db: Session, record: Record, commit: bool = True):
         main_code, main_name = DEFAULT_ACCOUNT_MAP.get((record.module_slug, 'liability'), ('2100', 'Current Liability'))
     elif record.direction == 'asset':
         main_code, main_name = DEFAULT_ACCOUNT_MAP.get((record.module_slug, 'asset'), ('1500', 'Asset'))
-    je = JournalEntry(entry_date=record.transaction_date, reference_no=f"REC-{record.id}", description=record.name or record.item, source_module=record.module_slug, status='posted')
+    debit_account, credit_account = ((pay_code, pay_name), (main_code, main_name)) if record.direction in {'income', 'liability'} else ((main_code, main_name), (pay_code, pay_name))
+    debit_account, credit_account = resolve_record_accounts(db, record, debit_account, credit_account)
+    if reverse:
+        debit_account, credit_account = credit_account, debit_account
+    entry_date = record.transaction_date or business_today()
+    ensure_date_unlocked(db, entry_date, scope='bir', action='post record')
+    record.transaction_date = entry_date
+    je = JournalEntry(entry_date=entry_date, reference_no=f"REC-{record.id}", description=record.name or record.item, source_module=record.module_slug, status='posted')
     db.add(je)
     db.flush()
-    if record.direction == 'income':
-        dr, cr = (amount, 0) if not reverse else (0, amount)
-        db.add(JournalLine(journal_entry_id=je.id, account_code=pay_code, account_name=pay_name, debit=dr, credit=cr, memo=record.name))
-        db.add(JournalLine(journal_entry_id=je.id, account_code=main_code, account_name=main_name, debit=cr, credit=dr, memo=record.name))
-    elif record.direction == 'expense':
-        dr, cr = (amount, 0) if not reverse else (0, amount)
-        db.add(JournalLine(journal_entry_id=je.id, account_code=main_code, account_name=main_name, debit=dr, credit=cr, memo=record.name))
-        db.add(JournalLine(journal_entry_id=je.id, account_code=pay_code, account_name=pay_name, debit=cr, credit=dr, memo=record.name))
-    elif record.direction == 'liability':
-        dr, cr = (amount, 0) if not reverse else (0, amount)
-        db.add(JournalLine(journal_entry_id=je.id, account_code=pay_code, account_name=pay_name, debit=dr, credit=cr, memo=record.name))
-        db.add(JournalLine(journal_entry_id=je.id, account_code=main_code, account_name=main_name, debit=cr, credit=dr, memo=record.name))
-    elif record.direction == 'asset':
-        dr, cr = (amount, 0) if not reverse else (0, amount)
-        db.add(JournalLine(journal_entry_id=je.id, account_code=main_code, account_name=main_name, debit=dr, credit=cr, memo=record.name))
-        db.add(JournalLine(journal_entry_id=je.id, account_code=pay_code, account_name=pay_name, debit=cr, credit=dr, memo=record.name))
+    db.add(JournalLine(journal_entry_id=je.id, account_code=debit_account[0], account_name=debit_account[1], debit=amount, credit=0, memo=record.name))
+    db.add(JournalLine(journal_entry_id=je.id, account_code=credit_account[0], account_name=credit_account[1], debit=0, credit=amount, memo=record.name))
     if commit:
         db.commit()
         db.refresh(je)

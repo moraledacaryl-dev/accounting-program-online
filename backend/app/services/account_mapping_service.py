@@ -2,7 +2,7 @@ from __future__ import annotations
 
 from sqlalchemy.orm import Session, selectinload
 
-from app.models.entities import AccountMappingRule, ChartAccount
+from app.models.entities import AccountMappingRule, ChartAccount, JournalLine
 from app.schemas.accounting_setup import (
     AccountMappingRuleCreate,
     AccountMappingRuleUpdate,
@@ -100,6 +100,8 @@ def update_chart_account(db: Session, account_id: int, payload: ChartAccountUpda
         raise ValueError('Chart account not found.')
     data = payload.model_dump(exclude_unset=True)
     if 'code' in data:
+        if data['code'] != row.code and db.query(JournalLine.id).filter(JournalLine.account_code == row.code).first():
+            raise ValueError('An account used in journals cannot be renumbered. Create a new account instead.')
         code = ensure_editable_after_create(
             db,
             'chart_account',
@@ -124,6 +126,13 @@ def update_chart_account(db: Session, account_id: int, payload: ChartAccountUpda
             raise ValueError('parent_id cannot reference self.')
         if parent_id and not db.get(ChartAccount, int(parent_id)):
             raise ValueError('parent_id not found.')
+        cursor, visited = parent_id, {row.id}
+        while cursor:
+            if cursor in visited:
+                raise ValueError('Chart account hierarchy cannot contain a cycle.')
+            visited.add(cursor)
+            parent = db.get(ChartAccount, int(cursor))
+            cursor = parent.parent_id if parent else None
         row.parent_id = parent_id
     for key in ('subtype', 'is_active', 'notes'):
         if key in data:
@@ -144,6 +153,10 @@ def delete_chart_account(db: Session, account_id: int):
     has_children = db.query(ChartAccount.id).filter(ChartAccount.parent_id == row.id).first()
     if has_children:
         raise ValueError('Cannot delete chart account with child accounts.')
+    if db.query(JournalLine.id).filter(JournalLine.account_code == row.code).first():
+        raise ValueError('An account used in journals cannot be deleted. Deactivate it instead.')
+    if db.query(AccountMappingRule.id).filter((AccountMappingRule.debit_account_code == row.code) | (AccountMappingRule.credit_account_code == row.code)).first():
+        raise ValueError('Remove posting rules referencing this account before deleting it.')
     db.delete(row)
     db.commit()
     return {'ok': True}
@@ -220,3 +233,28 @@ def delete_account_mapping(db: Session, mapping_id: int):
     db.delete(row)
     db.commit()
     return {'ok': True}
+
+
+def resolve_record_accounts(db: Session, record, fallback_debit, fallback_credit):
+    """First matching active rule wins: priority, specificity, then stable id."""
+    fields = ('category', 'bucket', 'item', 'direction', 'payment_method')
+    rules = db.query(AccountMappingRule).filter(
+        AccountMappingRule.module_slug == record.module_slug,
+        AccountMappingRule.is_active == True,
+    ).all()
+    matching = [rule for rule in rules if all(
+        not getattr(rule, field) or str(getattr(rule, field)).strip().lower() == str(getattr(record, field, '') or '').strip().lower()
+        for field in fields
+    )]
+    matching.sort(key=lambda rule: (rule.priority, -sum(bool(getattr(rule, field)) for field in fields), rule.id))
+    if not matching:
+        return fallback_debit, fallback_credit
+    rule = matching[0]
+    if not rule.debit_account_code or not rule.credit_account_code:
+        raise ValueError('The matching posting rule needs both a debit and a credit account.')
+    codes = {rule.debit_account_code, rule.credit_account_code}
+    accounts = {a.code: a for a in db.query(ChartAccount).filter(ChartAccount.code.in_(codes), ChartAccount.is_active == True).all()}
+    if set(accounts) != codes:
+        raise ValueError('The matching posting rule references a missing or inactive chart account.')
+    return ((rule.debit_account_code, accounts[rule.debit_account_code].name),
+            (rule.credit_account_code, accounts[rule.credit_account_code].name))
