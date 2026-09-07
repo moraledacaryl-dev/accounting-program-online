@@ -44,6 +44,10 @@ async function request(path, init = {}) {
 function readApiMessage(value) {
   if (!value) return '';
   if (typeof value === 'string') return value;
+  if (Array.isArray(value)) return value.map((item) => {
+    const field = Array.isArray(item?.loc) ? item.loc.filter((part) => part !== 'body').join(' → ') : '';
+    return `${field ? `${field}: ` : ''}${readApiMessage(item?.msg || item)}`;
+  }).join('\n');
   if (value instanceof Error) return value.message || '';
   if (typeof value === 'object') {
     const direct = value.message || value.detail || value.error || value.msg;
@@ -150,7 +154,7 @@ export const postPayrollRun = (id) => request(`/payroll/runs/${id}/post`, { meth
 export const approvePayrollRun = (id) => request(`/approvals/payroll/${id}/approve`, { method:'POST' });
 
 export const fetchJournalEntries = () => request('/journals/entries');
-export const createJournalEntry = (payload) => request('/journals/entries', { method:'POST', body: JSON.stringify(payload)});
+export const createJournalEntry = async (payload) => (await import('./cashflowApi')).idempotentMutation('/journals/entries', 'journal:create', payload);
 export const fetchJournalEntryDetail = (id) => request(`/journals/entries/${id}`);
 export const postJournalEntry = (id) => request(`/journals/entries/${id}/post`, { method:'POST' });
 export const reverseJournalEntry = (id) => request(`/journals/entries/${id}/reverse`, { method:'POST' });

@@ -47,8 +47,8 @@ export default function InventoryRestaurantNav() {
         })}
       </div>
       <div className="operations-context-nav__actions" aria-label="Common inventory actions">
-        <Link href="/purchase-requests" className="operations-action">New request</Link>
-        <Link href="/receiving" className="operations-action operations-action--primary">Receive stock</Link>
+        <Link href={process.env.NEXT_PUBLIC_INVENTORY_APP_URL || 'https://inventory.hiddenoasis.app'} className="operations-action">Open Inventory</Link>
+        <Link href={process.env.NEXT_PUBLIC_POS_APP_URL || 'https://pos.hiddenoasis.app'} className="operations-action operations-action--primary">Open POS</Link>
       </div>
     </nav>
   );

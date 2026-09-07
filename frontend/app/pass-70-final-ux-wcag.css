@@ -91,3 +91,17 @@
     scroll-behavior: auto;
   }
 }
+
+/* Ledger controls and compact phone navigation. */
+.journal-fields { border: 0; padding: 0; margin: 0; min-width: 0; }
+.journal-line { align-items: end; margin-bottom: 12px; }
+.journal-line > button { align-self: end; }
+.journal-workspace .table-wrap { overflow-x: auto; max-width: 100%; }
+.journal-workspace [tabindex="-1"]:focus { outline: 2px solid #2f6b50; outline-offset: 3px; }
+@media (max-width: 760px) {
+  body .finance-context-nav { position: relative; top: auto; gap: 6px; padding: 8px 12px; min-height: 0; }
+  body .finance-context-nav__links { min-width: 0; overflow-x: auto; }
+  body .finance-context-nav__actions { display: flex; width: auto; gap: 6px; }
+  body .finance-context-nav__actions .finance-action { flex: 0 0 auto; min-width: 0; width: auto; padding: 8px 12px; }
+  .journal-line { grid-template-columns: minmax(0, 1fr); }
+}

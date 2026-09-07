@@ -44,6 +44,40 @@ def _authorize_record_read(db: Session, user, module_slug: str):
         raise HTTPException(status_code=403, detail='Not enough privileges for this record module')
 
 
+RECORD_WRITE_PERMISSIONS = {
+    'rooms': ('bookings.edit', 'folios.manage'),
+    'restaurant': ('menu.manage',), 'breakfast': ('menu.manage',),
+    'cafe': ('menu.manage',), 'bar': ('menu.manage',),
+    'events': ('bookings.edit',), 'inventory': ('inventory.manage',),
+    'procurement': ('purchase_requests.create', 'purchase_orders.create'),
+    'payroll': ('payroll_periods.manage',), 'assets': ('assets.manage',),
+    'channel_ota': ('cashflow.money_in',), 'reconciliation': ('cashflow.reconcile',),
+    'finance': ('journals.post',), 'utilities': ('cashflow.money_out',),
+    'other_income': ('cashflow.money_in',), 'internal': ('journals.post',),
+    'bir_statutory': ('bir.manage',), 'master_data': ('master_data.manage',),
+    'workflow_status_control': ('approvals.act',),
+}
+
+
+def _authorize_record_write(db, user, module_slug, *, direction=None, approval=False):
+    required = RECORD_WRITE_PERMISSIONS.get((module_slug or '').strip().lower())
+    if not required:
+        raise HTTPException(status_code=404, detail='Record module not found')
+    enforce_external_record_ownership(module_slug, user)
+    if getattr(user, 'role', None) in {'owner', 'admin'}:
+        return
+    effective = get_user_permission_keys(db, user)
+    if not effective.intersection(required):
+        raise HTTPException(status_code=403, detail='Not enough privileges to change this record module')
+    if approval and 'approvals.act' not in effective:
+        raise HTTPException(status_code=403, detail='Approval permission is required to approve or reject records')
+    if module_slug in {'finance', 'utilities', 'other_income', 'channel_ota'}:
+        money_permission = {'income': 'cashflow.money_in', 'liability': 'cashflow.money_in',
+                            'expense': 'cashflow.money_out', 'asset': 'cashflow.money_out'}.get(direction)
+        if money_permission and money_permission not in effective:
+            raise HTTPException(status_code=403, detail=f'Missing permission: {money_permission}')
+
+
 @router.get('/{module_slug}/meta')
 def module_meta(module_slug: str, db: Session = Depends(get_db), user=Depends(get_current_user)):
     _authorize_record_read(db, user, module_slug)
@@ -61,19 +95,13 @@ def module_create_record(
     module_slug: str,
     payload: RecordCreate,
     db: Session = Depends(get_db),
-    user=Depends(require_any_permissions(
-        'cashflow.money_in',
-        'cashflow.money_out',
-        'inventory.manage',
-        'assets.manage',
-        'payroll_periods.manage',
-        'menu.manage',
-        'bookings.edit',
-    )),
+    user=Depends(get_current_user),
 ):
     try:
+        _authorize_record_write(db, user, module_slug, direction=payload.direction, approval=payload.workflow_status in {'approved', 'rejected'})
         return create_record(db, module_slug, payload, username=user.username)
     except ValueError as e:
+        db.rollback()
         raise HTTPException(status_code=400, detail=str(e))
 
 
@@ -94,26 +122,20 @@ def single_update(
     record_id: int,
     payload: RecordUpdate,
     db: Session = Depends(get_db),
-    user=Depends(require_any_permissions(
-        'cashflow.money_in',
-        'cashflow.money_out',
-        'inventory.manage',
-        'assets.manage',
-        'payroll_periods.manage',
-        'menu.manage',
-        'bookings.edit',
-    )),
+    user=Depends(get_current_user),
 ):
     try:
         current = get_record_obj(db, record_id)
         if not current:
             raise HTTPException(status_code=404, detail='Record not found')
-        enforce_external_record_ownership(current.module_slug, user)
+        _authorize_record_write(db, user, current.module_slug, direction=current.direction)
+        _authorize_record_write(db, user, current.module_slug, direction=payload.direction or current.direction, approval=payload.workflow_status in {'approved', 'rejected'} and payload.workflow_status != current.workflow_status)
         record = update_record(db, record_id, payload, approver=user.username)
         if not record:
             raise HTTPException(status_code=404, detail='Record not found')
         return record
     except ValueError as e:
+        db.rollback()
         raise HTTPException(status_code=400, detail=str(e))
 
 
@@ -124,7 +146,7 @@ def approve_record(record_id: int, payload: ApprovalPayload, db: Session = Depen
         current = get_record_obj(db, record_id)
         if not current:
             raise HTTPException(status_code=404, detail='Record not found')
-        enforce_external_record_ownership(current.module_slug, user)
+        _authorize_record_write(db, user, current.module_slug, direction=current.direction, approval=True)
         notes = current.notes
         if payload.note:
             notes = '\n'.join(filter(None, [notes, f'{status.title()} by {user.username}: {payload.note.strip()}']))
@@ -133,6 +155,7 @@ def approve_record(record_id: int, payload: ApprovalPayload, db: Session = Depen
             raise HTTPException(status_code=404, detail='Record not found')
         return record
     except ValueError as e:
+        db.rollback()
         raise HTTPException(status_code=400, detail=str(e))
 
 
@@ -140,16 +163,17 @@ def approve_record(record_id: int, payload: ApprovalPayload, db: Session = Depen
 def single_delete(
     record_id: int,
     db: Session = Depends(get_db),
-    user=Depends(require_any_permissions('approvals.act', 'cashflow.money_out', 'inventory.manage', 'assets.manage')),
+    user=Depends(get_current_user),
 ):
     try:
         current = get_record_obj(db, record_id)
         if not current:
             raise HTTPException(status_code=404, detail='Record not found')
-        enforce_external_record_ownership(current.module_slug, user)
-        ok = delete_record(db, record_id)
+        _authorize_record_write(db, user, current.module_slug, direction=current.direction)
+        ok = delete_record(db, record_id, username=user.username)
         if not ok:
             raise HTTPException(status_code=404, detail='Record not found')
         return {'ok': True}
     except ValueError as e:
+        db.rollback()
         raise HTTPException(status_code=400, detail=str(e))

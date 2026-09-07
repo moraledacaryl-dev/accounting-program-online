@@ -54,7 +54,7 @@ export const ROLE_PERMISSION_FALLBACKS = {
 
 export function effectivePermissions(user) {
   const explicit = Array.isArray(user?.permissions) ? user.permissions.filter(Boolean) : [];
-  if (explicit.length) return new Set(explicit);
+  if (Array.isArray(user?.permissions)) return new Set(explicit);
   const role = String(user?.role || '').toLowerCase();
   const fallback = ROLE_PERMISSION_FALLBACKS[role] || [];
   return new Set(fallback);

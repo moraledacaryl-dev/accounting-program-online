@@ -1,8 +1,10 @@
 from __future__ import annotations
 import json
+from types import SimpleNamespace
+from app.services.audit_service import record_audit
 from sqlalchemy import select
 from sqlalchemy.orm import Session
-from app.models.entities import Record
+from app.models.entities import Record, JournalEntry
 from app.schemas.common import RecordCreate, RecordUpdate
 from app.services.taxonomy_service import get_module_name, validate_record
 from app.services.accounting_service import autopost_record
@@ -66,10 +68,12 @@ def create_record(db: Session, module_slug: str, payload: RecordCreate, username
         created_by=username,
     )
     db.add(rec)
+    db.flush()
+    if rec.workflow_status == 'approved':
+        autopost_record(db, rec, commit=False)
+    record_audit(db, entity_type='record', entity_id=rec.id, action='created', user=SimpleNamespace(username=username), after=serialize_record(rec))
     db.commit()
     db.refresh(rec)
-    if rec.workflow_status == 'approved':
-        autopost_record(db, rec)
     return serialize_record(rec)
 
 def list_records(db: Session, module_slug: str | None = None, limit: int = 200, search: str | None = None):
@@ -91,13 +95,18 @@ def get_record(db: Session, record_id: int):
     return serialize_record(row) if row else None
 
 def update_record(db: Session, record_id: int, payload: RecordUpdate, approver: str | None = None):
-    row = db.get(Record, record_id)
+    row = db.query(Record).filter(Record.id == record_id).populate_existing().with_for_update().first()
     if not row:
         return None
     # Block edits when either the original or target period is locked.
     ensure_date_unlocked(db, row.transaction_date, scope='bir', action='update record')
     old_status = row.workflow_status
+    before = serialize_record(row)
     data = payload.model_dump(exclude_unset=True)
+    posted = db.query(JournalEntry.id).filter(JournalEntry.reference_no == f'REC-{row.id}').first()
+    protected = set(data) - {'notes'}
+    if posted and any(getattr(row, key, None) != data[key] for key in protected):
+        raise ValueError('Posted records cannot be changed. Reverse the journal and create a replacement record with a reference to the original.')
     if 'transaction_date' in data:
         ensure_date_unlocked(db, data.get('transaction_date'), scope='bir', action='move record to locked period')
     for key, value in data.items():
@@ -108,17 +117,22 @@ def update_record(db: Session, record_id: int, payload: RecordUpdate, approver: 
     if row.workflow_status == 'approved' and old_status != 'approved':
         row.approved_by = approver
     db.add(row)
+    db.flush()
+    if row.workflow_status == 'approved':
+        autopost_record(db, row, commit=False)
+    record_audit(db, entity_type='record', entity_id=row.id, action='updated', user=SimpleNamespace(username=approver), before=before, after=serialize_record(row))
     db.commit()
     db.refresh(row)
-    if row.workflow_status == 'approved':
-        autopost_record(db, row)
     return serialize_record(row)
 
-def delete_record(db: Session, record_id: int):
-    row = db.get(Record, record_id)
+def delete_record(db: Session, record_id: int, username: str | None = None):
+    row = db.query(Record).filter(Record.id == record_id).populate_existing().with_for_update().first()
     if not row:
         return False
     ensure_date_unlocked(db, row.transaction_date, scope='bir', action='delete record')
+    if db.query(JournalEntry.id).filter(JournalEntry.reference_no == f'REC-{row.id}').first():
+        raise ValueError('Posted records cannot be deleted. Use a journal reversal to preserve the audit trail.')
+    record_audit(db, entity_type='record', entity_id=row.id, action='deleted', user=SimpleNamespace(username=username), before=serialize_record(row))
     db.delete(row)
     db.commit()
     return True

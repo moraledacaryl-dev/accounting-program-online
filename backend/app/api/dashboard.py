@@ -28,6 +28,7 @@ from app.models.entities import (
     StaffMealLog,
 )
 from app.services.cashflow_service import cashflow_summary
+from app.models.entities import IntegrationReviewItem
 from app.services.guest_service import folio_balance_summary
 from app.services.system_settings_service import (
     dashboard_widget_catalog,
@@ -446,6 +447,7 @@ def summary(db: Session = Depends(get_db), user=Depends(require_permissions('das
         'open_folios': len(open_folios),
         'guest_balance_due': round(guest_balance_due, 2),
         'pending_approvals': pending_approvals,
+        'pending_review': db.query(IntegrationReviewItem).filter(IntegrationReviewItem.status.in_(['ready_for_review', 'validation_failed'])).count(),
         'cash_on_hand': _to_currency(cards.get('total_cash_on_hand')),
         'bank_balance': _to_currency(cards.get('total_bank_balance')),
         'receivables_due': _to_currency(cards.get('receivables_due')),

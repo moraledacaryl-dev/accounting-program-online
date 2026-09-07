@@ -26,6 +26,9 @@ EXTERNAL_RECORD_MODULE_OWNERS = {
     'inventory': 'Inventory & Procurement',
     'procurement': 'Inventory & Procurement',
     'restaurant': 'POS Cloud',
+    'breakfast': 'POS Cloud',
+    'cafe': 'POS Cloud',
+    'bar': 'POS Cloud',
 }
 
 

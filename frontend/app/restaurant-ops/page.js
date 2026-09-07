@@ -897,11 +897,11 @@ export default function RestaurantOpsPage() {
         <div className="row wrap" style={{ justifyContent: 'space-between' }}>
           <div>
             <h1>Restaurant Operations</h1>
-            <p className="muted">One screen for sales posting, automatic inventory deduction, restocking with accounting, and menu builders.</p>
+            <p className="muted">Retained sales, cost, and stock references for accounting review. Create and manage sales and menus in POS Cloud.</p>
           </div>
           <div className="row wrap">
-            <span className="badge">Inventory-Linked Sales</span>
-            <span className="badge">Accounting-Linked Restock</span>
+            <span className="badge">Sales references</span>
+            <span className="badge">Stock cost history</span>
           </div>
         </div>
         {!!notice && <p className="success-text">{notice}</p>}

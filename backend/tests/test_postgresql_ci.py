@@ -36,7 +36,7 @@ pytestmark = pytest.mark.skipif(
 def test_postgresql_migration_head_and_auth_security_tables_exist():
     with engine.connect() as connection:
         head = connection.execute(text('SELECT version_num FROM alembic_version')).scalar_one()
-        assert head == '0008_operations_outbox'
+        assert head == '0009_journal_precision'
 
         tables = set(
             connection.execute(

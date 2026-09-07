@@ -1,4 +1,5 @@
 'use client';
+import Link from 'next/link';
 import { businessDateISO } from '../../lib/businessDate';
 
 import { useEffect, useMemo, useState } from 'react';
@@ -20,8 +21,11 @@ function monthStartISO() {
   return `${businessDateISO().slice(0, 7)}-01`;
 }
 
+const closeRoutes = { draft_records: '/approvals', unreconciled_cashflow_accounts: '/cashflow/reconciliation', unposted_payroll_periods: '/payroll-periods', ar_over_30_days: '/cashflow/receivables', ap_over_30_days: '/cashflow/payables', low_stock_items: '/inventory-items' };
+const exceptionLabels = { draft_records: 'Draft or pending records', unreconciled_cashflow_accounts: 'Unreconciled cash and bank accounts', unposted_payroll_periods: 'Unposted payroll periods', ar_over_30_days: 'Receivables over 30 days', ap_over_30_days: 'Payables over 30 days', low_stock_items: 'Low stock items' };
+
 function currency(value) {
-  return Number(value || 0).toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+  return Number(value || 0).toLocaleString('en-PH', { minimumFractionDigits: 2, maximumFractionDigits: 4 });
 }
 
 function number(value) {
@@ -175,7 +179,7 @@ export default function ReportsPage() {
     <div>
       <section className="section">
         <h1>Reports & Reconciliation</h1>
-        <p className="muted">Consolidated management view, AR/AP aging, and settlement tracking.</p>
+        <p className="muted">Financial statements, aging, and close readiness. All amounts are in PHP.</p>
         {!!notice && <p className="success-text">{notice}</p>}
         {!!error && <p className="error-text">{error}</p>}
         <div className="form-grid">
@@ -224,7 +228,7 @@ export default function ReportsPage() {
                 <td>{row.label}</td>
                 <td>{number(row.value)}</td>
                 <td><span className={`badge ${row.passed ? 'success' : row.severity === 'critical' ? 'danger' : row.severity === 'warning' ? 'warn' : 'info'}`}>{row.passed ? 'OK' : row.severity}</span></td>
-                <td>{row.action}</td>
+                <td>{!row.passed && closeRoutes[row.key] ? <Link href={closeRoutes[row.key]}>{row.action}</Link> : row.action}</td>
               </tr>
             ))}
             {!report?.close_readiness?.checks?.length && <tr><td colSpan="4" className="muted">No close-readiness checks loaded.</td></tr>}
@@ -252,7 +256,7 @@ export default function ReportsPage() {
           <tbody>
             {Object.entries(report?.exceptions || {}).map(([k, v]) => (
               <tr key={k}>
-                <td>{k}</td>
+                <td>{exceptionLabels[k] || k.replaceAll('_', ' ')}</td>
                 <td>{v}</td>
               </tr>
             ))}
@@ -289,8 +293,8 @@ export default function ReportsPage() {
           <div className="row wrap">
             <span className="badge">Period {statements?.period?.start_date || 'all'} to {statements?.period?.end_date || 'latest'}</span>
             <span className="badge">As of {statements?.period?.as_of_date || '-'}</span>
-            <span className="badge">TB Balanced {String(!!statements?.trial_balance?.totals?.is_balanced)}</span>
-            <span className="badge">BS Check {currency(statements?.balance_sheet?.totals?.balance_check)}</span>
+            <span className="badge">Trial balance: {statements?.trial_balance?.totals?.is_balanced ? 'Balanced' : 'Needs review'}</span>
+            <span className="badge">Balance sheet difference: ₱{currency(statements?.balance_sheet?.totals?.balance_check)}</span>
           </div>
         </section>
 

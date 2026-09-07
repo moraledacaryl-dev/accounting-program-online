@@ -74,7 +74,7 @@ function clearMutationAttempt(attempt) {
   }
 }
 
-async function idempotentMutation(path, scope, payload) {
+export async function idempotentMutation(path, scope, payload) {
   const attempt = mutationAttempt(scope, payload);
   try {
     const result = await request(path, {

@@ -1,13 +1,16 @@
 from __future__ import annotations
-from typing import Any
-from pydantic import BaseModel, Field
+from typing import Any, Literal
+from pydantic import BaseModel, Field, field_validator, model_validator
+from datetime import date
+from decimal import Decimal
+import re
 
 class RecordCreate(BaseModel):
     category: str
     bucket: str
     item: str
     name: str = ''
-    amount: float | None = None
+    amount: float | None = Field(default=None, allow_inf_nan=False)
     quantity: float | None = None
     unit: str | None = None
     direction: str = 'neutral'
@@ -15,19 +18,28 @@ class RecordCreate(BaseModel):
     counterparty: str | None = None
     channel: str | None = None
     bir_status: str = 'internal_only'
-    workflow_status: str = 'draft'
+    workflow_status: Literal['draft', 'pending_review', 'approved', 'rejected', 'cancelled'] = 'draft'
     transaction_date: str | None = None
     due_date: str | None = None
     document_ref: str | None = None
     notes: str | None = None
     metadata: dict[str, Any] = Field(default_factory=dict)
 
+    @field_validator('transaction_date', 'due_date')
+    @classmethod
+    def validate_record_dates(cls, value):
+        if value in (None, ''):
+            return None
+        if date.fromisoformat(value).isoformat() != value:
+            raise ValueError('Use YYYY-MM-DD for record dates.')
+        return value
+
 class RecordUpdate(BaseModel):
     category: str | None = None
     bucket: str | None = None
     item: str | None = None
     name: str | None = None
-    amount: float | None = None
+    amount: float | None = Field(default=None, allow_inf_nan=False)
     quantity: float | None = None
     unit: str | None = None
     direction: str | None = None
@@ -35,12 +47,29 @@ class RecordUpdate(BaseModel):
     counterparty: str | None = None
     channel: str | None = None
     bir_status: str | None = None
-    workflow_status: str | None = None
+    workflow_status: Literal['draft', 'pending_review', 'approved', 'rejected', 'cancelled'] | None = None
     transaction_date: str | None = None
     due_date: str | None = None
     document_ref: str | None = None
     notes: str | None = None
     metadata: dict[str, Any] | None = None
+
+
+    @field_validator('transaction_date', 'due_date')
+    @classmethod
+    def validate_record_dates(cls, value):
+        if value in (None, ''):
+            return None
+        if date.fromisoformat(value).isoformat() != value:
+            raise ValueError('Use YYYY-MM-DD for record dates.')
+        return value
+
+    @model_validator(mode='after')
+    def nonnullable_record_fields(self):
+        for name in ('category', 'bucket', 'item', 'direction', 'bir_status', 'workflow_status'):
+            if name in self.model_fields_set and getattr(self, name) is None:
+                raise ValueError(f'{name} cannot be null.')
+        return self
 
 class UserCreate(BaseModel):
     username: str
@@ -313,19 +342,49 @@ class PayrollGeneratePayload(BaseModel):
     include_allowances: bool = True
 
 class JournalLineCreate(BaseModel):
-    account_code: str
-    account_name: str
-    debit: float = 0
-    credit: float = 0
+    account_code: str = Field(min_length=1, max_length=50)
+    account_name: str = Field(default='', max_length=255)
+    debit: Decimal = Field(default=Decimal(0), ge=0, max_digits=20, decimal_places=4, allow_inf_nan=False)
+    credit: Decimal = Field(default=Decimal(0), ge=0, max_digits=20, decimal_places=4, allow_inf_nan=False)
     memo: str | None = None
 
+    @model_validator(mode='after')
+    def one_side_only(self):
+        if (self.debit > 0) == (self.credit > 0):
+            raise ValueError('Enter a positive debit or credit on each line, never both.')
+        self.account_code = self.account_code.strip()
+        if not self.account_code:
+            raise ValueError('Choose a chart account.')
+        return self
+
+
 class JournalEntryCreate(BaseModel):
-    entry_date: str | None = None
-    reference_no: str | None = None
+    entry_date: str
+    reference_no: str | None = Field(default=None, max_length=255)
     description: str | None = None
     source_module: str | None = None
-    status: str = 'draft'
-    lines: list[JournalLineCreate] = Field(default_factory=list)
+    status: Literal['draft', 'posted'] = 'draft'
+    lines: list[JournalLineCreate] = Field(min_length=2, max_length=500)
+
+    @field_validator('reference_no')
+    @classmethod
+    def manual_reference(cls, value):
+        if value and re.match(r'^(REC-\d+|PAY-\d+|REV-)', value.strip(), re.IGNORECASE):
+            raise ValueError('This reference prefix is reserved for automatic postings and reversals.')
+        return value.strip() or None if value else None
+
+    @field_validator('entry_date')
+    @classmethod
+    def valid_date(cls, value):
+        if date.fromisoformat(value).isoformat() != value:
+            raise ValueError('Use YYYY-MM-DD for the journal date.')
+        return value
+
+    @model_validator(mode='after')
+    def balanced(self):
+        if sum(line.debit for line in self.lines) != sum(line.credit for line in self.lines):
+            raise ValueError('Debits and credits must balance.')
+        return self
 
 class TaxonomyNodeCreate(BaseModel):
     module_slug: str

@@ -26,7 +26,7 @@ if [ -L "$CURRENT_LINK" ]; then
 fi
 PREVIOUS_SHA="$(basename "${CURRENT_TARGET:-none}")"
 
-ROOT="$RELEASE" bash "$RELEASE/scripts/dr/backup-accounting.sh"
+ROOT="$RELEASE" BACKUP_UPLOADS_DIR="$DEPLOY_UPLOADS_DIR" bash "$RELEASE/scripts/dr/backup-accounting.sh"
 
 OLD_PATH="$PATH"
 set -a

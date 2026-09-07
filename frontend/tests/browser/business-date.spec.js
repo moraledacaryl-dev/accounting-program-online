@@ -46,6 +46,7 @@ test('cashflow date default uses Manila business day at the UTC boundary', async
   });
 
   await page.goto('/cashflow/payables');
+  await page.getByRole('button', { name: 'Add Bill', exact: true }).click();
   await expect(page.getByRole('heading', { name: 'Bills to Pay', exact: true })).toBeVisible();
   await expect(page.getByLabel('Bill Date', { exact: true })).toHaveValue('2026-08-27');
 });
