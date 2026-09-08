@@ -11,6 +11,7 @@ import InventoryRestaurantNav from '../operations/InventoryRestaurantNav';
 import PeoplePayrollNav from '../people/PeoplePayrollNav';
 import RouteGuard from '../RouteGuard';
 import Sidebar from '../Sidebar';
+import { useAppShell } from './AppShellContext';
 
 const CONTEXT_NAVIGATION = [
   {
@@ -60,6 +61,7 @@ function contextNavigationForPath(pathname = '') {
 
 export default function AppFrame({ children }) {
   const pathname = usePathname();
+  const { loaded, user } = useAppShell();
   const isAuthenticationRoute = pathname === '/login';
   const contextNavigation = contextNavigationForPath(pathname);
   const ContextNavigation = contextNavigation?.Component || null;
@@ -72,6 +74,14 @@ export default function AppFrame({ children }) {
           <RouteGuard>{children}</RouteGuard>
         </div>
       </div>
+    );
+  }
+
+  if (!loaded || !user) {
+    return (
+      <main id="main-content" className="main" tabIndex="-1">
+        <RouteGuard>{children}</RouteGuard>
+      </main>
     );
   }
 

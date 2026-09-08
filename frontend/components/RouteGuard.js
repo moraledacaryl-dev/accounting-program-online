@@ -85,7 +85,9 @@ export default function RouteGuard({ children }) {
   const { loaded, can, user } = useAppShell();
 
   useEffect(() => {
-    if (!loaded || !user || pathname === '/login' || pathHasAccess(pathname, can)) return;
+    if (!loaded || pathname === '/login') return;
+    if (!user) { window.location.replace('/login'); return; }
+    if (pathHasAccess(pathname, can)) return;
     const target = defaultRouteForUser(can);
     if (target && target !== pathname) window.location.replace(target);
   }, [loaded, user, pathname, can]);
