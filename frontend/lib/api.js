@@ -37,6 +37,9 @@ async function request(path, init = {}) {
   const res = await fetch(`${API_BASE}${path}`, { cache: 'no-store', credentials: 'include', ...init, headers });
   let data = null;
   try { data = await res.json(); } catch { data = null; }
+  if (res.status === 401 && !CSRF_EXEMPT_PATHS.has(path) && typeof window !== 'undefined') {
+    window.dispatchEvent(new Event('accounting:session-expired'));
+  }
   if (!res.ok) throw new Error(readApiMessage(data?.detail || data?.message || data?.error || data) || 'Request failed');
   return data;
 }

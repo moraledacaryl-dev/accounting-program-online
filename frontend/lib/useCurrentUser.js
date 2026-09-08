@@ -30,7 +30,10 @@ export function CurrentUserProvider({ children }) {
   }, []);
 
   useEffect(() => {
+    const expire = () => { setUser(null); setLoaded(true); };
+    window.addEventListener('accounting:session-expired', expire);
     loadUser();
+    return () => window.removeEventListener('accounting:session-expired', expire);
   }, [loadUser]);
 
   const api = useMemo(() => ({
