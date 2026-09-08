@@ -1,4 +1,5 @@
 'use client';
+import RecordDrawer from '../../components/RecordDrawer';
 import { businessDateISO } from '../../lib/businessDate';
 
 import { useEffect, useMemo, useState } from 'react';
@@ -53,6 +54,8 @@ export default function AssetsPage() {
   const [disposalLogs, setDisposalLogs] = useState([]);
   const [error, setError] = useState('');
   const [notice, setNotice] = useState('');
+  const [showForm, setShowForm] = useState(false);
+  const [saving, setSaving] = useState(false);
   const [editingId, setEditingId] = useState(null);
   const [form, setForm] = useState({ ...EMPTY_ASSET_FORM });
 
@@ -110,12 +113,15 @@ export default function AssetsPage() {
   }, []);
 
   function resetAssetForm() {
+    setShowForm(false);
     setEditingId(null);
     setForm({ ...EMPTY_ASSET_FORM });
   }
 
   async function submitAsset(e) {
     e.preventDefault();
+    if (saving) return;
+    setSaving(true);
     setError('');
     try {
       const payload = {
@@ -133,13 +139,17 @@ export default function AssetsPage() {
         setNotice(payload.auto_post_accounting ? 'Asset saved and linked to accounting acquisition entry.' : 'Asset saved.');
       }
       resetAssetForm();
+      setShowForm(false);
       await load();
     } catch (err) {
       setError(err.message || 'Failed to save asset.');
+    } finally {
+      setSaving(false);
     }
   }
 
   function editAsset(row) {
+    setShowForm(true);
     setEditingId(row.id);
     setForm({
       name: row.name || '',
@@ -251,14 +261,15 @@ export default function AssetsPage() {
     <div>
       <section className="section">
         <h1>Assets</h1>
+        <button type="button" onClick={() => { setEditingId(null); setForm({ ...EMPTY_ASSET_FORM }); setError(''); setShowForm(true); }}>Add Asset</button>
         <p className="muted">Manage acquisition, depreciation, maintenance, and disposal with optional accounting posting.</p>
         {!!notice && <p className="success-text">{notice}</p>}
         {!!error && <p className="error-text">{error}</p>}
       </section>
 
-      <div className="grid">
-        <section className="section">
-          <h2>{editingId ? `Edit Asset #${editingId}` : 'Add Asset'}</h2>
+      <div className="stack">
+        <RecordDrawer open={showForm} title={editingId ? `Edit Asset #${editingId}` : 'Add Asset'} onClose={() => { if (!saving) setShowForm(false); }}>
+          {!!error && <p role="alert" className="error-text">{error}</p>}
           <form onSubmit={submitAsset}>
             <div className="form-grid">
               <label>Name<input required value={form.name} onChange={e => setForm(f => ({ ...f, name: e.target.value }))} /></label>
@@ -298,11 +309,11 @@ export default function AssetsPage() {
             </div>
             <label>Notes<textarea value={form.notes} onChange={e => setForm(f => ({ ...f, notes: e.target.value }))} /></label>
             <div className="row wrap">
-              <button type="submit">{editingId ? 'Update Asset' : 'Save Asset'}</button>
-              {editingId && <button type="button" className="secondary" onClick={resetAssetForm}>Cancel Edit</button>}
+              <button type="submit" disabled={saving}>{editingId ? 'Update Asset' : 'Save Asset'}</button>
+              <button type="button" className="secondary" disabled={saving} onClick={resetAssetForm}>Cancel</button>
             </div>
           </form>
-        </section>
+        </RecordDrawer>
 
         <section className="section">
           <h2>Asset List</h2>
@@ -326,8 +337,8 @@ export default function AssetsPage() {
       </div>
 
       <div className="grid">
-        <section className="section">
-          <h2>Depreciation</h2>
+        <details className="record-disclosure">
+          <summary>Depreciation</summary>
           <form onSubmit={postDepreciation} className="stack">
             <div className="form-grid">
               <label>Asset
@@ -366,10 +377,10 @@ export default function AssetsPage() {
             <label>Notes<input value={batchDepForm.notes} onChange={e => setBatchDepForm(f => ({ ...f, notes: e.target.value }))} /></label>
             <button type="submit" className="secondary">Run Batch Depreciation</button>
           </form>
-        </section>
+        </details>
 
-        <section className="section">
-          <h2>Maintenance / Disposal</h2>
+        <details className="record-disclosure">
+          <summary>Maintenance / Disposal</summary>
           <form onSubmit={postMaintenance} className="stack">
             <h3>Maintenance</h3>
             <div className="form-grid">
@@ -425,7 +436,7 @@ export default function AssetsPage() {
             <label>Notes<input value={disposalForm.notes} onChange={e => setDisposalForm(f => ({ ...f, notes: e.target.value }))} /></label>
             <button type="submit" className="secondary">Post Disposal</button>
           </form>
-        </section>
+        </details>
       </div>
 
       <div className="grid">

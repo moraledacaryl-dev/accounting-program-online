@@ -1,0 +1,30 @@
+/* Shared layout and icon controls: one owner for geometry, independent of page styles. */
+.main-shell { display: flex; flex-direction: column; min-width: 0; }
+.shell-content { flex: 1; min-width: 0; }
+.context-nav-stack { position: static; inset: auto; min-width: 0; margin: 0; z-index: 8; }
+.context-nav-stack > nav { position: static; inset: auto; min-width: 0; min-height: 0; display: flex; align-items: center; gap: 10px; padding: 8px 22px; }
+.context-nav-stack nav > [class$="__links"] { flex: 1; display: flex; gap: 4px; min-width: 0; overflow-x: auto; padding: 3px; scrollbar-width: thin; }
+.context-nav-stack nav > [class$="__links"] a { flex: 0 0 auto; min-height: 38px; }
+.topbar :is(.mobile-menu-button,.header-icon-button,.mobile-search-close), .record-drawer__close { display: inline-flex; align-items: center; justify-content: center; width: 40px; height: 40px; min-height: 40px; padding: 0; flex-shrink: 0; color: #2f503c; }
+.topbar :is(button,a) > svg, .record-drawer__close svg { flex-shrink: 0; }
+.record-drawer__close { background: #fff; border: 1px solid #bdcdbf; border-radius: 8px; }
+.main [data-scroll-region] { outline-offset: -3px; scrollbar-width: thin; }
+.main [data-scroll-region]:focus-visible { outline: 3px solid #38734d; }
+.main .register-actions { display: flex; gap: 10px; align-items: center; justify-content: space-between; flex-wrap: wrap; }
+.main .record-disclosure { padding: 18px; border: 1px solid #d9e3dc; border-radius: 12px; background: #fff; }
+.main .record-disclosure > summary { cursor: pointer; padding: 8px; font-weight: 650; color: #294a36; }
+.main .record-disclosure[open] > summary { margin-bottom: 14px; }
+.main .setup-notice { display: flex; gap: 12px; flex-wrap: wrap; align-items: center; padding: 12px; border: 1px solid #b5cabb; border-radius: 8px; background: #f0f6f1; color: #2d4f37; }
+@media (max-width: 1000px) {
+  .app-shell { grid-template-columns: minmax(0,1fr); }
+  .main-shell { grid-column: 1; width: 100%; margin: 0; }
+  .topbar .mobile-only { display: inline-flex !important; }
+  .topbar .desktop-only { display: none !important; }
+  .context-nav-stack { position: static; inset: auto; margin: 0; overflow: visible; }
+  .context-nav-stack > nav { position: static; inset: auto; min-width: 0; padding: 6px 8px; display: block; }
+  .context-nav-stack nav > [class$="__label"] { display: none; }
+  .context-nav-stack nav > [class$="__links"] { width: 100%; padding: 4px 2px; }
+  .context-nav-stack::after { content: none; }
+  .main .report-actions { display: grid; grid-template-columns: 1fr; width: 100%; }
+  .main .report-actions button { width: 100%; white-space: normal; min-height: 42px; }
+}

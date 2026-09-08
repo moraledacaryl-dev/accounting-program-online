@@ -9,8 +9,8 @@
 .workflow-list-card__header h2 { margin: 0; }
 .workflow-result-count { color: var(--muted); font-size: .75rem; }
 .record-drawer-layer { position: fixed; inset: 0; z-index: 100; display: grid; grid-template-columns: 1fr minmax(420px, 620px); }
-.record-drawer-scrim { grid-column: 1 / -1; grid-row: 1; border: 0; border-radius: 0; background: rgba(10, 23, 19, .44); backdrop-filter: blur(2px); }
-.record-drawer { grid-column: 2; grid-row: 1; min-width: 0; height: 100%; overflow: hidden; display: grid; grid-template-rows: auto minmax(0, 1fr); background: var(--surface); border-left: 1px solid var(--line); box-shadow: -20px 0 60px rgba(14, 33, 29, .18); }
+.record-drawer-scrim { grid-column: 1 / -1; grid-row: 1; z-index: 0; border: 0; border-radius: 0; background: rgba(10, 23, 19, .44); backdrop-filter: blur(2px); }
+.record-drawer { grid-column: 2; grid-row: 1; z-index: 1; min-width: 0; height: 100%; overflow: hidden; display: grid; grid-template-rows: auto minmax(0, 1fr); background: var(--surface); border-left: 1px solid var(--line); box-shadow: -20px 0 60px rgba(14, 33, 29, .18); }
 .record-drawer__header { display: flex; align-items: flex-start; justify-content: space-between; gap: 1rem; padding: 1.25rem 1.25rem 1rem; border-bottom: 1px solid var(--line); }
 .record-drawer__header h2 { margin: 0; font-size: 1.25rem; }
 .record-drawer__header p { margin-top: .35rem; color: var(--muted); font-size: .8125rem; line-height: 1.45; }

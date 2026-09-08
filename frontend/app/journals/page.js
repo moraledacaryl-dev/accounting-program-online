@@ -1,5 +1,6 @@
 'use client';
 
+import Link from 'next/link';
 import { useEffect, useMemo, useRef, useState } from 'react';
 import { createJournalEntry, fetchChartAccounts, fetchJournalEntryDetail, lockJournalEntry, postJournalEntry, request, reverseJournalEntry } from '../../lib/api';
 import { useCurrentUser } from '../../lib/useCurrentUser';
@@ -86,7 +87,7 @@ export default function JournalsPage() {
 
     {showForm && can('journals.post') && <section className="section">
       <h2>Create Entry</h2>
-      {!accounts.length && <p className="notice warn">Set up active chart accounts before creating a journal.</p>}
+      {!accounts.length && <div className="setup-notice"><span>Set up active chart accounts before creating a journal.</span>{can('chart_of_accounts.manage') ? <Link href="/chart-of-accounts">Set up chart of accounts</Link> : <span>Ask your administrator to set up active accounts.</span>}</div>}
       <form onSubmit={submit} aria-busy={busy}>
         <fieldset disabled={busy} className="journal-fields">
           <div className="form-grid">

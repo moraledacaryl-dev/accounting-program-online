@@ -168,7 +168,7 @@ export default function StaffMealsPage() {
       <div>
       <section className="section">
         <h1>Staff Meals</h1>
-        <p className="muted">Encode dish name, quantity, and ingredients. Inventory is deducted immediately; accounting posting is optional.</p>
+        <p className="muted">Historical staff meal records and costs. Record new ingredient usage through the Inventory link above.</p>
         {!!notice && <p className="success-text">{notice}</p>}
         {!!error && <p className="error-text">{error}</p>}
       </section>

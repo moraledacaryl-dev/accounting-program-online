@@ -1,53 +1,40 @@
 'use client';
 
 import Link from 'next/link';
+import { usePathname, useSearchParams } from 'next/navigation';
 import { useCurrentUser } from '../../lib/useCurrentUser';
-import { usePathname } from 'next/navigation';
 
-const links = [
-  { href: '/cashflow', label: 'Overview' },
-  { href: '/cashflow?tab=ledger', label: 'Ledgers' },
-  { href: '/cashflow/daily-cash', label: 'Daily close' },
-  { href: '/cashflow/payables', label: 'Payables' },
-  { href: '/cashflow/receivables', label: 'Receivables' },
-  { href: '/cashflow/reconciliation', label: 'Reconciliation' },
-  { href: '/journals', label: 'Journals' },
-  { href: '/bir', label: 'Tax & close' },
-  { href: '/assets', label: 'Fixed assets' },
-  { href: '/reports', label: 'Reports' },
+const cashLinks = [
+  { href: '/cashflow', label: 'Overview', permission: 'cashflow.view' },
+  { href: '/cashflow?tab=ledger', label: 'Ledgers', permission: 'cashflow.view' },
+  { href: '/cashflow?tab=close', label: 'Close & reconciliation', permission: 'cashflow.view' },
+  { href: '/cashflow/payables', label: 'Payables', permission: 'cashflow.view' },
+  { href: '/cashflow/receivables', label: 'Receivables', permission: 'cashflow.view' },
 ];
-
-const prefixes = ['/cashflow', '/journals', '/bir', '/assets', '/reports', '/attachments'];
-
-function activeFor(pathname, href) {
-  const base = href.split('?')[0];
-  if (href === '/cashflow') return pathname === '/cashflow';
-  if (href.startsWith('/cashflow?tab=ledger')) return false;
-  return pathname === base || pathname.startsWith(`${base}/`);
-}
+const accountingLinks = [
+  { href: '/journals', label: 'Journals', permission: 'journals.view' },
+  { href: '/reports', label: 'Reports', permission: 'reports.view' },
+  { href: '/bir', label: 'Tax & close', permission: 'bir.view' },
+  { href: '/assets', label: 'Fixed assets', permission: 'assets.view' },
+  { href: '/attachments', label: 'Files & evidence', permission: 'reports.view' },
+];
 
 export default function FinanceOperationsNav() {
   const pathname = usePathname();
+  const search = useSearchParams();
   const { can } = useCurrentUser();
-  if (!prefixes.some((prefix) => pathname === prefix || pathname.startsWith(`${prefix}/`))) return null;
-
+  const cash = pathname.startsWith('/cashflow');
+  const links = cash ? cashLinks : accountingLinks;
+  if (!cash && !accountingLinks.some(item => pathname === item.href || pathname.startsWith(`${item.href}/`))) return null;
   return (
     <nav className="finance-context-nav" aria-label="Finance and accounting sections">
-      <div className="finance-context-nav__label">Finance & accounting</div>
+      <div className="finance-context-nav__label">{cash ? 'Cash & treasury' : 'Accounting'}</div>
       <div className="finance-context-nav__links">
-        {links.map((item) => {
-          const active = activeFor(pathname, item.href);
-          return (
-            <Link key={item.href} href={item.href} className={active ? 'finance-context-link is-active' : 'finance-context-link'} aria-current={active ? 'page' : undefined}>
-              {item.label}
-            </Link>
-          );
+        {links.filter(item => can(item.permission)).map(item => {
+          const [base, query] = item.href.split('?');
+          const active = pathname === base && (query ? search.get('tab') === new URLSearchParams(query).get('tab') : base !== '/cashflow' || (!search.get('action') && (!search.get('tab') || search.get('tab') === 'overview')));
+          return <Link key={item.href} href={item.href} className={`finance-context-link${active ? ' is-active' : ''}`} aria-current={active ? 'page' : undefined}>{item.label}</Link>;
         })}
-      </div>
-      <div className="finance-context-nav__actions" aria-label="Common finance actions">
-        {can('cashflow.money_in') && <Link href="/cashflow?action=money-in" className="finance-action finance-action--in">Money in</Link>}
-        {can('cashflow.money_out') && <Link href="/cashflow?action=money-out" className="finance-action">Money out</Link>}
-        {can('cashflow.transfers') && <Link href="/cashflow?action=transfer" className="finance-action">Transfer</Link>}
       </div>
     </nav>
   );

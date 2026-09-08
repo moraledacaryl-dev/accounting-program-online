@@ -36,11 +36,14 @@ export default function SetupAdministrationNav() {
   const pathname = usePathname();
   if (!prefixes.some((prefix) => pathname === prefix || pathname.startsWith(`${prefix}/`))) return null;
 
+  const currentGroup = links.find(item => activeFor(pathname, item))?.group || 'system';
+  const relevantGroups = currentGroup === 'rooms' || currentGroup === 'channels' ? ['rooms', 'channels'] : [currentGroup];
+
   return (
     <nav className="setup-context-nav" aria-label="Setup and administration sections">
       <div className="setup-context-nav__label">Setup & administration</div>
       <div className="setup-context-nav__links">
-        {links.map((item) => {
+        {links.filter(item => relevantGroups.includes(item.group)).map((item) => {
           const active = activeFor(pathname, item);
           return (
             <Link
@@ -55,10 +58,7 @@ export default function SetupAdministrationNav() {
           );
         })}
       </div>
-      <div className="setup-context-nav__actions" aria-label="Common setup actions">
-        <Link href="/rooms" className="setup-action">Manage rooms</Link>
-        <Link href="/system-settings" className="setup-action setup-action--primary">System settings</Link>
-      </div>
+
     </nav>
   );
 }

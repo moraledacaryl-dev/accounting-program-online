@@ -1,12 +1,13 @@
 'use client';
 
 import Link from 'next/link';
-import { usePathname } from 'next/navigation';
+import { usePathname, useSearchParams } from 'next/navigation';
 import { useEffect, useMemo, useRef, useState } from 'react';
 import { canAccess } from '../lib/permissions';
 import { useAppShell } from './app-shell/AppShellContext';
 import NavIcon from './app-shell/NavIcon';
 import { navigationGroups } from './app-shell/navigation';
+import { activeNavigationItem } from '../lib/navigationState';
 
 const connectedApps = [
   { label: 'Staff & Payroll', href: process.env.NEXT_PUBLIC_STAFF_PAYROLL_APP_URL },
@@ -30,12 +31,8 @@ function roleName(user) {
   return raw.replaceAll('_', ' ').replace(/\b\w/g, (letter) => letter.toUpperCase());
 }
 
-function isItemActive(pathname, href) {
-  return pathname === href || pathname.startsWith(`${href}/`);
-}
-
 function activeGroupForPath(pathname) {
-  return navigationGroups.find((group) => group.items.some((item) => isItemActive(pathname, item.href)))?.id || 'overview';
+  return activeNavigationItem(pathname, '', navigationGroups)?.groupId || 'overview';
 }
 
 function SidebarSkeleton({ collapsed }) {
@@ -60,7 +57,11 @@ function SidebarSkeleton({ collapsed }) {
 
 export default function Sidebar() {
   const pathname = usePathname();
+  const searchParams = useSearchParams();
+  const activeItem = activeNavigationItem(pathname, searchParams.toString(), navigationGroups);
+  const routeGroupId = activeItem?.groupId || 'overview';
   const { user, loaded, mobileNavOpen, closeMobileNav } = useAppShell();
+  const asideRef = useRef(null);
   const scrollRef = useRef(null);
   const activeItemRef = useRef(null);
   const searchInputRef = useRef(null);
@@ -70,6 +71,42 @@ export default function Sidebar() {
   const collapsed = desktopCollapsed && !mobileNavOpen;
   const [openGroupId, setOpenGroupId] = useState(() => activeGroupForPath(pathname));
   const [filter, setFilter] = useState('');
+
+  useEffect(() => {
+    setOpenGroupId(routeGroupId);
+  }, [routeGroupId, searchParams]);
+
+  useEffect(() => {
+    if (!mobileNavOpen) return;
+    const aside = asideRef.current;
+    const opener = document.activeElement;
+    const main = document.querySelector('.main-shell');
+    const wasInert = main?.inert;
+    const overflow = document.body.style.overflow;
+    if (main) main.inert = true;
+    document.body.style.overflow = 'hidden';
+    const focusable = () => [...aside.querySelectorAll('a[href], button:not(:disabled), input, [tabindex="0"]')].filter(e => e.getClientRects().length);
+    focusable()[0]?.focus();
+    const handleKey = event => {
+      if (event.key === 'Escape') { event.preventDefault(); closeMobileNav(); }
+      if (event.key !== 'Tab') return;
+      const items = focusable();
+      const index = items.indexOf(document.activeElement);
+      if (event.shiftKey && index <= 0) { event.preventDefault(); items.at(-1)?.focus(); }
+      else if (!event.shiftKey && (index === -1 || index === items.length - 1)) { event.preventDefault(); items[0]?.focus(); }
+    };
+    const media = window.matchMedia('(max-width: 1000px)');
+    const handleResize = () => { if (!media.matches) closeMobileNav(); };
+    document.addEventListener('keydown', handleKey);
+    media.addEventListener('change', handleResize);
+    return () => {
+      document.removeEventListener('keydown', handleKey);
+      media.removeEventListener('change', handleResize);
+      if (main) main.inert = wasInert;
+      document.body.style.overflow = overflow;
+      if (opener?.isConnected) opener.focus();
+    };
+  }, [mobileNavOpen, closeMobileNav]);
 
   const normalizedFilter = filter.trim().toLowerCase();
   const searchActive = normalizedFilter.length > 0;
@@ -106,7 +143,7 @@ export default function Sidebar() {
   useEffect(() => {
     closeMobileNav();
     setFilter('');
-    const activeGroupId = activeGroupForPath(pathname);
+    const activeGroupId = routeGroupId;
     setOpenGroupId(activeGroupId);
     try {
       window.localStorage.setItem(ACTIVE_GROUP_KEY, activeGroupId);
@@ -114,7 +151,7 @@ export default function Sidebar() {
       // Route-aware state still updates.
     }
     window.requestAnimationFrame(() => activeItemRef.current?.scrollIntoView({ block: 'nearest' }));
-  }, [pathname, closeMobileNav]);
+  }, [pathname, routeGroupId, closeMobileNav]);
 
   useEffect(() => {
     const wasSearching = previousSearchActiveRef.current;
@@ -190,6 +227,10 @@ export default function Sidebar() {
         onClick={closeMobileNav}
       />
       <aside
+        ref={asideRef}
+        id="accounting-navigation"
+        role={mobileNavOpen ? 'dialog' : undefined}
+        aria-modal={mobileNavOpen ? true : undefined}
         className={`${collapsed ? 'sidebar collapsed' : 'sidebar'} ${mobileNavOpen ? 'mobile-open' : ''} ${searchActive ? 'search-active' : ''}`}
         aria-label="Accounting navigation"
       >
@@ -208,6 +249,8 @@ export default function Sidebar() {
             className="sidebar-toggle desktop-only"
             aria-label={desktopCollapsed ? 'Expand sidebar' : 'Collapse sidebar'}
             aria-pressed={desktopCollapsed}
+            aria-controls="accounting-navigation"
+            title={desktopCollapsed ? 'Expand sidebar' : 'Collapse sidebar'}
             onClick={() => setCollapsed((value) => !value)}
           >
             <NavIcon name="chevron" size={17} className={desktopCollapsed ? '' : 'rotate-180'} />
@@ -248,7 +291,7 @@ export default function Sidebar() {
               ) : searchResults.length ? (
                 <nav className="sidebar-search-list" aria-label="Matching pages">
                   {searchResults.map((item) => {
-                    const active = isItemActive(pathname, item.href);
+                    const active = activeItem?.href === item.href;
                     return (
                       <Link
                         key={`${item.groupId}-${item.href}`}
@@ -277,7 +320,7 @@ export default function Sidebar() {
               {!collapsed && <div className="sidebar-eyebrow">Workspace</div>}
               <nav aria-label="Primary navigation">
                 {visibleGroups.map((group) => {
-                  const groupActive = group.items.some((item) => isItemActive(pathname, item.href));
+                  const groupActive = activeItem?.groupId === group.id;
                   const expanded = openGroupId === group.id;
                   const regionId = `sidebar-group-${group.id}`;
                   return (
@@ -292,7 +335,7 @@ export default function Sidebar() {
                         >
                           <span className="nav-group-heading">
                             <span className="nav-group-icon"><NavIcon name={group.icon} size={16} /></span>
-                            <span><strong>{group.label}</strong><small>{group.description}</small></span>
+                            <span><strong>{group.label}</strong></span>
                           </span>
                           <NavIcon name="down" size={13} className={expanded ? '' : 'rotate-negative-90'} />
                         </button>
@@ -303,14 +346,15 @@ export default function Sidebar() {
                           aria-label={group.label}
                           title={group.label}
                           aria-expanded={expanded}
-                          onClick={() => toggleGroup(group.id)}
+                          aria-controls={regionId}
+                          onClick={() => { setCollapsed(false); setOpenGroupId(group.id); }}
                         >
                           <NavIcon name={group.icon} size={17} />
                         </button>
                       )}
                       <div id={regionId} className="nav-group-items" hidden={!expanded}>
                         {group.items.map((item) => {
-                          const active = isItemActive(pathname, item.href);
+                          const active = activeItem?.href === item.href;
                           return (
                             <Link
                               key={item.href}

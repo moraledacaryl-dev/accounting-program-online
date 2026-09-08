@@ -147,7 +147,6 @@ textarea:disabled {
 }
 
 @media print {
-  .sidebar,
   .app-header,
   .ho-drawer-layer,
   .drawer-backdrop,

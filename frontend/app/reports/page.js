@@ -196,9 +196,9 @@ export default function ReportsPage() {
             <input type="date" value={filters.as_of_date} onChange={(e) => setFilters((f) => ({ ...f, as_of_date: e.target.value }))} />
           </label>
         </div>
-        <div className="row wrap" style={{ marginTop: 10 }}>
+        <div className="row wrap report-actions" style={{ marginTop: 10 }}>
           <button onClick={reloadFromFilters}>Refresh</button>
-          <button className="secondary" onClick={exportCsv}>Export Management CSV</button>
+          <button className="secondary" onClick={exportCsv}>Export CSV</button>
         </div>
         <div className="tabs">
           {[
@@ -289,11 +289,12 @@ export default function ReportsPage() {
       <div hidden={activeView !== 'statements'}>
         <section className="section">
           <h2>Formal Financial Statements</h2>
+          {!statements?.trial_balance?.lines?.length && <p className="setup-notice">No posted journal data is available as of this date. Zero totals do not establish that your accounting setup or opening balances are complete.</p>}
           <p className="muted">Generated from posted journal entries, with cashflow transactions and operational subledgers shown as supporting schedules.</p>
           <div className="row wrap">
             <span className="badge">Period {statements?.period?.start_date || 'all'} to {statements?.period?.end_date || 'latest'}</span>
             <span className="badge">As of {statements?.period?.as_of_date || '-'}</span>
-            <span className="badge">Trial balance: {statements?.trial_balance?.totals?.is_balanced ? 'Balanced' : 'Needs review'}</span>
+            <span className="badge">Trial balance: {!statements?.trial_balance?.lines?.length ? 'No posted data' : statements?.trial_balance?.totals?.is_balanced ? 'Balanced' : 'Needs review'}</span>
             <span className="badge">Balance sheet difference: ₱{currency(statements?.balance_sheet?.totals?.balance_check)}</span>
           </div>
         </section>

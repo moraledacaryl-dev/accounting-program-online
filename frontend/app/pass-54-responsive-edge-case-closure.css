@@ -10,18 +10,6 @@
     grid-template-columns: var(--sidebar-width, var(--sidebar-width-expanded, 292px)) minmax(0, 1fr);
   }
 
-  .sidebar {
-    position: sticky;
-    top: 0;
-    width: auto;
-    height: 100vh;
-    max-height: 100vh;
-    overflow-x: hidden;
-    overflow-y: auto;
-    border-right: 1px solid rgba(255,255,255,.04);
-    border-bottom: 0;
-  }
-
   .topbar {
     position: sticky;
     top: 0;
@@ -42,16 +30,6 @@
 /* Tablet / drawer mode: use dynamic viewport height and safe-area insets so
  * navigation, profile controls, drawers and dialogs remain reachable. */
 @media (max-width: 980px) {
-  .sidebar {
-    height: 100dvh;
-    max-height: 100dvh;
-    padding-bottom: max(12px, env(safe-area-inset-bottom));
-    z-index: 40;
-  }
-
-  .sidebar-scrim {
-    z-index: 39;
-  }
 
   .topbar {
     position: sticky;
@@ -189,10 +167,6 @@
 
 /* 320-430px devices: retain operational density without edge collisions. */
 @media (max-width: 430px) {
-  .sidebar,
-  .sidebar.collapsed {
-    width: min(92vw, 300px);
-  }
 
   .main {
     padding: 9px 8px 16px;
@@ -270,8 +244,6 @@
 }
 
 @media (prefers-reduced-motion: reduce) {
-  .sidebar,
-  .sidebar-scrim,
   .profile-menu,
   .search-results,
   .ho-drawer,

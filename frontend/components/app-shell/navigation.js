@@ -21,8 +21,7 @@ export const navigationGroups = [
       { href: '/cashflow/money-in', label: 'Money In', icon: 'receivable', permissionsAny: ['cashflow.view'] },
       { href: '/cashflow/money-out', label: 'Money Out', icon: 'payable', permissionsAny: ['cashflow.view'] },
       { href: '/cashflow/transfers', label: 'Transfers', icon: 'mapping', permissionsAny: ['cashflow.view'] },
-      { href: '/cashflow/daily-cash', label: 'Daily Cash', icon: 'receipt', permissionsAny: ['cashflow.view'] },
-      { href: '/cashflow/reconciliation', label: 'Reconciliation', icon: 'review', permissionsAny: ['cashflow.view'] },
+      { href: '/cashflow/daily-cash', label: 'Daily Close & Reconciliation', icon: 'receipt', permissionsAny: ['cashflow.view'] },
     ],
   },
   {

@@ -110,21 +110,6 @@
   outline-offset: 2px;
 }
 
-.sidebar .nav-group-items a.active,
-.sidebar .sidebar-search-result.active {
-  background: var(--sidebar-active-row, #f1f6f3);
-  color: var(--sidebar-active-ink, #173f2d);
-}
-
-.sidebar .collapsed-group-button.active {
-  background: #eef5f0;
-  color: #28533d;
-}
-
-.sidebar :where(.nav-group-toggle, .collapsed-group-button, .nav-group-items a):hover {
-  opacity: 1;
-}
-
 .main[data-route="/reports"] > div > .section:first-child > .tabs .tab.active {
   border-color: var(--state-selected-border, #cddfd3);
   background: var(--state-selected-bg, #edf4ef);

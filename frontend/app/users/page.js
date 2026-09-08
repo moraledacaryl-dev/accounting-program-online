@@ -1,4 +1,5 @@
 'use client';
+import RecordDrawer from '../../components/RecordDrawer';
 
 import { useEffect, useMemo, useState } from 'react';
 import { createUser, fetchRoles, fetchUsers, updateUser } from '../../lib/api';
@@ -16,6 +17,8 @@ const EMPTY_FORM = {
 export default function UsersPage() {
   const [rows, setRows] = useState([]);
   const [roles, setRoles] = useState([]);
+  const [showForm, setShowForm] = useState(false);
+  const [saving, setSaving] = useState(false);
   const [editingId, setEditingId] = useState(null);
   const [form, setForm] = useState({ ...EMPTY_FORM });
   const [error, setError] = useState('');
@@ -48,6 +51,8 @@ export default function UsersPage() {
 
   async function submit(e) {
     e.preventDefault();
+    if (saving) return;
+    setSaving(true);
     setError('');
     setNotice('');
     try {
@@ -74,9 +79,12 @@ export default function UsersPage() {
 
       setEditingId(null);
       setForm({ ...EMPTY_FORM });
+      setShowForm(false);
       await load();
     } catch (err) {
       setError(err.message || 'Failed to save user.');
+    } finally {
+      setSaving(false);
     }
   }
 
@@ -87,6 +95,7 @@ export default function UsersPage() {
   }
 
   function editUser(row) {
+    setShowForm(true);
     setEditingId(row.id);
     setForm({
       username: row.username,
@@ -99,6 +108,7 @@ export default function UsersPage() {
   }
 
   function resetForm() {
+    setShowForm(false);
     setEditingId(null);
     setForm({ ...EMPTY_FORM });
   }
@@ -107,14 +117,15 @@ export default function UsersPage() {
     <div className="stack">
       <section className="section">
         <h1>Users</h1>
+        <button type="button" onClick={() => { setEditingId(null); setForm({ ...EMPTY_FORM }); setError(''); setShowForm(true); }}>Create User</button>
         <p className="muted">Manage user accounts and assign one or more roles.</p>
         {!!notice && <p className="success-text">{notice}</p>}
         {!!error && <p className="error-text">{error}</p>}
       </section>
 
-      <div className="grid">
-        <section className="section">
-          <h2>{editingId ? `Edit User #${editingId}` : 'Create User'}</h2>
+      <div className="stack">
+        <RecordDrawer open={showForm} title={editingId ? `Edit User #${editingId}` : 'Create User'} onClose={() => { if (!saving) setShowForm(false); }}>
+          {!!error && <p role="alert" className="error-text">{error}</p>}
           <form onSubmit={submit} className="stack" onKeyDown={(event) => shouldPreventEnterSubmit(event, isSubmittable)}>
             <div className="form-grid">
               <label>Username
@@ -172,11 +183,11 @@ export default function UsersPage() {
             </div>
 
             <div className="row wrap">
-              <button type="submit">{editingId ? 'Update User' : 'Create User'}</button>
-              {editingId && <button type="button" className="secondary" onClick={resetForm}>Cancel</button>}
+              <button type="submit" disabled={saving}>{editingId ? 'Update User' : 'Create User'}</button>
+              <button type="button" className="secondary" disabled={saving} onClick={resetForm}>Cancel</button>
             </div>
           </form>
-        </section>
+        </RecordDrawer>
 
         <section className="section">
           <h2>User List</h2>
