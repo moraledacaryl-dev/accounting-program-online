@@ -1,6 +1,7 @@
 'use client';
 
 import { usePathname } from 'next/navigation';
+import { Suspense } from 'react';
 import AccessibilityEnhancer from '../AccessibilityEnhancer';
 import ExternalOwnershipBoundary from '../ExternalOwnershipBoundary';
 import Header from '../Header';
@@ -90,12 +91,12 @@ export default function AppFrame({ children }) {
       <AccessibilityEnhancer />
       <a className="skip-link" href="#main-content">Skip to main content</a>
       <div className="app-shell">
-        <Sidebar />
+        <Suspense fallback={null}><Sidebar /></Suspense>
         <div className="main-shell">
           <Header />
           {ContextNavigation && (
             <div className="context-nav-stack" data-context-section={contextNavigation.key}>
-              <ContextNavigation />
+              <Suspense fallback={null}><ContextNavigation /></Suspense>
             </div>
           )}
           <div className="shell-content">

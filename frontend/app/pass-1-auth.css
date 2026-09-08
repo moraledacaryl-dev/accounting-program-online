@@ -5,9 +5,7 @@
   display: grid;
   grid-template-columns: minmax(0, 1.15fr) minmax(360px, .85fr);
   align-items: stretch;
-  background:
-    radial-gradient(circle at 8% 8%, rgba(201, 149, 69, .16), transparent 30%),
-    linear-gradient(135deg, #102923 0%, #183b32 48%, #f3f5f1 48%, #f7f8f6 100%);
+  background: #f3f5f1;
 }
 
 .auth-login-brand {
@@ -17,6 +15,7 @@
   gap: 28px;
   padding: clamp(2rem, 6vw, 6rem);
   color: #fff;
+  background: radial-gradient(circle at top left, rgba(201, 149, 69, .16), transparent 55%), #183b32;
 }
 
 .auth-login-brand .ho-eyebrow { color: #e4c58f; }
@@ -78,7 +77,7 @@
   padding: clamp(1.5rem, 4vw, 2.5rem);
   border: 1px solid rgba(203, 211, 206, .9);
   border-radius: 24px;
-  background: rgba(255,255,255,.94);
+  background: #fff;
   box-shadow: 0 32px 90px rgba(17,39,33,.16);
   backdrop-filter: blur(16px);
 }
@@ -132,12 +131,11 @@
     align-content: center;
     gap: 24px;
     padding: 24px;
-    background:
-      radial-gradient(circle at top left, rgba(201, 149, 69, .15), transparent 34%),
-      linear-gradient(180deg, #102923 0, #183b32 40%, #f4f5f2 40%, #f4f5f2 100%);
+    background: #183b32;
   }
 
   .auth-login-brand {
+    background: transparent;
     gap: 16px;
     padding: 12px max(4px, 3vw) 0;
   }

@@ -60,7 +60,8 @@ if (!visualClosure.includes('.main .tab.active') || !visualClosure.includes("[ar
 if (!visualClosure.includes('--state-disabled-bg') || !visualClosure.includes('.main button:disabled')) {
   failures.push('Intentional disabled-button state is missing');
 }
-if (!visualClosure.includes('.sidebar .nav-group-items a.active') || !visualClosure.includes('var(--sidebar-active-ink')) {
+const sidebarStyles = fs.readFileSync(path.join(root, 'app/sidebar.css'), 'utf8');
+if (!sidebarStyles.includes('.sidebar .nav-group-items a.active') || !sidebarStyles.includes('var(--sidebar-active-ink')) {
   failures.push('Sidebar active state must remain a soft surface with dark text');
 }
 if (!visualClosure.includes('.main[data-route="/reports"] > div > .section:first-child > .tabs .tab.active')) {

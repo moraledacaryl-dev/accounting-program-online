@@ -92,12 +92,12 @@ export default function ExternalOwnershipBoundary({ children }) {
         <div>
           <span className="badge">Read-only accounting view</span>
           <h2>{ownership.appName} owns this operational workflow</h2>
-          <p className="muted">Accounting shows retained records, financial references, and history only. Create or change operational records in the authoritative application.</p>
+          <p className="muted">{ownership.explanation || 'Accounting shows retained records, financial references, and history only. Open the linked workspace to create or change operational records.'}</p>
           {!!blockedMessage && <p className="error-text" role="alert">{blockedMessage}</p>}
         </div>
         {ownership.appUrl ? (
           <Link className="button-link" href={ownership.appUrl} target="_blank" rel="noreferrer">
-            Open {ownership.appName}
+            {ownership.actionLabel || `Open ${ownership.appName}`}
           </Link>
         ) : (
           <span className="error-text" role="status">Authoritative application link is unavailable. Contact an administrator.</span>

@@ -177,7 +177,7 @@ export default function ChartOfAccountsPage() {
                   </td>
                 </tr>
               ))}
-              {!filteredRows.length && <tr><td colSpan="6" className="muted">No chart accounts match the current search.</td></tr>}
+              {!filteredRows.length && <tr><td colSpan="6" className="muted">{search.trim() ? 'No accounts match your search. Try a different code or name.' : 'No chart accounts yet. Choose New account to set up your first account.'}</td></tr>}
             </tbody>
           </table>
         </div>

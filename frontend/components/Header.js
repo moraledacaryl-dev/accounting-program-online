@@ -50,6 +50,8 @@ const titles = {
   '/integrations/payroll': ['Payroll Integration', 'Staff and payroll synchronization, status, and controls'],
   '/approvals': ['Approvals', 'Authorization queue for operational and financial actions'],
   '/workspace/finance': ['Finance & Accounting', 'Cashflow, journals, reports, assets, and BIR'],
+  '/cashflow/payables': ['Bills to Pay', 'Supplier bills and payments'],
+  '/cashflow/receivables': ['Payments to Receive', 'Outstanding balances and collections'],
   '/cashflow': ['Cash & Treasury', 'Money accounts, ledger, daily close, and reconciliation'],
   '/journals': ['Journals', 'Journal entries and trial balance'],
   '/reports': ['Reports', 'Management and accounting reports'],
@@ -100,7 +102,7 @@ function SearchResults({ results, error, onOpen }) {
 export default function Header() {
   const pathname = usePathname();
   const router = useRouter();
-  const { openMobileNav, user } = useAppShell();
+  const { mobileNavOpen, openMobileNav, user } = useAppShell();
   const profileRef = useRef(null);
   const desktopSearchRef = useRef(null);
   const mobileSearchRef = useRef(null);
@@ -111,7 +113,7 @@ export default function Header() {
   const [searchOpen, setSearchOpen] = useState(false);
   const [mobileSearchOpen, setMobileSearchOpen] = useState(false);
   const [profileOpen, setProfileOpen] = useState(false);
-  const found = Object.entries(titles).find(([key]) => pathname === key || pathname.startsWith(`${key}/`));
+  const found = Object.entries(titles).sort(([a], [b]) => b.length - a.length).find(([key]) => pathname === key || pathname.startsWith(`${key}/`));
   const [title, subtitle] = found ? found[1] : ['Hospitality ERP', 'Connected operations, finance, and compliance'];
   const showBack = pathname && pathname !== '/dashboard' && pathname !== '/login' && pathname !== '/';
   const showSearch = pathname && pathname !== '/login' && pathname !== '/';
@@ -213,7 +215,7 @@ export default function Header() {
   return (
     <header className="topbar" aria-label="Page toolbar">
       <div className="topbar-left">
-        <button type="button" className="mobile-menu-button mobile-only" onClick={openMobileNav} aria-label="Open navigation">
+        <button type="button" className="mobile-menu-button mobile-only" onClick={openMobileNav} aria-label="Open navigation" aria-expanded={mobileNavOpen} aria-controls="accounting-navigation">
           <NavIcon name="menu" size={19} />
         </button>
         {showBack && (

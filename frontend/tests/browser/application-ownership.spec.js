@@ -34,7 +34,7 @@ test('Inventory & Procurement workflow renders as compact read-only handoff', as
 
   await expect(page.getByRole('heading', { name: /Inventory & Procurement owns this operational workflow/i })).toBeVisible();
   await expect(page.getByRole('link', { name: /Open Inventory & Procurement/i })).toBeVisible();
-  await expect(page.getByRole('link', { name: /Open Inventory & Procurement/i })).toHaveAttribute('href', 'https://inventory.hiddenoasis.app');
+  await expect(page.getByRole('link', { name: /Open Inventory & Procurement/i })).toHaveAttribute('href', 'https://inventory.hiddenoasis.app/items');
 
   const mutationSections = page.locator('.ownership-mutation-section');
   if (await mutationSections.count()) {
@@ -47,12 +47,12 @@ test('Inventory & Procurement workflow renders as compact read-only handoff', as
   await expect(page.getByText('Read Only Rice')).toBeVisible();
 });
 
-test('POS-owned workflow renders authoritative handoff and hides mutation forms', async ({ page }) => {
+test('Menu workflow points to Inventory and hides retained mutation forms', async ({ page }) => {
   await installOwnershipFixtures(page);
   await page.goto('/menu-items');
 
-  await expect(page.getByRole('heading', { name: /POS Cloud owns this operational workflow/i })).toBeVisible();
-  await expect(page.getByRole('link', { name: /Open POS Cloud/i })).toHaveAttribute('href', 'https://pos.hiddenoasis.app');
+  await expect(page.getByRole('heading', { name: /Inventory & Procurement owns this operational workflow/i })).toBeVisible();
+  await expect(page.getByRole('link', { name: /Open Inventory & Procurement/i })).toHaveAttribute('href', 'https://inventory.hiddenoasis.app/fnb');
 
   const mutationSections = page.locator('.ownership-mutation-section');
   if (await mutationSections.count()) {

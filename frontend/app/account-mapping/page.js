@@ -1,4 +1,5 @@
 'use client';
+import RecordDrawer from '../../components/RecordDrawer';
 
 import { useEffect, useMemo, useState } from 'react';
 import {
@@ -29,6 +30,8 @@ export default function AccountMappingPage() {
   const confirmAction = useConfirmAction();
   const [rows, setRows] = useState([]);
   const [accounts, setAccounts] = useState([]);
+  const [showForm, setShowForm] = useState(false);
+  const [saving, setSaving] = useState(false);
   const [editingId, setEditingId] = useState(null);
   const [moduleFilter, setModuleFilter] = useState('');
   const [form, setForm] = useState({ ...EMPTY_FORM });
@@ -54,6 +57,8 @@ export default function AccountMappingPage() {
 
   async function submit(e) {
     e.preventDefault();
+    if (saving) return;
+    setSaving(true);
     setError('');
     setNotice('');
     try {
@@ -83,13 +88,17 @@ export default function AccountMappingPage() {
       }
       setEditingId(null);
       setForm({ ...EMPTY_FORM });
+      setShowForm(false);
       await load();
     } catch (err) {
       setError(err.message || 'Failed to save account mapping.');
+    } finally {
+      setSaving(false);
     }
   }
 
   function editRow(row) {
+    setShowForm(true);
     setEditingId(row.id);
     setForm({
       module_slug: row.module_slug || '',
@@ -132,6 +141,7 @@ export default function AccountMappingPage() {
         <div className="row" style={{ justifyContent: 'space-between' }}>
           <div>
             <h1>Account Mapping</h1>
+        <button type="button" onClick={() => { setEditingId(null); setForm({ ...EMPTY_FORM }); setError(''); setShowForm(true); }}>New Mapping</button>
             <p className="muted">Map module/category/bucket/item and direction to debit/credit account codes.</p>
           </div>
           <label style={{ minWidth: 220 }}>
@@ -146,9 +156,9 @@ export default function AccountMappingPage() {
         {!!error && <p className="error-text">{error}</p>}
       </section>
 
-      <div className="grid">
-        <section className="section">
-          <h2>{editingId ? `Edit Mapping #${editingId}` : 'New Mapping'}</h2>
+      <div className="stack">
+        <RecordDrawer open={showForm} title={editingId ? `Edit Mapping #${editingId}` : 'New Mapping'} onClose={() => { if (!saving) setShowForm(false); }}>
+          {!!error && <p role="alert" className="error-text">{error}</p>}
           <form onSubmit={submit} className="stack" onKeyDown={(event) => shouldPreventEnterSubmit(event, isSubmittable)}>
             <div className="form-grid">
               <label>Module Slug<input required value={form.module_slug} onChange={(e) => setForm((prev) => ({ ...prev, module_slug: e.target.value }))} placeholder="rooms, restaurant, inventory" /></label>
@@ -179,11 +189,11 @@ export default function AccountMappingPage() {
             </div>
             <label>Notes<textarea value={form.notes} onChange={(e) => setForm((prev) => ({ ...prev, notes: e.target.value }))} /></label>
             <div className="row wrap">
-              <button type="submit">{editingId ? 'Update Mapping' : 'Create Mapping'}</button>
-              {editingId && <button type="button" className="secondary" onClick={() => { setEditingId(null); setForm({ ...EMPTY_FORM }); }}>Cancel</button>}
+              <button type="submit" disabled={saving}>{editingId ? 'Update Mapping' : 'Create Mapping'}</button>
             </div>
+          <button type="button" className="secondary" disabled={saving} onClick={() => setShowForm(false)}>Cancel</button>
           </form>
-        </section>
+        </RecordDrawer>
 
         <section className="section">
           <h2>Mapping List</h2>
