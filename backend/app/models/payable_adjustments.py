@@ -52,3 +52,17 @@ class SupplierCredit(Base):
             name='uq_supplier_credit_source_event',
         ),
     )
+
+
+class SupplierCreditApplication(Base):
+    __tablename__ = 'supplier_credit_applications'
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True)
+    supplier_credit_id: Mapped[int] = mapped_column(ForeignKey('supplier_credits.id'), index=True)
+    payable_id: Mapped[int] = mapped_column(ForeignKey('payables.id'), index=True)
+    application_date: Mapped[str] = mapped_column(String(50), index=True)
+    amount: Mapped[float] = mapped_column(Float, default=0)
+    idempotency_key: Mapped[str] = mapped_column(String(180), unique=True, index=True)
+    notes: Mapped[str | None] = mapped_column(Text, nullable=True)
+    created_by: Mapped[str | None] = mapped_column(String(100), nullable=True)
+    created_at: Mapped[object] = mapped_column(DateTime(timezone=True), server_default=func.now())
