@@ -28,13 +28,18 @@
 .sidebar .nav-group { display: block; min-width: 0; margin: 0; padding: 0; border: 0; background: transparent; box-shadow: none; }
 .sidebar .nav-group-toggle { display: flex; align-items: center; justify-content: space-between; gap: 6px; width: 100%; min-height: 44px; padding: 8px; border: 1px solid transparent; border-radius: 9px; background: transparent; box-shadow: none; color: var(--sidebar-ink); }
 .sidebar .nav-group-toggle:hover { background: #edf3ef; }
-.sidebar .nav-group-heading { display: flex; align-items: center; gap: 9px; min-width: 0; text-align: left; }
+.sidebar .nav-group-heading { display: flex; align-items: center; gap: 7px; min-width: 0; text-align: left; }
 .sidebar .nav-group-heading strong { display: block; font-size: 13px; line-height: 1.35; font-weight: 650; letter-spacing: 0; text-transform: none; white-space: normal; }
 .sidebar .nav-group-icon, .sidebar .nav-symbol { display: inline-grid; place-items: center; flex: 0 0 20px; width: 20px; height: 20px; color: #526d5d; }
 .sidebar svg { flex-shrink: 0; }
-.sidebar .nav-group-items { display: grid; gap: 2px; margin: 0; padding: 2px 0 6px 6px; }
+.sidebar .nav-group-icon { flex-basis: 16px; width: 16px; }
+.sidebar .nav-group-toggle[aria-expanded="true"] { background: #eef3ef; font-weight: 700; }
+.sidebar .nav-group-items { position: relative; display: grid; gap: 2px; margin: 0; padding: 2px 0 6px; }
+.sidebar .nav-group:not(.connected-apps) .nav-group-items::before { content: ''; position: absolute; top: 5px; bottom: 9px; left: 17px; width: 1px; background: #c2d0c6; pointer-events: none; }
 .sidebar .nav-group-items[hidden] { display: none; }
 .sidebar .nav-group-items a { display: flex; align-items: center; gap: 9px; min-width: 0; min-height: 40px; padding: 8px; margin: 0; border: 0; border-radius: 8px; background: transparent; color: #354c3e; font-size: 13px; font-weight: 500; text-decoration: none; text-align: left; box-shadow: none; transform: none; }
+.sidebar .nav-group:not(.connected-apps) .nav-group-items a { padding-left: 32px; }
+.sidebar .nav-group:not(.connected-apps) .nav-group-items .nav-symbol { display: none; }
 .sidebar .nav-group-items a:hover { background: #eef3ef; }
 .sidebar .nav-group-items a.active { background: var(--sidebar-active-row); color: var(--sidebar-active-ink); box-shadow: inset 3px 0 #357453; font-weight: 650; }
 .sidebar .nav-group-items a.active::before { content: none; }

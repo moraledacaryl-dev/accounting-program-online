@@ -17,14 +17,15 @@ const closureCss = read('app/pass-70-final-ux-wcag.css');
 const ownership = read('components/ExternalOwnershipBoundary.js');
 const envExample = read('.env.production.example');
 
-requireText(appFrame, 'CONTEXT_NAVIGATION', 'single context-navigation registry');
-requireText(appFrame, 'data-context-section={contextNavigation.key}', 'context section identity');
+requireText(appFrame, '<SectionNavigation />', 'single shared location navigation');
+requireText(read('components/app-shell/SectionNavigation.js'), 'data-context-section={location.groupId}', 'sidebar-aligned section identity');
 forbidText(appFrame, '<HotelOperationsNav />\n            <FinanceOperationsNav />', 'simultaneous nav mounting');
 requireText(header, "'/integrations/payroll': ['Payroll Integration'", 'payroll integration metadata');
 forbidText(validationCss, 'input:invalid:not(:placeholder-shown)', 'premature invalid selector');
 requireText(validationCss, ":user-invalid", 'user-invalid selector');
 requireText(closureCss, 'position: relative;', 'payroll normal-flow correction');
-requireText(closureCss, 'Swipe for more', 'mobile scroll affordance');
+requireText(read('app/shell-controls.css'), '.section-navigation > .section-navigation__links', 'owned child navigation styles');
+requireText(read('app/shell-controls.css'), 'flex-wrap: wrap', 'visible wrapped mobile navigation');
 requireText(closureCss, ':focus-visible', 'keyboard focus visibility');
 requireText(ownership, 'ownership-mutation-section', 'compact external mutation handling');
 requireText(envExample, 'NEXT_PUBLIC_INVENTORY_APP_URL=https://inventory.hiddenoasis.app', 'inventory handoff URL');

@@ -86,9 +86,9 @@ test('payroll integration gets one context navigation and correct page title', a
   await installShellFixtures(page);
   await page.goto('/integrations/payroll');
 
-  await expect(page.locator('.context-nav-stack')).toHaveAttribute('data-context-section', 'people-payroll');
-  await expect(page.locator('.context-nav-stack nav')).toHaveCount(1);
-  await expect(page.locator('.people-context-nav')).toBeVisible();
+  await expect(page.locator('.context-nav-stack')).toHaveAttribute('data-context-section', 'integrations');
+  await expect(page.locator('.context-nav-stack nav')).toHaveCount(2);
+  await expect(page.getByRole('navigation', { name: 'Page location' })).toContainText('Operations Integration');
   await expect(page.locator('.setup-context-nav')).toHaveCount(0);
   await expect(page.locator('.topbar-title')).toHaveText('Payroll Integration');
 });

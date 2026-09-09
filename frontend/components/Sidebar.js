@@ -3,6 +3,8 @@
 import Link from 'next/link';
 import { usePathname, useSearchParams } from 'next/navigation';
 import { useEffect, useMemo, useRef, useState } from 'react';
+import { pathHasAccess } from '../lib/routeAccess';
+import { navigationChildren } from '../lib/navigationChildren';
 import { canAccess } from '../lib/permissions';
 import { useAppShell } from './app-shell/AppShellContext';
 import NavIcon from './app-shell/NavIcon';
@@ -20,11 +22,6 @@ const SIDEBAR_KEY = 'accounting_sidebar_collapsed_v5';
 const ACTIVE_GROUP_KEY = 'accounting_sidebar_active_group_v3';
 const SCROLL_KEY = 'accounting_sidebar_scroll_v1';
 const MIN_SEARCH_LENGTH = 2;
-
-function hasAnyPermission(user, keys = []) {
-  if (!keys.length) return true;
-  return keys.some((key) => canAccess(user, key));
-}
 
 function roleName(user) {
   const raw = String(user?.role || user?.roles?.[0]?.code || 'user');
@@ -172,20 +169,25 @@ export default function Sidebar() {
   const visibleGroups = useMemo(() => navigationGroups
     .map((group) => ({
       ...group,
-      items: group.items.filter((item) => hasAnyPermission(user, item.permissionsAny)),
+      items: group.items.map(item => ({
+        ...item,
+        destination: [item, ...(navigationChildren[item.href] || [])].find(candidate => pathHasAccess(candidate.href, permission => canAccess(user, permission)))?.href,
+      })).filter(item => item.destination),
     }))
     .filter((group) => group.items.length), [user]);
 
   const searchResults = useMemo(() => {
     if (!searchReady) return [];
-    return visibleGroups.flatMap((group) => group.items
+    return visibleGroups.flatMap((group) => group.items.flatMap(item => [item, ...(navigationChildren[item.href] || [])
+      .filter(child => child.href !== item.href && pathHasAccess(child.href, permission => canAccess(user, permission)))
+      .map(child => ({ ...child, destination: child.href, icon: item.icon }))])
       .filter((item) => {
         const pageLabel = item.label.toLowerCase();
         const hrefTerms = item.href.replaceAll('/', ' ').replaceAll('-', ' ').toLowerCase();
         return pageLabel.includes(normalizedFilter) || hrefTerms.includes(normalizedFilter);
       })
       .map((item) => ({ ...item, groupId: group.id, groupLabel: group.label })));
-  }, [normalizedFilter, searchReady, visibleGroups]);
+  }, [normalizedFilter, searchReady, visibleGroups, user]);
 
   function toggleGroup(groupId) {
     setOpenGroupId((current) => {
@@ -291,11 +293,11 @@ export default function Sidebar() {
               ) : searchResults.length ? (
                 <nav className="sidebar-search-list" aria-label="Matching pages">
                   {searchResults.map((item) => {
-                    const active = activeItem?.href === item.href;
+                    const active = activeItem?.page.href === item.href;
                     return (
                       <Link
                         key={`${item.groupId}-${item.href}`}
-                        href={item.href}
+                        href={item.destination}
                         className={active ? 'sidebar-search-result active' : 'sidebar-search-result'}
                         aria-current={active ? 'page' : undefined}
                       >
@@ -358,7 +360,7 @@ export default function Sidebar() {
                           return (
                             <Link
                               key={item.href}
-                              href={item.href}
+                              href={item.destination}
                               ref={active ? activeItemRef : undefined}
                               className={active ? 'active' : ''}
                               title={collapsed ? item.label : undefined}

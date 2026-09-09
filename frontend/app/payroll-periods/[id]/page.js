@@ -304,12 +304,9 @@ export default function PayrollPeriodDetailPage({ params }) {
         {!!notice && <p className="success-text">{notice}</p>}
         {!!error && <p className="error-text">{error}</p>}
 
-        <div className="tabs">
-          <button type="button" className={activeTab === 'summary' ? 'tab active' : 'tab'} onClick={() => setActiveTab('summary')}>Summary</button>
-          <button type="button" className={activeTab === 'input' ? 'tab active' : 'tab'} onClick={() => setActiveTab('input')}>Employee Input</button>
-          <button type="button" className={activeTab === 'import' ? 'tab active' : 'tab'} onClick={() => setActiveTab('import')}>Import</button>
-          <button type="button" className={activeTab === 'posting' ? 'tab active' : 'tab'} onClick={() => setActiveTab('posting')}>Posting</button>
-          <button type="button" className={activeTab === 'reports' ? 'tab active' : 'tab'} onClick={() => setActiveTab('reports')}>Reports</button>
+        <div className="tabs" role="group" aria-label="Payroll period views">
+          <button type="button" aria-pressed={activeTab === 'summary'} className={activeTab === 'summary' ? 'tab active' : 'tab'} onClick={() => setActiveTab('summary')}>Summary</button>
+          <button type="button" aria-pressed={activeTab === 'reports'} className={activeTab === 'reports' ? 'tab active' : 'tab'} onClick={() => setActiveTab('reports')}>Reports</button>
         </div>
       </section>
 

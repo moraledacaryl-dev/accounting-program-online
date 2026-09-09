@@ -200,14 +200,14 @@ export default function ReportsPage() {
           <button onClick={reloadFromFilters}>Refresh</button>
           <button className="secondary" onClick={exportCsv}>Export CSV</button>
         </div>
-        <div className="tabs">
+        <div className="tabs" role="group" aria-label="Report views">
           {[
             ['overview', 'Overview'],
             ['statements', 'Financial Statements'],
             ['operations', 'Rooms, F&B & Inventory'],
             ['finance', 'AR, AP & Settlements'],
             ['payroll', 'Payroll & BIR'],
-          ].map(([value, label]) => <button key={value} type="button" className={activeView === value ? 'tab active' : 'tab'} onClick={() => setActiveView(value)}>{label}</button>)}
+          ].map(([value, label]) => <button key={value} type="button" aria-pressed={activeView === value} className={activeView === value ? 'tab active' : 'tab'} onClick={() => setActiveView(value)}>{label}</button>)}
         </div>
       </section>
 

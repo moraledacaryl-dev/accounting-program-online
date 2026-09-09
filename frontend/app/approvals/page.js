@@ -48,6 +48,7 @@ const RECORD_MODULES = [
 ];
 
 const TABS = ['records', 'procurement', 'cashflow', 'payroll', 'journals', 'reconciliations'];
+const TAB_LABELS = { records: 'Records', procurement: 'Procurement', cashflow: 'Money Transactions', payroll: 'Payroll', journals: 'Journal Entries', reconciliations: 'Reconciliations' };
 
 const PENDING_RECORD_STATUSES = new Set(['draft', 'pending_review']);
 
@@ -178,10 +179,10 @@ export default function ApprovalsPage() {
       </section>
 
       <section className="section">
-        <div className="tabs" style={{ marginTop: 0 }}>
+        <div className="tabs" role="group" aria-label="Approval queues" style={{ marginTop: 0 }}>
           {TABS.map((name) => (
-            <button key={name} type="button" className={tab === name ? 'tab active' : 'tab'} onClick={() => setTab(name)}>
-              {name} ({counts[name] || 0})
+            <button key={name} type="button" aria-pressed={tab === name} className={tab === name ? 'tab active' : 'tab'} onClick={() => setTab(name)}>
+              {TAB_LABELS[name]} ({counts[name] || 0})
             </button>
           ))}
         </div>
