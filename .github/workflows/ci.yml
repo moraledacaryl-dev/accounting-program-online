@@ -207,7 +207,15 @@ jobs:
       - name: Install pinned browser blocker tooling
         working-directory: frontend
         run: |
+          set -euo pipefail
           npm install --no-save --package-lock=false @playwright/test@1.55.0 @axe-core/playwright@4.10.2
+          # Playwright needs Ubuntu system libraries plus its own pinned Chromium.
+          # The hosted runner also carries Google's Chrome apt source, which is
+          # unrelated to this test and can temporarily publish an index whose
+          # Release metadata and Packages file are out of sync. Remove only that
+          # third-party source so an unrelated repository cannot block acceptance.
+          sudo rm -f /etc/apt/sources.list.d/google-chrome.list
+          sudo rm -f /var/lib/apt/lists/dl.google.com_linux_chrome-stable_deb_*
           npx playwright install --with-deps chromium
 
       - name: Run browser regression blocker
