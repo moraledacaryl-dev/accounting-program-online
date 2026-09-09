@@ -17,6 +17,7 @@ from app.services.integration_review_service import (
     retry_item,
     summary,
 )
+from app.services.inventory_integration_adapter import normalize_inventory_review_payload
 
 router = APIRouter()
 
@@ -37,6 +38,7 @@ def require_service_integration_key(
 
 def _create(payload: IntegrationReviewCreate, db: Session):
     try:
+        payload = normalize_inventory_review_payload(db, payload)
         return create_review_item(db, payload)
     except ValueError as exc:
         db.rollback()
