@@ -120,3 +120,7 @@ Final local validation: **149 browser tests passed**, production build and sourc
 The suite includes route ownership, exactly one current sidebar destination, tab/view switching, cash URL history, restricted-role link destinations, search for child pages, session entry, drawers, contrast and phone/tablet geometry. Production builds and UI source contracts are checked. Screenshots cover Reports, Transfers, Approvals, Rooms & Rates and Inventory at 390px and 1440px plus the phone sidebar.
 
 Local route tests use mocked API data. They verify navigation, not every populated business workflow. Live post-deployment checks and release IDs are recorded in the workspace audit artifact.
+
+## Dependency audit follow-up
+
+The first CI run stopped at its production dependency audit. The release now pins Next.js 16.3.4 and resolves sharp 0.35.4, addressing the reviewed [Next.js image optimization advisory](https://github.com/advisories/GHSA-2xp9-vwfh-vxw4), [Windows-hosted Next.js advisory](https://github.com/advisories/GHSA-p293-qw3h-jr36), and [sharp/libheif advisory](https://github.com/advisories/GHSA-rgj7-g3m4-5g8c). The production dependency audit reports zero known vulnerabilities after the update. Navigation tests and the production build were rerun against the patched versions.
