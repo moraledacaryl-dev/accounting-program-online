@@ -1,7 +1,7 @@
 'use client';
 
 import { useMemo, useState } from 'react';
-import { applySupplierCredit } from '../../lib/supplierCreditApi';
+import { applySupplierCredit, reverseSupplierCreditApplication } from '../../lib/supplierCreditApi';
 import { todayISO } from '../../app/cashflow/shared';
 
 function sameSupplier(a, b) {
@@ -13,10 +13,15 @@ export default function SupplierCreditsPanel({ credits = [], payables = [], canA
   const [payableId, setPayableId] = useState('');
   const [amount, setAmount] = useState('');
   const [notes, setNotes] = useState('');
+  const [targetApplication, setTargetApplication] = useState(null);
+  const [reversalReason, setReversalReason] = useState('');
   const [error, setError] = useState('');
   const [saving, setSaving] = useState(false);
 
   const openCredits = credits.filter((row) => Number(row.balance_available || 0) > 0);
+  const applications = credits.flatMap((credit) => (
+    (credit.applications || []).map((application) => ({ ...application, credit }))
+  ));
   const eligiblePayables = useMemo(() => {
     if (!targetCredit) return [];
     return payables.filter((row) => (
@@ -32,9 +37,17 @@ export default function SupplierCreditsPanel({ credits = [], payables = [], canA
     ));
     const first = eligible[0];
     setTargetCredit(credit);
+    setTargetApplication(null);
     setPayableId(first ? String(first.id) : '');
     setAmount(first ? String(Math.min(Number(credit.balance_available || 0), Number(first.balance_due || 0))) : '');
     setNotes(`Apply supplier credit #${credit.id}`);
+    setError('');
+  }
+
+  function chooseReversal(application) {
+    setTargetCredit(null);
+    setTargetApplication(application);
+    setReversalReason('');
     setError('');
   }
 
@@ -75,6 +88,31 @@ export default function SupplierCreditsPanel({ credits = [], payables = [], canA
       await onApplied?.();
     } catch (err) {
       setError(err.message || 'Failed to apply supplier credit.');
+    } finally {
+      setSaving(false);
+    }
+  }
+
+  async function submitReversal(event) {
+    event.preventDefault();
+    if (!targetApplication) return;
+    const reason = reversalReason.trim();
+    if (reason.length < 3) {
+      setError('Enter a clear reversal reason.');
+      return;
+    }
+    setSaving(true);
+    setError('');
+    try {
+      await reverseSupplierCreditApplication(targetApplication.id, {
+        reversal_date: todayISO(),
+        reason,
+      });
+      setTargetApplication(null);
+      setReversalReason('');
+      await onApplied?.();
+    } catch (err) {
+      setError(err.message || 'Failed to reverse supplier credit application.');
     } finally {
       setSaving(false);
     }
@@ -156,6 +194,64 @@ export default function SupplierCreditsPanel({ credits = [], payables = [], canA
           <div className="row wrap">
             <button type="submit" disabled={saving || eligiblePayables.length === 0}>{saving ? 'Applying…' : 'Apply Supplier Credit'}</button>
             <button type="button" className="secondary" disabled={saving} onClick={() => setTargetCredit(null)}>Cancel</button>
+          </div>
+        </form>
+      ) : null}
+
+      <div style={{ marginTop: '1.5rem' }}>
+        <h3>Credit Application History</h3>
+        <p className="muted">Reversals preserve the original application and restore both the supplier credit and the bill liability.</p>
+        {applications.length === 0 ? (
+          <p className="muted">No supplier credit applications yet.</p>
+        ) : (
+          <div className="table-wrap" tabIndex="0" aria-label="Supplier credit application history">
+            <table>
+              <thead>
+                <tr>
+                  <th>Application</th>
+                  <th>Supplier</th>
+                  <th>Bill</th>
+                  <th>Date</th>
+                  <th>Amount</th>
+                  <th>Status</th>
+                  {canApply ? <th>Action</th> : null}
+                </tr>
+              </thead>
+              <tbody>
+                {applications.map((application) => (
+                  <tr key={application.id}>
+                    <td>#{application.id}</td>
+                    <td>{application.credit.supplier_name}</td>
+                    <td>#{application.payable_id}</td>
+                    <td>{application.application_date || '—'}</td>
+                    <td>₱{Number(application.amount || 0).toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</td>
+                    <td>{application.is_reversed ? `Reversed ${application.reversal?.reversal_date || ''}`.trim() : 'Applied'}</td>
+                    {canApply ? (
+                      <td>
+                        {application.is_reversed ? '—' : (
+                          <button type="button" className="secondary" onClick={() => chooseReversal(application)}>Reverse</button>
+                        )}
+                      </td>
+                    ) : null}
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+        )}
+      </div>
+
+      {targetApplication && canApply ? (
+        <form onSubmit={submitReversal} className="stack" style={{ marginTop: '1rem' }}>
+          <h3>Reverse credit application #{targetApplication.id}</h3>
+          <p className="muted">This restores ₱{Number(targetApplication.amount || 0).toFixed(2)} to the supplier credit and restores the same amount to bill #{targetApplication.payable_id}. No cash transaction is created.</p>
+          <label>Reversal Reason
+            <textarea required minLength={3} value={reversalReason} onChange={(event) => setReversalReason(event.target.value)} />
+          </label>
+          {!!error && <p role="alert" className="error-text">{error}</p>}
+          <div className="row wrap">
+            <button type="submit" disabled={saving}>{saving ? 'Reversing…' : 'Reverse Application'}</button>
+            <button type="button" className="secondary" disabled={saving} onClick={() => setTargetApplication(null)}>Cancel</button>
           </div>
         </form>
       ) : null}

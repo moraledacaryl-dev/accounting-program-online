@@ -36,7 +36,7 @@ pytestmark = pytest.mark.skipif(
 def test_postgresql_migration_head_and_auth_security_tables_exist():
     with engine.connect() as connection:
         head = connection.execute(text('SELECT version_num FROM alembic_version')).scalar_one()
-        assert head == '0011_supplier_credit_apps'
+        assert head == '0012_supplier_credit_reversals'
 
         tables = set(
             connection.execute(
@@ -56,6 +56,7 @@ def test_postgresql_migration_head_and_auth_security_tables_exist():
     assert 'payable_adjustments' in tables
     assert 'supplier_credits' in tables
     assert 'supplier_credit_applications' in tables
+    assert 'supplier_credit_application_reversals' in tables
 
 
 def test_postgresql_money_transaction_idempotency_and_balance_update():

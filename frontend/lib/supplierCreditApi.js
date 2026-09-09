@@ -20,3 +20,11 @@ export const applySupplierCredit = (creditId, payload) => (
     payload,
   )
 );
+
+export const reverseSupplierCreditApplication = (applicationId, payload) => (
+  idempotentMutation(
+    `/supplier-credits/applications/${applicationId}/reverse`,
+    `supplier-credit-reverse-${applicationId}`,
+    payload,
+  )
+);
