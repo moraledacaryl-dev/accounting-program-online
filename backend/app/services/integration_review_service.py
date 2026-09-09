@@ -13,9 +13,10 @@ from app.schemas.integration_review import IntegrationReviewCreate, IntegrationR
 from app.services.audit_service import record_audit
 from app.services.bir_service import ensure_date_unlocked
 from app.services.cashflow_service import create_money_transaction
+from app.services.payable_adjustment_service import apply_purchase_return_adjustment
 
 ALLOWED_EFFECTS = {
-    'cash_in', 'cash_out', 'journal_only', 'receivable', 'payable',
+    'cash_in', 'cash_out', 'journal_only', 'receivable', 'payable', 'payable_adjustment',
     'folio_charge', 'reference_only', 'settlement',
 }
 CASH_EFFECTS = {'cash_in', 'cash_out', 'settlement'}
@@ -118,6 +119,13 @@ def validate_review_payload(db: Session, payload: IntegrationReviewCreate | dict
         errors.append('Receivable effects require proposed_links.counterparty_name.')
     if effect == 'payable' and not str(links.get('supplier_name') or '').strip():
         errors.append('Payable effects require proposed_links.supplier_name.')
+    if effect == 'payable_adjustment':
+        if source_app != 'inventory':
+            errors.append('Payable adjustments are currently supported only for Inventory events.')
+        if not str(links.get('supplier_name') or '').strip():
+            errors.append('Payable adjustments require proposed_links.supplier_name.')
+        if not str(links.get('purchase_order_id') or '').strip():
+            errors.append('Payable adjustments require proposed_links.purchase_order_id.')
     if effect in REFERENCE_EFFECTS:
         if not str(links.get('target_type') or '').strip() or not str(links.get('target_id') or '').strip():
             errors.append('Reference and folio effects require proposed_links.target_type and target_id.')
@@ -245,6 +253,19 @@ def get_item(db: Session, item_id: int):
     return row
 
 
+def _locked_item(db: Session, item_id: int):
+    row = (
+        db.query(IntegrationReviewItem)
+        .filter(IntegrationReviewItem.id == int(item_id))
+        .populate_existing()
+        .with_for_update()
+        .first()
+    )
+    if not row:
+        raise ValueError('Review item not found.')
+    return row
+
+
 def _current_validation(db: Session, row: IntegrationReviewItem) -> dict:
     payload = {
         'source_app': row.source_app,
@@ -264,7 +285,7 @@ def _current_validation(db: Session, row: IntegrationReviewItem) -> dict:
 
 
 def accept_item(db: Session, item_id: int, decision: IntegrationReviewDecision, username: str | None):
-    row = get_item(db, item_id)
+    row = _locked_item(db, item_id)
     if row.status == 'accepted':
         return _serialize(row)
     if row.status != 'ready_for_review':
@@ -286,6 +307,7 @@ def accept_item(db: Session, item_id: int, decision: IntegrationReviewDecision, 
     links = _loads(row.proposed_links_json)
     source = f'{row.source_app}:{row.source_event_id}'
     effect = row.financial_effect
+    payable_adjustment_result = None
 
     if effect in CASH_EFFECTS:
         account_id = decision.account_id or row.proposed_account_id
@@ -387,6 +409,19 @@ def accept_item(db: Session, item_id: int, decision: IntegrationReviewDecision, 
         db.add(pay)
         db.flush()
         row.accepted_payable_id = pay.id
+    elif effect == 'payable_adjustment':
+        payable_adjustment_result = apply_purchase_return_adjustment(
+            db,
+            row,
+            links,
+            transaction_date,
+            notes=decision.notes,
+        )
+        row.validation_json = json.dumps({
+            **validation,
+            'result': 'payable_adjusted',
+            'payable_adjustment': payable_adjustment_result,
+        })
     else:
         row.validation_json = json.dumps({
             **validation,
@@ -413,6 +448,7 @@ def accept_item(db: Session, item_id: int, decision: IntegrationReviewDecision, 
             'accepted_journal_entry_id': row.accepted_journal_entry_id,
             'accepted_receivable_id': row.accepted_receivable_id,
             'accepted_payable_id': row.accepted_payable_id,
+            'payable_adjustment': payable_adjustment_result,
         },
         source_app=row.source_app,
         correlation_id=row.correlation_id,
