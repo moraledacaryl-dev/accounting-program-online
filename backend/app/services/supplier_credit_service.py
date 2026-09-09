@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session
 
 from app.core.business_clock import business_today
@@ -96,6 +97,24 @@ def list_supplier_credits(
     return [_serialize_credit(db, row) for row in rows]
 
 
+def _same_application_request(
+    row: SupplierCreditApplication,
+    *,
+    credit_id: int,
+    payable_id: int,
+    amount: float,
+    application_date: str,
+    notes: str | None,
+) -> bool:
+    return (
+        int(row.supplier_credit_id) == int(credit_id)
+        and int(row.payable_id) == int(payable_id)
+        and abs(_money(row.amount) - amount) <= TOLERANCE
+        and str(row.application_date or '') == application_date
+        and str(row.notes or '') == str(notes or '')
+    )
+
+
 def _replay_result(db: Session, application: SupplierCreditApplication) -> dict:
     credit = db.get(SupplierCredit, int(application.supplier_credit_id))
     payable = db.get(Payable, int(application.payable_id))
@@ -131,14 +150,14 @@ def apply_supplier_credit(
         .first()
     )
     if existing:
-        same_request = (
-            int(existing.supplier_credit_id) == int(credit_id)
-            and int(existing.payable_id) == payable_id
-            and abs(_money(existing.amount) - amount) <= TOLERANCE
-            and str(existing.application_date or '') == date
-            and str(existing.notes or '') == str(payload.notes or '')
-        )
-        if not same_request:
+        if not _same_application_request(
+            existing,
+            credit_id=credit_id,
+            payable_id=payable_id,
+            amount=amount,
+            application_date=date,
+            notes=payload.notes,
+        ):
             raise SupplierCreditIdempotencyConflict(
                 'Idempotency-Key was already used with a different supplier-credit application.'
             )
@@ -201,6 +220,9 @@ def apply_supplier_credit(
         'status': payable.status,
     }
 
+    # Reserve the application key before changing either business row. If a
+    # concurrent retry won the key race, rolling back here cannot discard any
+    # supplier-credit or payable mutation from this request.
     application = SupplierCreditApplication(
         supplier_credit_id=credit.id,
         payable_id=payable.id,
@@ -211,7 +233,29 @@ def apply_supplier_credit(
         created_by=username,
     )
     db.add(application)
-    db.flush()
+    try:
+        db.flush()
+    except IntegrityError:
+        db.rollback()
+        winner = (
+            db.query(SupplierCreditApplication)
+            .filter(SupplierCreditApplication.idempotency_key == key)
+            .first()
+        )
+        if not winner:
+            raise
+        if not _same_application_request(
+            winner,
+            credit_id=credit_id,
+            payable_id=payable_id,
+            amount=amount,
+            application_date=date,
+            notes=payload.notes,
+        ):
+            raise SupplierCreditIdempotencyConflict(
+                'Idempotency-Key was already used with a different supplier-credit application.'
+            )
+        return _replay_result(db, winner)
 
     credit.applied_amount = _money(_money(credit.applied_amount) + amount)
     credit.balance_available = _money(max(0.0, available - amount))
