@@ -66,3 +66,18 @@ class SupplierCreditApplication(Base):
     notes: Mapped[str | None] = mapped_column(Text, nullable=True)
     created_by: Mapped[str | None] = mapped_column(String(100), nullable=True)
     created_at: Mapped[object] = mapped_column(DateTime(timezone=True), server_default=func.now())
+
+
+class SupplierCreditApplicationReversal(Base):
+    __tablename__ = 'supplier_credit_application_reversals'
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True)
+    application_id: Mapped[int] = mapped_column(
+        ForeignKey('supplier_credit_applications.id'), unique=True, index=True
+    )
+    reversal_date: Mapped[str] = mapped_column(String(50), index=True)
+    amount: Mapped[float] = mapped_column(Float, default=0)
+    idempotency_key: Mapped[str] = mapped_column(String(180), unique=True, index=True)
+    reason: Mapped[str] = mapped_column(Text)
+    reversed_by: Mapped[str | None] = mapped_column(String(100), nullable=True)
+    created_at: Mapped[object] = mapped_column(DateTime(timezone=True), server_default=func.now())
