@@ -1,7 +1,6 @@
 'use client';
 
 import { useEffect, useState } from 'react';
-import CashflowTabs from '../../../components/cashflow/CashflowTabs';
 import InputActionModal from '../../../components/InputActionModal';
 import ReceivablesTable from '../../../components/cashflow/ReceivablesTable';
 import SettlementModal from '../../../components/cashflow/SettlementModal';
@@ -189,7 +188,6 @@ export default function ReceivablesPage() {
 
   return (
     <div className="stack">
-      <CashflowTabs />
 
       <section className="section">
         <h1>Payments to Receive</h1>

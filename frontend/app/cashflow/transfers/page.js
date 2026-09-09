@@ -1,2 +1,2 @@
 import { redirect } from 'next/navigation';
-export default function LegacyCashflowRedirect() { redirect('/cashflow?tab=close&action=transfer'); }
+export default function CashflowRedirect() { redirect('/cashflow?tab=transfers'); }

@@ -6,6 +6,7 @@ import { fetchBirBooks, fetchBirCandidates, fetchLocks, generateBirBooks, saveBi
 import { useCurrentUser } from '../../lib/useCurrentUser';
 
 const TABS = ['review', 'missing_docs', 'candidates', 'books', 'locks'];
+const TAB_LABELS = { review: 'Review', missing_docs: 'Missing Documents', candidates: 'Candidate Records', books: 'Tax Books', locks: 'Period Locks' };
 
 function currency(value) {
   return Number(value || 0).toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 });
@@ -195,10 +196,10 @@ export default function BirPage() {
       </section>
 
       <section className="section">
-        <div className="tabs" style={{ marginTop: 0 }}>
+        <div className="tabs" role="group" aria-label="Tax and period close views" style={{ marginTop: 0 }}>
           {TABS.map((name) => (
-            <button key={name} type="button" className={tab === name ? 'tab active' : 'tab'} onClick={() => setTab(name)}>
-              {name}
+            <button key={name} type="button" aria-pressed={tab === name} className={tab === name ? 'tab active' : 'tab'} onClick={() => setTab(name)}>
+              {TAB_LABELS[name]}
             </button>
           ))}
         </div>

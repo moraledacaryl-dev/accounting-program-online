@@ -1,7 +1,6 @@
 'use client';
 
 import { useEffect, useState } from 'react';
-import CashflowTabs from '../../../components/cashflow/CashflowTabs';
 import PaymentMethodSelect from '../../../components/cashflow/PaymentMethodSelect';
 import TemplateLaunchModal from '../../../components/cashflow/TemplateLaunchModal';
 import ToggleField from '../../../components/cashflow/ToggleField';
@@ -199,7 +198,6 @@ export default function CashflowTemplatesPage() {
 
   return (
     <div className="stack">
-      <CashflowTabs />
 
       <section className="section">
         <h1>Cashflow Templates</h1>

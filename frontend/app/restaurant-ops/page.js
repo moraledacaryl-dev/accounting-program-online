@@ -1201,15 +1201,15 @@ export default function RestaurantOpsPage() {
             <h2>Advanced Catalog Tools</h2>
             <p className="muted small">Use <Link className="secondary-link" href="/menu-items">Menu & Recipes</Link> for routine item and base-recipe edits, or <Link className="secondary-link" href="/setup-imports">Excel Setup Import</Link> for bulk data. These advanced tools are for prep components, variants, and promotions.</p>
           </div>
-          <div className="segmented">
+          <div className="segmented" role="group" aria-label="Retained catalog views">
             {BUILDER_TABS.map((tab) => (
               <button
                 key={tab}
-                className={builderTab === tab ? 'tab active' : 'tab'}
+                aria-pressed={builderTab === tab} className={builderTab === tab ? 'tab active' : 'tab'}
                 type="button"
                 onClick={() => setBuilderTab(tab)}
               >
-                {tab}
+                {{ menu: 'Menu', components: 'Ingredients & Components', skus: 'SKUs', promos: 'Promotions' }[tab]}
               </button>
             ))}
           </div>

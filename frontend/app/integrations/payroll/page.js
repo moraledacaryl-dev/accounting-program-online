@@ -96,13 +96,12 @@ export default function PayrollIntegrationReviewPage() {
       {error ? <div className="error-text">{error}</div> : null}
 
       <section className="section payroll-integration-workspace">
-        <div className="payroll-integration-tabs" role="tablist" aria-label="Payroll review status">
+        <div className="payroll-integration-tabs" role="group" aria-label="Payroll review status">
           {tabs.map((tab) => (
             <button
               key={tab}
               type="button"
-              role="tab"
-              aria-selected={status === tab}
+              aria-pressed={status === tab}
               className={`payroll-integration-tab ${status === tab ? 'active' : ''}`}
               onClick={() => setStatus(tab)}
             >

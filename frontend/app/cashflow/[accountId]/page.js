@@ -2,7 +2,6 @@
 
 import { useEffect, useState } from 'react';
 import { useParams } from 'next/navigation';
-import CashflowTabs from '../../../components/cashflow/CashflowTabs';
 import AccountLedgerTable from '../../../components/cashflow/AccountLedgerTable';
 import { fetchAccountLedger } from '../../../lib/cashflowApi';
 import { money } from '../shared';
@@ -36,7 +35,6 @@ export default function AccountLedgerPage() {
 
   return (
     <div className="stack">
-      <CashflowTabs />
 
       <section className="section">
         <h1>Account History</h1>

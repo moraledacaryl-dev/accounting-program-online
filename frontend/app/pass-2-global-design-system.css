@@ -41,18 +41,6 @@ body {
   background: transparent;
 }
 
-.context-nav-stack {
-  position: sticky;
-  top: 76px;
-  z-index: 8;
-  min-width: 0;
-  background: rgba(248, 250, 247, .92);
-  backdrop-filter: blur(14px);
-  border-bottom: 1px solid rgba(203, 213, 206, .75);
-}
-
-.context-nav-stack:empty { display: none; }
-
 .shell-content {
   min-width: 0;
   width: 100%;
@@ -369,36 +357,6 @@ tbody tr:hover td { background: #fbfcfb; }
 }
 
 /* Context navigation becomes a restrained secondary layer. */
-.context-nav-stack > nav {
-  width: 100%;
-  min-height: 46px;
-  margin: 0;
-  padding: 7px clamp(18px, 2.4vw, 34px);
-  border: 0;
-  border-radius: 0;
-  background: transparent;
-  box-shadow: none;
-}
-
-.context-nav-stack [class$="__label"] {
-  color: var(--ho-muted);
-  font-size: .67rem;
-  font-weight: 800;
-  letter-spacing: .07em;
-  text-transform: uppercase;
-}
-
-.context-nav-stack a {
-  border-radius: 8px;
-  font-size: .74rem;
-  font-weight: 650;
-}
-
-.context-nav-stack a[class*="is-active"],
-.context-nav-stack a[aria-current="page"] {
-  background: var(--ho-brand-soft);
-  color: var(--ho-brand-strong);
-}
 
 /* Topbar */
 .topbar {
@@ -429,8 +387,6 @@ tbody tr:hover td { background: #fbfcfb; }
   .page-hero { align-items: flex-start; flex-direction: column; gap: 14px; }
   .page-actions,
   .ho-page-actions { width: 100%; justify-content: flex-start; }
-  .context-nav-stack { top: 66px; overflow-x: auto; }
-  .context-nav-stack > nav { min-width: max-content; padding-inline: 14px; }
 }
 
 @media (max-width: 760px) {
