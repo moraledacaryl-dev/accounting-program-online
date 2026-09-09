@@ -1,6 +1,9 @@
+from decimal import Decimal
+
 from fastapi import APIRouter, Depends, HTTPException
 from sqlalchemy.orm import Session, selectinload
 from app.db.database import get_db
+from app.db.monetary_precision import centavos, decimal_money
 from app.models.entities import PayrollRun
 from app.schemas.common import PayrollRunCreate, PayrollGeneratePayload
 from app.services.payroll_service import generate_payroll_run, autopost_payroll_run
@@ -25,28 +28,28 @@ def create_run(payload: PayrollRunCreate, db: Session = Depends(get_db), user=De
     from app.models.entities import PayrollLine
     for line in payload.lines:
         values = line.model_dump()
-        gross_components = (
-            float(values.get('basic_pay') or 0)
-            + float(values.get('overtime_pay') or 0)
-            + float(values.get('night_diff_pay') or 0)
-            + float(values.get('holiday_pay') or 0)
-            + float(values.get('allowances') or 0)
-        )
-        gross_pay = float(values.get('gross_pay') or 0)
+        gross_components = sum((
+            decimal_money(values.get('basic_pay')),
+            decimal_money(values.get('overtime_pay')),
+            decimal_money(values.get('night_diff_pay')),
+            decimal_money(values.get('holiday_pay')),
+            decimal_money(values.get('allowances')),
+        ), Decimal('0'))
+        gross_pay = decimal_money(values.get('gross_pay'))
         if gross_pay == 0 and gross_components > 0:
             gross_pay = gross_components
 
-        statutory_deductions = (
-            float(values.get('sss_employee') or 0)
-            + float(values.get('philhealth_employee') or 0)
-            + float(values.get('pagibig_employee') or 0)
-        )
-        other_deductions = float(values.get('other_deductions') or 0)
-        total_deductions = round(statutory_deductions + other_deductions, 2)
+        statutory_deductions = sum((
+            decimal_money(values.get('sss_employee')),
+            decimal_money(values.get('philhealth_employee')),
+            decimal_money(values.get('pagibig_employee')),
+        ), Decimal('0'))
+        other_deductions = decimal_money(values.get('other_deductions'))
+        total_deductions = centavos(statutory_deductions + other_deductions)
 
-        values['gross_pay'] = round(gross_pay, 2)
+        values['gross_pay'] = centavos(gross_pay)
         values['total_deductions'] = total_deductions
-        values['net_pay'] = round(gross_pay - total_deductions, 2)
+        values['net_pay'] = centavos(gross_pay - total_deductions)
 
         db.add(PayrollLine(payroll_run_id=run.id, **values))
     db.commit(); db.refresh(run)
