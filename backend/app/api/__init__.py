@@ -23,6 +23,7 @@ from app.api.transfers import router as transfers_router
 from app.api.reconciliations import router as reconciliations_router
 from app.api.receivables import router as receivables_router
 from app.api.payables import router as payables_router
+from app.api.supplier_credits import router as supplier_credits_router
 from app.api.cashflow_templates import router as cashflow_templates_router
 from app.api.room_types import router as room_types_router
 from app.api.rooms import router as rooms_router
@@ -74,6 +75,7 @@ api_router.include_router(transfers_router, prefix='/transfers', tags=['transfer
 api_router.include_router(reconciliations_router, prefix='/reconciliations', tags=['reconciliations'])
 api_router.include_router(receivables_router, prefix='/receivables', tags=['receivables'])
 api_router.include_router(payables_router, prefix='/payables', tags=['payables'])
+api_router.include_router(supplier_credits_router, prefix='/supplier-credits', tags=['supplier-credits'])
 api_router.include_router(cashflow_templates_router, prefix='/cashflow-templates', tags=['cashflow-templates'])
 api_router.include_router(room_types_router, prefix='/room-types', tags=['room-types'])
 api_router.include_router(rooms_router, prefix='/rooms', tags=['rooms'])
