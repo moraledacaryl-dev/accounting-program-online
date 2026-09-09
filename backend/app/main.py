@@ -17,6 +17,7 @@ from app.core.migrations import ensure_database_ready, migration_status
 from app.core.settings import settings
 from app.db.database import SessionLocal, engine
 from app.db.schema_migration import run_startup_migrations
+from app.services.financial_configuration_service import financial_configuration_status
 from app.services.operations_outbox_service import operations_outbox_status
 import app.models  # noqa: F401
 
@@ -89,10 +90,12 @@ def _healthz_details_payload():
     db_ok = False
     migration = None
     outbox = None
+    financial_configuration = None
     try:
         with SessionLocal() as db:
             db.execute(text('SELECT 1'))
             outbox = operations_outbox_status(db)
+            financial_configuration = financial_configuration_status(db)
         db_ok = True
         migration = migration_status(engine)
     except Exception:
@@ -112,6 +115,7 @@ def _healthz_details_payload():
             'ok': scanner_ok,
         },
         'operations_outbox': outbox,
+        'financial_configuration': financial_configuration,
     }
 
 
