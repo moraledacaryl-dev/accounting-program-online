@@ -153,10 +153,13 @@ def centavos(value: object | None) -> Decimal:
 def _coerce_registered_money_column(column: Column, table) -> None:
     if (table.name, column.name) not in MONEY_COLUMNS:
         return
-    if isinstance(column.type, Numeric):
-        return
+    # SQLAlchemy Float subclasses Numeric, so test Float first; otherwise a
+    # binary-float money declaration would be mistaken for an already-exact type.
     if isinstance(column.type, Float):
         column.type = Numeric(MONEY_PRECISION, MONEY_SCALE, asdecimal=True)
+        return
+    if isinstance(column.type, Numeric):
+        return
 
 
 # Register before model modules attach their Column objects to tables. Every model
