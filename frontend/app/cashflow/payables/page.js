@@ -4,6 +4,7 @@ import { useEffect, useRef, useState } from 'react';
 import InputActionModal from '../../../components/InputActionModal';
 import PayablesTable from '../../../components/cashflow/PayablesTable';
 import SettlementModal from '../../../components/cashflow/SettlementModal';
+import SupplierCreditsPanel from '../../../components/cashflow/SupplierCreditsPanel';
 import {
   createPayable,
   fetchFinancialAccounts,
@@ -14,6 +15,7 @@ import {
   updatePayable,
   writeOffPayable,
 } from '../../../lib/cashflowApi';
+import { fetchSupplierCredits } from '../../../lib/supplierCreditApi';
 import { shouldPreventEnterSubmit } from '../../../lib/formBehavior';
 import { useCurrentUser } from '../../../lib/useCurrentUser';
 import { todayISO } from '../shared';
@@ -39,6 +41,7 @@ export default function PayablesPage() {
   const savingRef = useRef(false);
   const [accounts, setAccounts] = useState([]);
   const [rows, setRows] = useState([]);
+  const [credits, setCredits] = useState([]);
   const [form, setForm] = useState({ ...EMPTY_FORM });
   const [paymentTarget, setPaymentTarget] = useState(null);
   const [reverseTarget, setReverseTarget] = useState(null);
@@ -48,12 +51,14 @@ export default function PayablesPage() {
   const [notice, setNotice] = useState('');
 
   async function load() {
-    const [accountRows, payableRows] = await Promise.all([
+    const [accountRows, payableRows, creditRows] = await Promise.all([
       fetchFinancialAccounts({ only_active: true }),
       fetchPayables({ limit: 400 }),
+      fetchSupplierCredits({ limit: 400 }),
     ]);
     setAccounts(Array.isArray(accountRows) ? accountRows : []);
     setRows(Array.isArray(payableRows) ? payableRows : []);
+    setCredits(Array.isArray(creditRows) ? creditRows : []);
   }
 
   useEffect(() => {
@@ -195,11 +200,9 @@ export default function PayablesPage() {
 
   return (
     <div className="stack">
-
-
       <section className="section">
         <div className="row wrap" style={{ justifyContent: 'space-between' }}><h1>Bills to Pay</h1>{can('cashflow.money_out') && <button disabled={showForm} onClick={() => { setEditingId(null); setForm({ ...EMPTY_FORM, bill_date: todayISO() }); setShowForm(true); }}>Add Bill</button>}</div>
-        <p className="muted">Track supplier bills and pay them directly from cash, bank, or e-wallet accounts.</p>
+        <p className="muted">Track supplier bills, apply purchase-return credits, and pay remaining balances from cash, bank, or e-wallet accounts.</p>
         {editingId ? <p className="small muted">Editing bill #{editingId}</p> : null}
         {!!notice && <p role="status" className="success-text">{notice}</p>}
         {!!error && <p role="alert" className="error-text">{error}</p>}
@@ -235,7 +238,7 @@ export default function PayablesPage() {
               </select>
             </label>
           </div>
-          {!editingId ? <p className="small muted">New bills start unpaid. Use Pay after saving to record money leaving a financial account.</p> : null}
+          {!editingId ? <p className="small muted">New bills start unpaid. Supplier credits reduce the bill without cash movement; Pay records actual money leaving an account.</p> : null}
           <label>Notes<textarea value={form.notes} onChange={(e) => setForm((f) => ({ ...f, notes: e.target.value }))} /></label>
           <div className="row wrap">
             <button type="submit" disabled={saving}>{saving ? 'Saving…' : editingId ? 'Update Bill' : 'Save Bill'}</button>
@@ -256,6 +259,16 @@ export default function PayablesPage() {
           </div>
         </form>
       </section>}
+
+      <SupplierCreditsPanel
+        credits={credits}
+        payables={rows}
+        canApply={can('cashflow.money_out')}
+        onApplied={async () => {
+          setNotice('Supplier credit applied to bill. No cash movement was recorded.');
+          await load();
+        }}
+      />
 
       <section className="section">
         <h2>Open Bills to Pay</h2>
