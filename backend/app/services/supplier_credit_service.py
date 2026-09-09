@@ -5,7 +5,7 @@ from sqlalchemy.orm import Session
 from app.core.business_clock import business_today
 from app.models.entities import Payable
 from app.models.payable_adjustments import SupplierCredit, SupplierCreditApplication
-from app.schemas.cashflow import SupplierCreditApplyPayload
+from app.schemas.supplier_credits import SupplierCreditApplyPayload
 from app.services.audit_service import record_audit
 from app.services.bir_service import ensure_date_unlocked
 from app.services.cashflow_service import _serialize_payable, _update_payable_balance
