@@ -3,6 +3,7 @@ from __future__ import annotations
 from sqlalchemy.orm import Session
 
 from app.models.entities import Payable, Receivable
+from app.models.payable_adjustments import PayableAdjustment, SupplierCreditApplication
 
 
 TOLERANCE = 0.0001
@@ -66,8 +67,28 @@ def ensure_payable_edit_preserves_settlement(db: Session, payable_id: int, paylo
     if requested_gross + TOLERANCE < stored_paid:
         raise ValueError('gross_amount cannot be less than actual amount_paid.')
 
+    gross_changed = abs(requested_gross - _as_float(row.gross_amount)) > TOLERANCE
+    if gross_changed:
+        has_return_adjustment = (
+            db.query(PayableAdjustment.id)
+            .filter(PayableAdjustment.payable_id == row.id)
+            .first()
+            is not None
+        )
+        has_supplier_credit = (
+            db.query(SupplierCreditApplication.id)
+            .filter(SupplierCreditApplication.payable_id == row.id)
+            .first()
+            is not None
+        )
+        if has_return_adjustment or has_supplier_credit:
+            raise ValueError(
+                'gross_amount is adjustment-derived and cannot be edited directly after '
+                'a purchase return or supplier credit has been applied.'
+            )
+
     status = (row.status or '').strip().lower()
     if status == 'written_off':
         raise ValueError('Reopen the payable before editing a written-off payable.')
-    if status == 'settled' and abs(requested_gross - _as_float(row.gross_amount)) > TOLERANCE:
+    if status == 'settled' and gross_changed:
         raise ValueError('Reopen the payable before changing the gross amount of a settled payable.')
