@@ -1,0 +1,40 @@
+name: Pass78 Lock Refresh
+
+on:
+  push:
+    branches:
+      - pass-78-staff-meal-inventory-accounting
+
+permissions:
+  contents: write
+
+jobs:
+  refresh-lock:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Check out branch
+        run: |
+          set -euo pipefail
+          git init .
+          git remote add origin "https://x-access-token:${GITHUB_TOKEN}@github.com/${GITHUB_REPOSITORY}.git"
+          git fetch --no-tags --depth=1 origin pass-78-staff-meal-inventory-accounting
+          git checkout -B pass-78-staff-meal-inventory-accounting FETCH_HEAD
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+      - name: Refresh audited lockfile
+        working-directory: frontend
+        run: |
+          npm install --package-lock-only --ignore-scripts
+          npm audit --omit=dev
+      - name: Commit lockfile
+        run: |
+          set -euo pipefail
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add frontend/package-lock.json
+          if git diff --cached --quiet; then
+            echo "Lockfile already current"
+            exit 0
+          fi
+          git commit -m "Refresh Accounting frontend dependency lockfile"
+          git push origin HEAD:pass-78-staff-meal-inventory-accounting
