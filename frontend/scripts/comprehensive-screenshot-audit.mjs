@@ -42,7 +42,7 @@ function discoverRoutes() {
 }
 
 async function login(api, username, password) {
-  const response = await api.post(`${BASE_URL}/api/auth/login`, { form: { username, password } });
+  const response = await api.post(`${BASE_URL}/api/auth/login`, { data: { username, password } });
   if (!response.ok()) throw new Error(`Login failed for ${username}: HTTP ${response.status()}`);
   return api.storageState();
 }
