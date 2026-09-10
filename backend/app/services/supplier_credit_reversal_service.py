@@ -13,22 +13,19 @@ from app.models.payable_adjustments import (
 from app.schemas.supplier_credits import SupplierCreditReversePayload
 from app.services.audit_service import record_audit
 from app.services.bir_service import ensure_date_unlocked
-from app.services.cashflow_service import _serialize_payable, _update_payable_balance
+from app.services.cashflow_service import _serialize_payable
+from app.services.exact_money_service import (
+    MONEY_TOLERANCE,
+    ZERO,
+    normalize_money,
+    serialize_money,
+    update_payable_balance_exact,
+)
 from app.services.supplier_credit_service import list_supplier_credits
-
-
-TOLERANCE = 0.0001
 
 
 class SupplierCreditReversalIdempotencyConflict(ValueError):
     pass
-
-
-def _money(value) -> float:
-    try:
-        return round(float(value or 0), 4)
-    except (TypeError, ValueError):
-        return 0.0
 
 
 def _normalize_key(value: str | None) -> str:
@@ -49,7 +46,7 @@ def _serialize_reversal(row: SupplierCreditApplicationReversal) -> dict:
         'id': row.id,
         'application_id': row.application_id,
         'reversal_date': row.reversal_date,
-        'amount': _money(row.amount),
+        'amount': serialize_money(row.amount),
         'idempotency_key': row.idempotency_key,
         'reason': row.reason,
         'reversed_by': row.reversed_by,
@@ -126,8 +123,8 @@ def _replay_result(
         'supplier_credit_id': credit.id,
         'supplier_credit': {
             'id': credit.id,
-            'applied_amount': _money(credit.applied_amount),
-            'balance_available': _money(credit.balance_available),
+            'applied_amount': serialize_money(credit.applied_amount),
+            'balance_available': serialize_money(credit.balance_available),
             'status': credit.status,
         },
         'payable': _serialize_payable(payable),
@@ -209,10 +206,10 @@ def reverse_supplier_credit_application(
     if not credit or not payable:
         raise ValueError('Supplier credit application references missing financial records.')
 
-    amount = _money(application.amount)
-    if amount <= TOLERANCE:
+    amount = normalize_money(application.amount)
+    if amount <= MONEY_TOLERANCE:
         raise ValueError('Supplier credit application has no reversible amount.')
-    if _money(credit.applied_amount) + TOLERANCE < amount:
+    if normalize_money(credit.applied_amount) + MONEY_TOLERANCE < amount:
         raise ValueError('Supplier credit applied balance is inconsistent with this application.')
 
     ensure_date_unlocked(
@@ -223,14 +220,14 @@ def reverse_supplier_credit_application(
     )
 
     before_credit = {
-        'applied_amount': _money(credit.applied_amount),
-        'balance_available': _money(credit.balance_available),
+        'applied_amount': normalize_money(credit.applied_amount),
+        'balance_available': normalize_money(credit.balance_available),
         'status': credit.status,
     }
     before_payable = {
-        'gross_amount': _money(payable.gross_amount),
-        'amount_paid': _money(payable.amount_paid),
-        'balance_due': _money(payable.balance_due),
+        'gross_amount': normalize_money(payable.gross_amount),
+        'amount_paid': normalize_money(payable.amount_paid),
+        'balance_due': normalize_money(payable.balance_due),
         'status': payable.status,
     }
 
@@ -270,20 +267,20 @@ def reverse_supplier_credit_application(
             'Idempotency-Key was already used with a different supplier-credit reversal.'
         )
 
-    credit.applied_amount = _money(max(0.0, _money(credit.applied_amount) - amount))
-    credit.balance_available = _money(
-        min(_money(credit.amount), _money(credit.balance_available) + amount)
+    credit.applied_amount = normalize_money(max(ZERO, normalize_money(credit.applied_amount) - amount))
+    credit.balance_available = normalize_money(
+        min(normalize_money(credit.amount), normalize_money(credit.balance_available) + amount)
     )
-    if credit.applied_amount <= TOLERANCE:
-        credit.applied_amount = 0.0
+    if credit.applied_amount <= MONEY_TOLERANCE:
+        credit.applied_amount = ZERO
         credit.status = 'open'
     else:
         credit.status = 'partially_applied'
     db.add(credit)
 
-    payable.gross_amount = _money(_money(payable.gross_amount) + amount)
+    payable.gross_amount = normalize_money(normalize_money(payable.gross_amount) + amount)
     db.add(payable)
-    _update_payable_balance(db, payable.id)
+    update_payable_balance_exact(db, payable.id)
     db.flush()
 
     record_audit(
@@ -315,8 +312,8 @@ def reverse_supplier_credit_application(
         user=user,
         before=before_credit,
         after={
-            'applied_amount': _money(credit.applied_amount),
-            'balance_available': _money(credit.balance_available),
+            'applied_amount': normalize_money(credit.applied_amount),
+            'balance_available': normalize_money(credit.balance_available),
             'status': credit.status,
         },
         source_app='accounting',
@@ -330,9 +327,9 @@ def reverse_supplier_credit_application(
         user=user,
         before=before_payable,
         after={
-            'gross_amount': _money(payable.gross_amount),
-            'amount_paid': _money(payable.amount_paid),
-            'balance_due': _money(payable.balance_due),
+            'gross_amount': normalize_money(payable.gross_amount),
+            'amount_paid': normalize_money(payable.amount_paid),
+            'balance_due': normalize_money(payable.balance_due),
             'status': payable.status,
         },
         source_app='accounting',
@@ -345,8 +342,8 @@ def reverse_supplier_credit_application(
         'supplier_credit_id': credit.id,
         'supplier_credit': {
             'id': credit.id,
-            'applied_amount': _money(credit.applied_amount),
-            'balance_available': _money(credit.balance_available),
+            'applied_amount': serialize_money(credit.applied_amount),
+            'balance_available': serialize_money(credit.balance_available),
             'status': credit.status,
         },
         'payable': _serialize_payable(payable),
