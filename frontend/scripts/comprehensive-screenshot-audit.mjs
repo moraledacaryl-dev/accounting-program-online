@@ -16,7 +16,6 @@ const DYNAMIC_ROUTE_EXPANSIONS = {
   '/workspace/[module]': ['rooms', 'events', 'restaurant', 'breakfast', 'cafe', 'bar', 'inventory', 'payroll', 'finance', 'settings'].map(module => `/workspace/${module}`),
 };
 
-// Safe, non-mutating local UI states that are not represented by distinct URLs.
 const LOCAL_VIEW_STATES = {
   '/reports': { group: 'Report views', labels: ['Overview', 'Financial Statements', 'Rooms, F&B & Inventory', 'AR, AP & Settlements', 'Payroll & BIR'] },
   '/bir': { group: 'Tax and period close views', labels: ['Review', 'Missing Documents', 'Candidate Records', 'Tax Books', 'Period Locks'] },
@@ -120,7 +119,8 @@ if (!ownerEntry) throw new Error('AUDIT_USERS_JSON must include owner or admin s
 const bootstrapApi = await request.newContext({ baseURL: BASE_URL });
 const ownerState = await login(bootstrapApi, ownerEntry.username, ownerEntry.password); await bootstrapApi.dispose();
 const activeRoles = await discoverRoleMatrix(ownerState);
-const allRoleNames = [...new Set(activeRoles.map(r => r.slug || r.key || r.name).filter(Boolean))];
+if (!activeRoles.every(role => role && typeof role.code === 'string' && role.code.trim())) throw new Error('Active role API returned a role without a canonical code.');
+const allRoleNames = [...new Set(activeRoles.map(role => role.code.trim()))];
 const serviceRoles = allRoleNames.filter(SERVICE_ROLE);
 const roleNames = allRoleNames.filter(role => !SERVICE_ROLE(role));
 const missing = roleNames.filter(role => !USERS[role]);
