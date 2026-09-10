@@ -10,11 +10,11 @@ on:
 
 permissions:
   contents: read
+  actions: read
 
 jobs:
-  deploy:
+  certify-release:
     runs-on: ubuntu-latest
-
     steps:
       - name: Validate release SHA input
         shell: bash
@@ -24,6 +24,55 @@ jobs:
           set -euo pipefail
           [[ "$RELEASE_SHA" =~ ^[0-9a-f]{40}$ ]]
 
+      - name: Require successful CI for exact release SHA
+        shell: bash
+        env:
+          GH_TOKEN: ${{ github.token }}
+          GH_REPO: ${{ github.repository }}
+          RELEASE_SHA: ${{ inputs.release_sha }}
+        run: |
+          set -euo pipefail
+
+          commit_sha="$(gh api "repos/$GH_REPO/commits/$RELEASE_SHA" --jq '.sha')"
+          [[ "$commit_sha" == "$RELEASE_SHA" ]]
+
+          main_sha="$(gh api "repos/$GH_REPO/commits/main" --jq '.sha')"
+          comparison="$(gh api "repos/$GH_REPO/compare/$RELEASE_SHA...$main_sha" --jq '.status')"
+          case "$comparison" in
+            identical|ahead) ;;
+            *)
+              echo "Release SHA is not on main: compare status=$comparison" >&2
+              exit 1
+              ;;
+          esac
+
+          mapfile -t matching_runs < <(
+            gh api --paginate "repos/$GH_REPO/actions/workflows/ci.yml/runs?head_sha=$RELEASE_SHA&event=push&per_page=100" \
+              --jq '.workflow_runs[] | [.id, .status, (.conclusion // "")] | @tsv'
+          )
+
+          if (( ${#matching_runs[@]} == 0 )); then
+            echo "No push-triggered CI run exists for exact release SHA $RELEASE_SHA" >&2
+            exit 1
+          fi
+
+          for row in "${matching_runs[@]}"; do
+            IFS=$'\t' read -r run_id status conclusion <<< "$row"
+            if [[ "$status" == "completed" && "$conclusion" == "success" ]]; then
+              echo "Certified exact release SHA $RELEASE_SHA by successful CI run $run_id"
+              exit 0
+            fi
+          done
+
+          echo "Exact release SHA $RELEASE_SHA has no completed successful push-triggered CI run" >&2
+          printf '%s\n' "${matching_runs[@]}" >&2
+          exit 1
+
+  deploy:
+    needs: certify-release
+    runs-on: ubuntu-latest
+
+    steps:
       - name: Prepare and activate exact release on server
         # v1.0.3 pinned to an immutable upstream commit for supply-chain integrity.
         uses: appleboy/ssh-action@029f5b4aeeeb58fdfe1410a5d17f967dacf36262
