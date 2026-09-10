@@ -116,6 +116,7 @@ ROLE_PERMISSION_PRESETS = {
     },
     'restaurant_admin': {
         'dashboard.view', 'restaurant.view', 'menu.view', 'menu.manage', 'recipes.manage',
+        'bookings.view',
         'staff_meals.view', 'staff_meals.manage',
         'inventory.view', 'inventory.manage', 'stock_movements.create',
         'cashflow.view', 'cashflow.money_in',
