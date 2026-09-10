@@ -21,7 +21,7 @@ from urllib.error import HTTPError, URLError
 from urllib.parse import urlsplit
 from urllib.request import HTTPRedirectHandler, Request, build_opener
 
-DEFAULT_BASE_URL = "https://hiddenoasis.app"
+DEFAULT_BASE_URL = "https://accounting.hiddenoasis.app"
 DEFAULT_REPO = "moraledacaryl-dev/accounting-program-online"
 SECRET_NAME = "ACCOUNTING_SCREENSHOT_AUDIT_USERS_JSON"
 SERVICE_ROLE_RE = re.compile(r"(?:^|_)(?:integration|service)(?:_|$)")
