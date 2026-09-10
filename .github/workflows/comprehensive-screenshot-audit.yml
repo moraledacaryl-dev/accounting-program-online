@@ -96,6 +96,7 @@ jobs:
         run: |
           python3 - <<'PY'
           import json
+          from collections import Counter
           from pathlib import Path
           root = Path('audit-artifacts/screenshots')
           manifest = root / 'manifest.json'
@@ -103,7 +104,10 @@ jobs:
           summary = ['# Hidden Oasis Accounting Screenshot Audit', '']
           if manifest.exists():
               data = json.loads(manifest.read_text())
-              failures = [x for x in data['captures'] if x['status'] != 'ok']
+              captures = data['captures']
+              statuses = Counter(x['status'] for x in captures)
+              incomplete = [x for x in captures if x['status'] in {'capture-error', 'state-capture-error', 'incomplete-loading'} or x['status'].startswith('http-')]
+              redirects = [x for x in captures if x['status'] == 'redirected']
               summary += [
                   f"- Human roles: {len(data['roles'])}",
                   f"- Service roles inventoried: {len(data.get('serviceRoles', []))}",
@@ -111,7 +115,10 @@ jobs:
                   f"- Environment states: {', '.join(data['states'])}",
                   f"- Base screenshots: {data['expectedBaseScreenshots']}",
                   f"- Capture records including local UI substates: {data['actualCaptureRecords']}",
-                  f"- Non-OK captures: {len(failures)}",
+                  f"- Settled OK captures: {statuses.get('ok', 0)}",
+                  f"- Redirected captures (classified separately): {len(redirects)}",
+                  f"- Incomplete/error captures: {len(incomplete)}",
+                  f"- Capture status breakdown: {json.dumps(dict(sorted(statuses.items())), sort_keys=True)}",
               ]
           if endpoints.exists():
               data = json.loads(endpoints.read_text())
