@@ -12,12 +12,16 @@ from app.models.mutation_idempotency import MutationIdempotency
 from app.schemas.cashflow import PayableCreate, PayablePayPayload
 from app.services.bir_service import ensure_date_unlocked
 from app.services.cashflow_service import (
-    _apply_money_effect,
-    _as_float,
     _create_linked_record,
     _serialize_money_transaction,
     _serialize_payable,
-    _update_payable_balance,
+)
+from app.services.exact_money_service import (
+    MONEY_TOLERANCE,
+    ZERO,
+    apply_payable_payment_effect_exact,
+    normalize_money,
+    update_payable_balance_exact,
 )
 
 
@@ -84,9 +88,6 @@ def _reserve(
         db.flush()
         return row, False
     except IntegrityError:
-        # A concurrent request may have won the unique-key race. No business
-        # mutation has occurred yet, so rolling back here cannot discard money
-        # or liability state from this request.
         db.rollback()
         existing = (
             db.query(MutationIdempotency)
@@ -131,11 +132,11 @@ def create_payable_idempotent(
             )
         return _serialize_payable(existing), True
 
-    gross_amount = _as_float(payload.gross_amount)
-    amount_paid = max(_as_float(payload.amount_paid), 0)
-    if gross_amount <= 0:
+    gross_amount = normalize_money(payload.gross_amount)
+    amount_paid = max(normalize_money(payload.amount_paid), ZERO)
+    if gross_amount <= ZERO:
         raise ValueError('gross_amount must be greater than zero.')
-    if amount_paid > gross_amount:
+    if amount_paid - gross_amount > MONEY_TOLERANCE:
         raise ValueError('amount_paid cannot exceed gross_amount.')
 
     bill_date = _business_date(payload.bill_date)
@@ -156,7 +157,7 @@ def create_payable_idempotent(
     )
     db.add(row)
     db.flush()
-    _update_payable_balance(db, row.id)
+    update_payable_balance_exact(db, row.id)
     db.flush()
 
     reservation.resource_type = 'payable'
@@ -206,13 +207,14 @@ def pay_payable_idempotent(
             'transaction': _serialize_money_transaction(tx),
         }, True
 
-    if float(payable.balance_due or 0) <= 0:
+    balance_due = normalize_money(payable.balance_due)
+    if balance_due <= MONEY_TOLERANCE:
         raise ValueError('Payable is already settled.')
 
-    amount = _as_float(payload.amount)
-    if amount <= 0:
+    amount = normalize_money(payload.amount)
+    if amount <= ZERO:
         raise ValueError('Payment amount must be greater than zero.')
-    if amount > float(payable.balance_due or 0):
+    if amount - balance_due > MONEY_TOLERANCE:
         raise ValueError('Payment amount cannot exceed payable balance.')
 
     account = db.get(FinancialAccount, int(payload.financial_account_id))
@@ -257,7 +259,13 @@ def pay_payable_idempotent(
     )
     db.add(tx)
     db.flush()
-    _apply_money_effect(db, tx, allow_overdraw=False)
+    apply_payable_payment_effect_exact(
+        db,
+        payable_id=payable.id,
+        financial_account_id=account.id,
+        amount=amount,
+        allow_overdraw=False,
+    )
 
     if bool(payload.auto_post_accounting):
         _, journal_id = _create_linked_record(
