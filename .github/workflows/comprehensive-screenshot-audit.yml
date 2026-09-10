@@ -9,7 +9,7 @@ on:
         default: https://hiddenoasis.app
         type: string
       states:
-        description: Comma-separated visual states (live,api-error)
+        description: Comma-separated environment states (live,api-error)
         required: true
         default: live,api-error
         type: string
@@ -20,7 +20,7 @@ permissions:
 jobs:
   screenshot-audit:
     runs-on: ubuntu-latest
-    timeout-minutes: 120
+    timeout-minutes: 240
     env:
       AUDIT_BASE_URL: ${{ inputs.base_url }}
       AUDIT_STATES: ${{ inputs.states }}
@@ -86,7 +86,7 @@ jobs:
           sudo rm -f /var/lib/apt/lists/dl.google.com_linux_chrome-stable_deb_*
           npx playwright install --with-deps chromium
 
-      - name: Capture every active human role, page, viewport, and requested state
+      - name: Capture every active human role, page, viewport, environment state, and local view state
         working-directory: frontend
         run: node scripts/comprehensive-screenshot-audit.mjs
 
@@ -103,12 +103,19 @@ jobs:
           summary = ['# Hidden Oasis Accounting Screenshot Audit', '']
           if manifest.exists():
               data = json.loads(manifest.read_text())
-              summary += [f"- Human roles: {len(data['roles'])}", f"- Service roles: {len(data.get('serviceRoles', []))}", f"- UI routes: {len(data['routes'])}", f"- States: {', '.join(data['states'])}", f"- Expected screenshots: {data['expectedScreenshots']}"]
               failures = [x for x in data['captures'] if x['status'] != 'ok']
-              summary += [f"- Non-OK captures: {len(failures)}"]
+              summary += [
+                  f"- Human roles: {len(data['roles'])}",
+                  f"- Service roles inventoried: {len(data.get('serviceRoles', []))}",
+                  f"- UI routes: {len(data['routes'])}",
+                  f"- Environment states: {', '.join(data['states'])}",
+                  f"- Base screenshots: {data['expectedBaseScreenshots']}",
+                  f"- Capture records including local UI substates: {data['actualCaptureRecords']}",
+                  f"- Non-OK captures: {len(failures)}",
+              ]
           if endpoints.exists():
               data = json.loads(endpoints.read_text())
-              summary += [f"- API endpoints inventoried: {data['count']}"]
+              summary += [f"- API endpoints inventoried: {data['count']}", f"- API methods: {json.dumps(data.get('methods', {}), sort_keys=True)}"]
           (root / 'SUMMARY.md').write_text('\n'.join(summary) + '\n')
           print('\n'.join(summary))
           PY
