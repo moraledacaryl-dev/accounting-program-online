@@ -10,6 +10,7 @@ import {
   fetchRoomFolios,
   updateRoomFolioStatus,
 } from '../../lib/api';
+import { useCurrentUser } from '../../lib/useCurrentUser';
 
 const STATUS_ALL = '__all__';
 
@@ -26,6 +27,10 @@ function php(value) {
 
 export default function RoomFoliosPage() {
   const searchParams = useSearchParams();
+  const { can, loaded } = useCurrentUser();
+  const canManageFolios = can('folios.manage');
+  const canViewBookings = can('bookings.view');
+  const canViewGuests = can('guests.view');
   const [rows, setRows] = useState([]);
   const [bookings, setBookings] = useState([]);
   const [guests, setGuests] = useState([]);
@@ -37,23 +42,23 @@ export default function RoomFoliosPage() {
   const [notice, setNotice] = useState('');
 
   async function load() {
-    const [folioData, bookingData, guestData] = await Promise.all([
-      fetchRoomFolios({
-        status: statusFilter !== STATUS_ALL ? statusFilter : undefined,
-        booking_id: bookingFilter ? Number(bookingFilter) : undefined,
-        guest_id: guestFilter ? Number(guestFilter) : undefined,
-      }),
-      fetchBookings(),
-      fetchGuests({ active_only: true, limit: 500 }),
-    ]);
+    const folioPromise = fetchRoomFolios({
+      status: statusFilter !== STATUS_ALL ? statusFilter : undefined,
+      booking_id: bookingFilter ? Number(bookingFilter) : undefined,
+      guest_id: guestFilter ? Number(guestFilter) : undefined,
+    });
+    const bookingPromise = canManageFolios && canViewBookings ? fetchBookings() : Promise.resolve([]);
+    const guestPromise = canManageFolios && canViewGuests ? fetchGuests({ active_only: true, limit: 500 }) : Promise.resolve([]);
+    const [folioData, bookingData, guestData] = await Promise.all([folioPromise, bookingPromise, guestPromise]);
     setRows(Array.isArray(folioData) ? folioData : []);
     setBookings(Array.isArray(bookingData) ? bookingData : []);
     setGuests(Array.isArray(guestData) ? guestData : []);
   }
 
   useEffect(() => {
+    if (!loaded) return;
     load().catch((e) => setError(e.message || 'Failed to load folios.'));
-  }, [statusFilter, bookingFilter, guestFilter]);
+  }, [loaded, statusFilter, bookingFilter, guestFilter, canManageFolios, canViewBookings, canViewGuests]);
 
   useEffect(() => {
     const nextBookingId = searchParams.get('booking_id') || '';
@@ -70,6 +75,7 @@ export default function RoomFoliosPage() {
 
   async function submit(e) {
     e.preventDefault();
+    if (!canManageFolios) return;
     setError('');
     setNotice('');
     try {
@@ -93,6 +99,7 @@ export default function RoomFoliosPage() {
   }
 
   async function setStatus(row, status) {
+    if (!canManageFolios) return;
     setError('');
     try {
       await updateRoomFolioStatus(row.id, {
@@ -125,24 +132,28 @@ export default function RoomFoliosPage() {
                 <option value="cancelled">cancelled</option>
               </select>
             </label>
-            <label style={{ minWidth: 180 }}>
-              Booking
-              <select value={bookingFilter} onChange={(e) => setBookingFilter(e.target.value)}>
-                <option value="">All</option>
-                {bookings.map((row) => (
-                  <option key={row.id} value={row.id}>BOOK-{row.id} · {row.guest_name}</option>
-                ))}
-              </select>
-            </label>
-            <label style={{ minWidth: 180 }}>
-              Guest
-              <select value={guestFilter} onChange={(e) => setGuestFilter(e.target.value)}>
-                <option value="">All</option>
-                {guests.map((row) => (
-                  <option key={row.id} value={row.id}>{row.full_name}</option>
-                ))}
-              </select>
-            </label>
+            {canManageFolios && canViewBookings && (
+              <label style={{ minWidth: 180 }}>
+                Booking
+                <select value={bookingFilter} onChange={(e) => setBookingFilter(e.target.value)}>
+                  <option value="">All</option>
+                  {bookings.map((row) => (
+                    <option key={row.id} value={row.id}>BOOK-{row.id} · {row.guest_name}</option>
+                  ))}
+                </select>
+              </label>
+            )}
+            {canManageFolios && canViewGuests && (
+              <label style={{ minWidth: 180 }}>
+                Guest
+                <select value={guestFilter} onChange={(e) => setGuestFilter(e.target.value)}>
+                  <option value="">All</option>
+                  {guests.map((row) => (
+                    <option key={row.id} value={row.id}>{row.full_name}</option>
+                  ))}
+                </select>
+              </label>
+            )}
           </div>
         </div>
         {!!notice && <p className="success-text">{notice}</p>}
@@ -150,43 +161,50 @@ export default function RoomFoliosPage() {
       </section>
 
       <div className="grid">
-        <section className="section">
-          <h2>Create Folio</h2>
-          <form onSubmit={submit} className="stack">
-            <div className="form-grid">
-              <label>Booking
-                <select value={form.booking_id} onChange={(e) => {
-                  const nextBookingId = e.target.value;
-                  const booking = bookingById.get(Number(nextBookingId));
-                  setForm((f) => ({
-                    ...f,
-                    booking_id: nextBookingId,
-                    guest_id: booking?.guest_id ? String(booking.guest_id) : f.guest_id,
-                  }));
-                }}>
-                  <option value="">Select booking</option>
-                  {bookings.map((row) => (
-                    <option key={row.id} value={row.id}>BOOK-{row.id} · {row.guest_name} · {row.room_name || row.room_display_name || '-'}</option>
-                  ))}
-                </select>
-              </label>
-              <label>Guest (override)
-                <select value={form.guest_id} onChange={(e) => setForm((f) => ({ ...f, guest_id: e.target.value }))}>
-                  <option value="">Use booking guest</option>
-                  {guests.map((row) => (
-                    <option key={row.id} value={row.id}>{row.full_name}</option>
-                  ))}
-                </select>
-              </label>
-              <label>Folio No (optional)<input value={form.folio_no} onChange={(e) => setForm((f) => ({ ...f, folio_no: e.target.value }))} /></label>
-            </div>
-            <label>Notes<textarea value={form.notes} onChange={(e) => setForm((f) => ({ ...f, notes: e.target.value }))} /></label>
-            <div className="row wrap">
-              <button type="submit">Create Folio</button>
-              <button type="button" className="secondary" onClick={() => setForm({ ...EMPTY_FORM })}>Clear</button>
-            </div>
-          </form>
-        </section>
+        {canManageFolios ? (
+          <section className="section">
+            <h2>Create Folio</h2>
+            <form onSubmit={submit} className="stack">
+              <div className="form-grid">
+                <label>Booking
+                  <select value={form.booking_id} onChange={(e) => {
+                    const nextBookingId = e.target.value;
+                    const booking = bookingById.get(Number(nextBookingId));
+                    setForm((f) => ({
+                      ...f,
+                      booking_id: nextBookingId,
+                      guest_id: booking?.guest_id ? String(booking.guest_id) : f.guest_id,
+                    }));
+                  }}>
+                    <option value="">Select booking</option>
+                    {bookings.map((row) => (
+                      <option key={row.id} value={row.id}>BOOK-{row.id} · {row.guest_name} · {row.room_name || row.room_display_name || '-'}</option>
+                    ))}
+                  </select>
+                </label>
+                <label>Guest (override)
+                  <select value={form.guest_id} onChange={(e) => setForm((f) => ({ ...f, guest_id: e.target.value }))}>
+                    <option value="">Use booking guest</option>
+                    {guests.map((row) => (
+                      <option key={row.id} value={row.id}>{row.full_name}</option>
+                    ))}
+                  </select>
+                </label>
+                <label>Folio No (optional)<input value={form.folio_no} onChange={(e) => setForm((f) => ({ ...f, folio_no: e.target.value }))} /></label>
+              </div>
+              <label>Notes<textarea value={form.notes} onChange={(e) => setForm((f) => ({ ...f, notes: e.target.value }))} /></label>
+              <div className="row wrap">
+                <button type="submit">Create Folio</button>
+                <button type="button" className="secondary" onClick={() => setForm({ ...EMPTY_FORM })}>Clear</button>
+              </div>
+            </form>
+          </section>
+        ) : (
+          <section className="section">
+            <h2>Read-only folio access</h2>
+            <p className="muted">You can review folio balances and history. Creating folios or changing folio status requires folio management permission.</p>
+          </section>
+        )}
 
         <section className="section">
           <h2>Balances Snapshot</h2>
@@ -204,33 +222,37 @@ export default function RoomFoliosPage() {
         </section>
       </div>
 
-        <section className="section">
-          <div className="row" style={{ justifyContent: 'space-between', alignItems: 'center' }}>
-            <h2>Folio / Invoice List</h2>
-            <p className="muted small">{rows.length} record(s) loaded.</p>
-          </div>
-          <table className="table">
-	          <thead><tr><th>Folio</th><th>Booking</th><th>Guest</th><th>Status</th><th>Charges</th><th>Deposits</th><th>Other Payments</th><th>Balance</th><th></th></tr></thead>
-	          <tbody>
-	            {rows.map((row) => (
-	              <tr key={row.id}>
-	                <td>{row.folio_no}</td>
-	                <td>{row.booking_ref || `BOOK-${row.booking_id}`}</td>
-	                <td>{row.guest_name || '-'}</td>
-	                <td>{row.status}</td>
-	                <td>{php(row.charges || 0)}</td>
-	                <td>{php(row.deposits || 0)}</td>
-	                <td>{php(Number(row.payments || 0) - Number(row.deposits || 0))}</td>
-	                <td>{php(row.balance || 0)}</td>
-	                <td className="row wrap">
+      <section className="section">
+        <div className="row" style={{ justifyContent: 'space-between', alignItems: 'center' }}>
+          <h2>Folio / Invoice List</h2>
+          <p className="muted small">{rows.length} record(s) loaded.</p>
+        </div>
+        <table className="table">
+          <thead><tr><th>Folio</th><th>Booking</th><th>Guest</th><th>Status</th><th>Charges</th><th>Deposits</th><th>Other Payments</th><th>Balance</th><th></th></tr></thead>
+          <tbody>
+            {rows.map((row) => (
+              <tr key={row.id}>
+                <td>{row.folio_no}</td>
+                <td>{row.booking_ref || `BOOK-${row.booking_id}`}</td>
+                <td>{row.guest_name || '-'}</td>
+                <td>{row.status}</td>
+                <td>{php(row.charges || 0)}</td>
+                <td>{php(row.deposits || 0)}</td>
+                <td>{php(Number(row.payments || 0) - Number(row.deposits || 0))}</td>
+                <td>{php(row.balance || 0)}</td>
+                <td className="row wrap">
                   <Link className="button-link secondary-link" href={`/room-folios/${row.id}`}>Open</Link>
-                  <button type="button" className="secondary" onClick={() => setStatus(row, 'reviewed')}>Review</button>
-                  <button type="button" className="secondary" onClick={() => setStatus(row, 'closed')}>Close</button>
-                  <button type="button" className="secondary" onClick={() => setStatus(row, 'open')}>Reopen</button>
+                  {canManageFolios && (
+                    <>
+                      <button type="button" className="secondary" onClick={() => setStatus(row, 'reviewed')}>Review</button>
+                      <button type="button" className="secondary" onClick={() => setStatus(row, 'closed')}>Close</button>
+                      <button type="button" className="secondary" onClick={() => setStatus(row, 'open')}>Reopen</button>
+                    </>
+                  )}
                 </td>
               </tr>
             ))}
-	            {!rows.length && <tr><td colSpan="9" className="muted">No folios found.</td></tr>}
+            {!rows.length && <tr><td colSpan="9" className="muted">No folios found.</td></tr>}
           </tbody>
         </table>
       </section>
