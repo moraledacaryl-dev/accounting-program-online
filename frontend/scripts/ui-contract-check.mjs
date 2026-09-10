@@ -45,6 +45,31 @@ if (!enhancer.includes('Ledger start date') || !enhancer.includes('Ledger status
   failures.push('Cash & Treasury filter accessibility labels are missing');
 }
 
+const approvals = fs.readFileSync(path.join(root, 'app/approvals/page.js'), 'utf8');
+if (!approvals.includes('readableRecordModules') || !approvals.includes('visibleTabs')) {
+  failures.push('Approvals must scope queues to effective read permissions');
+}
+if (!approvals.includes("can('payroll_periods.view') ? fetchPayrollPeriods") || !approvals.includes("can('journals.view') ? fetchJournalEntries")) {
+  failures.push('Approvals must not fetch hidden payroll or journal queues');
+}
+if (!approvals.includes('canApproveRecord') || !approvals.includes('RECORD_WRITE_REQUIREMENTS')) {
+  failures.push('Record approval actions must respect module write authority');
+}
+if (!approvals.includes('canActOnMoneyRow') || !approvals.includes("row.direction === 'in'")) {
+  failures.push('Cashflow approval actions must remain direction-scoped');
+}
+
+const roomFolios = fs.readFileSync(path.join(root, 'app/room-folios/page.js'), 'utf8');
+if (!roomFolios.includes("canManageFolios = can('folios.manage')")) {
+  failures.push('Room Folios must distinguish read-only and manage access');
+}
+if (!roomFolios.includes('canManageFolios && canViewBookings ? fetchBookings()') || !roomFolios.includes('canManageFolios && canViewGuests ? fetchGuests')) {
+  failures.push('Room Folios must not fetch booking/guest dependencies for read-only folio users');
+}
+if (!roomFolios.includes('Read-only folio access')) {
+  failures.push('Room Folios must render an explicit read-only state');
+}
+
 const visualClosure = fs.readFileSync(path.join(root, 'app/visual-closure.css'), 'utf8');
 const layout = fs.readFileSync(path.join(root, 'app/layout.js'), 'utf8');
 const visualClosureImport = "import './visual-closure.css';";
