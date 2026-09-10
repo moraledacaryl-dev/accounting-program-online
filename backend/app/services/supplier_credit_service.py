@@ -1,5 +1,7 @@
 from __future__ import annotations
 
+from decimal import Decimal
+
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session
 
@@ -9,21 +11,18 @@ from app.models.payable_adjustments import SupplierCredit, SupplierCreditApplica
 from app.schemas.supplier_credits import SupplierCreditApplyPayload
 from app.services.audit_service import record_audit
 from app.services.bir_service import ensure_date_unlocked
-from app.services.cashflow_service import _serialize_payable, _update_payable_balance
-
-
-TOLERANCE = 0.0001
+from app.services.cashflow_service import _serialize_payable
+from app.services.exact_money_service import (
+    MONEY_TOLERANCE,
+    ZERO,
+    normalize_money,
+    serialize_money,
+    update_payable_balance_exact,
+)
 
 
 class SupplierCreditIdempotencyConflict(ValueError):
     pass
-
-
-def _money(value) -> float:
-    try:
-        return round(float(value or 0), 4)
-    except (TypeError, ValueError):
-        return 0.0
 
 
 def _normalize_name(value: str | None) -> str:
@@ -49,7 +48,7 @@ def _serialize_application(row: SupplierCreditApplication) -> dict:
         'supplier_credit_id': row.supplier_credit_id,
         'payable_id': row.payable_id,
         'application_date': row.application_date,
-        'amount': _money(row.amount),
+        'amount': serialize_money(row.amount),
         'idempotency_key': row.idempotency_key,
         'notes': row.notes,
         'created_by': row.created_by,
@@ -69,9 +68,9 @@ def _serialize_credit(db: Session, row: SupplierCredit) -> dict:
         'supplier_name': row.supplier_name,
         'purchase_order_id': row.purchase_order_id,
         'credit_date': row.credit_date,
-        'amount': _money(row.amount),
-        'applied_amount': _money(row.applied_amount),
-        'balance_available': _money(row.balance_available),
+        'amount': serialize_money(row.amount),
+        'applied_amount': serialize_money(row.applied_amount),
+        'balance_available': serialize_money(row.balance_available),
         'status': row.status,
         'source_app': row.source_app,
         'source_event_id': row.source_event_id,
@@ -102,14 +101,14 @@ def _same_application_request(
     *,
     credit_id: int,
     payable_id: int,
-    amount: float,
+    amount: Decimal,
     application_date: str,
     notes: str | None,
 ) -> bool:
     return (
         int(row.supplier_credit_id) == int(credit_id)
         and int(row.payable_id) == int(payable_id)
-        and abs(_money(row.amount) - amount) <= TOLERANCE
+        and abs(normalize_money(row.amount) - amount) <= MONEY_TOLERANCE
         and str(row.application_date or '') == application_date
         and str(row.notes or '') == str(notes or '')
     )
@@ -141,7 +140,7 @@ def apply_supplier_credit(
 ) -> dict:
     key = _normalize_key(idempotency_key)
     date = _application_date(payload.application_date)
-    amount = _money(payload.amount)
+    amount = normalize_money(payload.amount)
     payable_id = int(payload.payable_id)
 
     existing = (
@@ -163,10 +162,9 @@ def apply_supplier_credit(
             )
         return _replay_result(db, existing)
 
-    if amount <= TOLERANCE:
+    if amount <= MONEY_TOLERANCE:
         raise ValueError('Supplier credit application amount must be greater than zero.')
 
-    # Lock credit first, then payable. All credit applications use this order.
     credit = (
         db.query(SupplierCredit)
         .filter(SupplierCredit.id == int(credit_id))
@@ -190,15 +188,15 @@ def apply_supplier_credit(
     if _normalize_name(credit.supplier_name) != _normalize_name(payable.supplier_name):
         raise ValueError('Supplier credit can only be applied to a payable for the same supplier.')
 
-    available = max(_money(credit.balance_available), 0.0)
-    balance_due = max(_money(payable.balance_due), 0.0)
-    if available <= TOLERANCE or (credit.status or '').strip().lower() == 'applied':
+    available = max(normalize_money(credit.balance_available), ZERO)
+    balance_due = max(normalize_money(payable.balance_due), ZERO)
+    if available <= MONEY_TOLERANCE or (credit.status or '').strip().lower() == 'applied':
         raise ValueError('Supplier credit has no remaining balance.')
-    if balance_due <= TOLERANCE:
+    if balance_due <= MONEY_TOLERANCE:
         raise ValueError('Payable has no remaining balance.')
-    if amount - available > TOLERANCE:
+    if amount - available > MONEY_TOLERANCE:
         raise ValueError('Application amount cannot exceed supplier credit balance.')
-    if amount - balance_due > TOLERANCE:
+    if amount - balance_due > MONEY_TOLERANCE:
         raise ValueError('Application amount cannot exceed payable balance.')
 
     ensure_date_unlocked(
@@ -209,20 +207,17 @@ def apply_supplier_credit(
     )
 
     before_credit = {
-        'applied_amount': _money(credit.applied_amount),
+        'applied_amount': normalize_money(credit.applied_amount),
         'balance_available': available,
         'status': credit.status,
     }
     before_payable = {
-        'gross_amount': _money(payable.gross_amount),
-        'amount_paid': _money(payable.amount_paid),
+        'gross_amount': normalize_money(payable.gross_amount),
+        'amount_paid': normalize_money(payable.amount_paid),
         'balance_due': balance_due,
         'status': payable.status,
     }
 
-    # Reserve the application key before changing either business row. If a
-    # concurrent retry won the key race, rolling back here cannot discard any
-    # supplier-credit or payable mutation from this request.
     application = SupplierCreditApplication(
         supplier_credit_id=credit.id,
         payable_id=payable.id,
@@ -257,20 +252,20 @@ def apply_supplier_credit(
             )
         return _replay_result(db, winner)
 
-    credit.applied_amount = _money(_money(credit.applied_amount) + amount)
-    credit.balance_available = _money(max(0.0, available - amount))
-    if credit.balance_available <= TOLERANCE:
-        credit.balance_available = 0.0
+    credit.applied_amount = normalize_money(normalize_money(credit.applied_amount) + amount)
+    credit.balance_available = normalize_money(max(ZERO, available - amount))
+    if credit.balance_available <= MONEY_TOLERANCE:
+        credit.balance_available = ZERO
         credit.status = 'applied'
     else:
         credit.status = 'partially_applied'
     db.add(credit)
 
-    # Supplier credits are non-cash reductions of the payable's gross liability.
-    # This matches purchase-return adjustments and keeps amount_paid cash-derived.
-    payable.gross_amount = _money(max(_money(payable.amount_paid), _money(payable.gross_amount) - amount))
+    payable.gross_amount = normalize_money(
+        max(normalize_money(payable.amount_paid), normalize_money(payable.gross_amount) - amount)
+    )
     db.add(payable)
-    _update_payable_balance(db, payable.id)
+    update_payable_balance_exact(db, payable.id)
     db.flush()
 
     record_audit(
@@ -284,8 +279,8 @@ def apply_supplier_credit(
             'application_id': application.id,
             'payable_id': payable.id,
             'amount': amount,
-            'applied_amount': _money(credit.applied_amount),
-            'balance_available': _money(credit.balance_available),
+            'applied_amount': normalize_money(credit.applied_amount),
+            'balance_available': normalize_money(credit.balance_available),
             'status': credit.status,
         },
         source_app='accounting',
@@ -302,9 +297,9 @@ def apply_supplier_credit(
             'supplier_credit_id': credit.id,
             'application_id': application.id,
             'amount': amount,
-            'gross_amount': _money(payable.gross_amount),
-            'amount_paid': _money(payable.amount_paid),
-            'balance_due': _money(payable.balance_due),
+            'gross_amount': normalize_money(payable.gross_amount),
+            'amount_paid': normalize_money(payable.amount_paid),
+            'balance_due': normalize_money(payable.balance_due),
             'status': payable.status,
         },
         source_app='accounting',
