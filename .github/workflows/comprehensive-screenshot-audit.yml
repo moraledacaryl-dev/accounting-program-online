@@ -86,7 +86,7 @@ jobs:
           sudo rm -f /var/lib/apt/lists/dl.google.com_linux_chrome-stable_deb_*
           npx playwright install --with-deps chromium
 
-      - name: Capture every active role, page, viewport, and requested state
+      - name: Capture every active human role, page, viewport, and requested state
         working-directory: frontend
         run: node scripts/comprehensive-screenshot-audit.mjs
 
@@ -103,7 +103,7 @@ jobs:
           summary = ['# Hidden Oasis Accounting Screenshot Audit', '']
           if manifest.exists():
               data = json.loads(manifest.read_text())
-              summary += [f"- Roles: {len(data['roles'])}", f"- UI routes: {len(data['routes'])}", f"- States: {', '.join(data['states'])}", f"- Expected screenshots: {data['expectedScreenshots']}"]
+              summary += [f"- Human roles: {len(data['roles'])}", f"- Service roles: {len(data.get('serviceRoles', []))}", f"- UI routes: {len(data['routes'])}", f"- States: {', '.join(data['states'])}", f"- Expected screenshots: {data['expectedScreenshots']}"]
               failures = [x for x in data['captures'] if x['status'] != 'ok']
               summary += [f"- Non-OK captures: {len(failures)}"]
           if endpoints.exists():
@@ -115,7 +115,7 @@ jobs:
 
       - name: Upload comprehensive screenshot evidence
         if: always()
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
         with:
           name: accounting-comprehensive-screenshot-audit-${{ github.run_id }}
           path: frontend/audit-artifacts/screenshots/
