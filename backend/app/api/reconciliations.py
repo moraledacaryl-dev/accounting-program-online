@@ -21,7 +21,7 @@ router = APIRouter()
 @router.get('/')
 def get_reconciliations(
     db: Session = Depends(get_db),
-    user=Depends(require_permissions('cashflow.reconcile')),
+    user=Depends(require_permissions('cashflow.view')),
     account_id: int | None = None,
     start_date: str | None = None,
     end_date: str | None = None,

@@ -176,7 +176,7 @@ def reverse_transaction(
     transaction_id: int,
     payload: CashflowActionPayload,
     db: Session = Depends(get_db),
-    user=Depends(require_any_permissions('cashflow.money_in', 'cashflow.money_out')),
+    user=Depends(require_permissions('money.reverse')),
 ):
     current = _transaction_for_direction_auth(db, transaction_id)
     _authorize_cashflow_direction(db, user, current.direction)
