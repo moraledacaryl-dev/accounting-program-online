@@ -11,6 +11,15 @@ const STATES = (process.env.AUDIT_STATES || 'live').split(',').map(v => v.trim()
 const STATIC_SKIP = new Set(['/login']);
 const SERVICE_ROLE = role => /(?:^|_)(?:integration|service)(?:_|$)/.test(role);
 const slug = value => value.replace(/^\//, '').replace(/[^a-zA-Z0-9._-]+/g, '-') || 'root';
+const SETTLE_TIMEOUT_MS = Number(process.env.AUDIT_SETTLE_TIMEOUT_MS || 12_000);
+const LOADING_MARKERS = [
+  'Checking access',
+  'Loading your permitted work areas',
+  'Loading today’s accounting overview',
+  'Loading today\'s accounting overview',
+  'Refreshing queues…',
+  'Refreshing queues...',
+];
 
 const DYNAMIC_ROUTE_EXPANSIONS = {
   '/records/[module]': ['rooms', 'events', 'restaurant', 'breakfast', 'cafe', 'bar', 'inventory', 'payroll', 'finance', 'settings'].map(module => `/records/${module}`),
@@ -22,7 +31,6 @@ const LOCAL_VIEW_STATES = {
   '/bir': { group: 'Tax and period close views', labels: ['Review', 'Missing Documents', 'Candidate Records', 'Tax Books', 'Period Locks'] },
   '/approvals': { group: 'Approval queues', labels: ['Records', 'Procurement', 'Money Transactions', 'Payroll', 'Journal Entries', 'Reconciliations'] },
   '/integrations/payroll': { group: 'Payroll review status', labels: ['For Review', 'Ready to Post', 'Posted', 'Rejected', 'Errors', 'Already Applied'] },
-  '/payroll-periods/1': { group: 'Payroll period views', labels: ['Summary', 'Reports'] },
   '/dashboard': { group: 'Guest movement', labels: ['Arrivals', 'Departures', 'In-house'] },
   '/cashflow': { group: 'Cash workspace views', labels: ['Cash Overview', 'Cash Ledger', 'Transfers', 'Daily Close & Reconciliation', 'Cash Settings'] },
 };
@@ -48,7 +56,8 @@ function discoverRoutes() {
     route = route || '/';
     if (STATIC_SKIP.has(route)) continue;
     if (DYNAMIC_ROUTE_EXPANSIONS[route]) { routes.push(...DYNAMIC_ROUTE_EXPANSIONS[route]); continue; }
-    route = route.replace(/\[(id|accountId)\]/g, '1');
+    route = route.replace(/\[accountId\]/g, '1');
+    if (route.includes('[id]')) continue;
     if (!route.includes('[')) routes.push(route);
   }
   return [...new Set(routes)].sort();
@@ -67,6 +76,43 @@ async function discoverRoleMatrix(ownerState) {
   const roles = await response.json(); await api.dispose(); return roles;
 }
 
+async function discoverRepresentativeRoutes(ownerState, routes) {
+  const api = await request.newContext({ baseURL: BASE_URL, storageState: ownerState });
+  try {
+    const response = await api.get('/api/payroll-periods?limit=1', { failOnStatusCode: false });
+    if (response.ok()) {
+      const body = await response.json();
+      const rows = Array.isArray(body) ? body : Array.isArray(body?.items) ? body.items : [];
+      const id = rows[0]?.id;
+      if (id) routes.push(`/payroll-periods/${id}`);
+    }
+  } finally {
+    await api.dispose();
+  }
+  return [...new Set(routes)].sort();
+}
+
+function isBenignAbortedRequest(entry) {
+  if (!String(entry.failure || '').includes('ERR_ABORTED')) return false;
+  const url = String(entry.url || '');
+  return url.includes('_rsc=') || url.includes('/_next/static/chunks/');
+}
+
+async function loadingMarkersPresent(page) {
+  const text = await page.locator('body').innerText().catch(() => '');
+  return LOADING_MARKERS.filter(marker => text.includes(marker));
+}
+
+async function waitForSettledPage(page) {
+  const started = Date.now();
+  let markers = await loadingMarkersPresent(page);
+  while (markers.length && Date.now() - started < SETTLE_TIMEOUT_MS) {
+    await page.waitForTimeout(250);
+    markers = await loadingMarkersPresent(page);
+  }
+  return { settled: markers.length === 0, loadingMarkers: markers, settleMs: Date.now() - started };
+}
+
 async function saveCapture(page, resultBase, suffix = 'default') {
   const file = path.join(OUT, slug(resultBase.role), resultBase.viewport, slug(resultBase.state), `${slug(resultBase.route)}--${slug(suffix)}.png`);
   fs.mkdirSync(path.dirname(file), { recursive: true });
@@ -75,8 +121,8 @@ async function saveCapture(page, resultBase, suffix = 'default') {
 }
 
 async function captureLocalViews(page, resultBase, results) {
-  const config = LOCAL_VIEW_STATES[resultBase.route];
-  if (!config) return;
+  const config = LOCAL_VIEW_STATES[resultBase.route] || (resultBase.route.startsWith('/payroll-periods/') ? { group: 'Payroll period views', labels: ['Summary', 'Reports'] } : null);
+  if (!config || resultBase.redirected || !resultBase.settled) return;
   const group = page.getByRole('group', { name: config.group, exact: true });
   if (!(await group.count())) return;
   for (const label of config.labels) {
@@ -84,38 +130,50 @@ async function captureLocalViews(page, resultBase, results) {
     if (!(await button.count())) continue;
     try {
       await button.click({ timeout: 5_000 });
-      await page.waitForTimeout(250);
+      const settled = await waitForSettledPage(page);
       const screenshot = await saveCapture(page, resultBase, `view-${label}`);
-      results.push({ ...resultBase, uiState: `view:${label}`, status: 'ok', screenshot });
+      results.push({ ...resultBase, ...settled, uiState: `view:${label}`, status: settled.settled ? 'ok' : 'incomplete-loading', screenshot });
     } catch (e) {
       results.push({ ...resultBase, uiState: `view:${label}`, status: 'state-capture-error', error: String(e) });
     }
   }
 }
 
-async function captureRole(browser, roleName, credentials, routes, states) {
+async function captureRole(browser, roleName, credentials, routes, states, progress) {
   const api = await request.newContext({ baseURL: BASE_URL });
   const storageState = await login(api, credentials.username, credentials.password); await api.dispose();
   const results = [];
   for (const [viewportName, viewport] of Object.entries(VIEWPORTS)) for (const state of states) {
     const context = await browser.newContext({ baseURL: BASE_URL, storageState, viewport, reducedMotion: 'reduce' });
     for (const route of routes) {
-      const page = await context.newPage(); const consoleErrors = []; const failedRequests = [];
+      progress.completed += 1;
+      const prefix = `[${progress.completed}/${progress.total}] ${roleName} ${viewportName} ${state} ${route}`;
+      console.log(`${prefix} START`);
+      const page = await context.newPage(); const consoleErrors = []; const failedRequestsRaw = [];
       page.on('console', msg => { if (msg.type() === 'error') consoleErrors.push(msg.text()); });
-      page.on('requestfailed', req => failedRequests.push({ url: req.url(), failure: req.failure()?.errorText || 'failed' }));
+      page.on('requestfailed', req => failedRequestsRaw.push({ url: req.url(), failure: req.failure()?.errorText || 'failed' }));
       if (state === 'api-error') await page.route('**/api/**', async r => r.request().url().includes('/api/auth/me') ? r.continue() : r.fulfill({ status: 503, contentType: 'application/json', body: JSON.stringify({ detail: 'Screenshot audit simulated API outage' }) }));
       const started = Date.now(); let status = 'ok'; let error = null; let screenshot = null;
       try {
         const response = await page.goto(route, { waitUntil: 'domcontentloaded', timeout: 30_000 });
-        await page.waitForTimeout(750);
-        const base = { role: roleName, viewport: viewportName, state, route, durationMs: Date.now() - started, consoleErrors, failedRequests };
+        const settled = await waitForSettledPage(page);
+        const finalUrl = new URL(page.url());
+        const finalRoute = `${finalUrl.pathname}${finalUrl.search}`;
+        const redirected = finalUrl.pathname !== new URL(route, BASE_URL).pathname;
+        const failedRequests = failedRequestsRaw.filter(entry => !isBenignAbortedRequest(entry));
+        const benignAbortedRequests = failedRequestsRaw.filter(isBenignAbortedRequest);
+        const base = { role: roleName, viewport: viewportName, state, route, requestedUrl: new URL(route, BASE_URL).href, finalUrl: page.url(), finalRoute, redirected, ...settled, durationMs: Date.now() - started, consoleErrors, failedRequests, benignAbortedRequests };
         screenshot = await saveCapture(page, base);
         if (response && response.status() >= 400) status = `http-${response.status()}`;
+        else if (!settled.settled) status = 'incomplete-loading';
+        else if (redirected) status = 'redirected';
         results.push({ ...base, uiState: 'default', status, error, screenshot });
         await captureLocalViews(page, base, results);
+        console.log(`${prefix} ${status.toUpperCase()} ${Date.now() - started}ms${redirected ? ` -> ${finalRoute}` : ''}`);
       } catch (e) {
         status = 'capture-error'; error = String(e);
-        results.push({ role: roleName, viewport: viewportName, state, route, uiState: 'default', status, error, screenshot, durationMs: Date.now() - started, consoleErrors, failedRequests });
+        results.push({ role: roleName, viewport: viewportName, state, route, requestedUrl: new URL(route, BASE_URL).href, finalUrl: page.url(), finalRoute: null, redirected: false, settled: false, loadingMarkers: [], uiState: 'default', status, error, screenshot, durationMs: Date.now() - started, consoleErrors, failedRequests: failedRequestsRaw.filter(entry => !isBenignAbortedRequest(entry)), benignAbortedRequests: failedRequestsRaw.filter(isBenignAbortedRequest) });
+        console.log(`${prefix} CAPTURE-ERROR ${Date.now() - started}ms ${error}`);
       }
       await page.close();
     }
@@ -127,13 +185,14 @@ async function captureRole(browser, roleName, credentials, routes, states) {
 fs.mkdirSync(OUT, { recursive: true });
 BASE_URL = await resolveCanonicalBaseUrl();
 if (BASE_URL !== CONFIGURED_BASE_URL) console.log(`Resolved canonical Accounting host: ${BASE_URL}`);
-const routes = discoverRoutes();
+let routes = discoverRoutes();
 if (!Object.keys(USERS).length) throw new Error('AUDIT_USERS_JSON is required. Provide one real audit account per active human role.');
 const ownerEntry = USERS.owner || USERS.admin;
 if (!ownerEntry) throw new Error('AUDIT_USERS_JSON must include owner or admin so active roles can be enumerated.');
 const bootstrapApi = await request.newContext({ baseURL: BASE_URL });
 const ownerState = await login(bootstrapApi, ownerEntry.username, ownerEntry.password); await bootstrapApi.dispose();
 const activeRoles = await discoverRoleMatrix(ownerState);
+routes = await discoverRepresentativeRoutes(ownerState, routes);
 if (!activeRoles.every(role => role && typeof role.code === 'string' && role.code.trim())) throw new Error('Active role API returned a role without a canonical code.');
 const allRoleNames = [...new Set(activeRoles.map(role => role.code.trim()))];
 const serviceRoles = allRoleNames.filter(SERVICE_ROLE);
@@ -142,10 +201,11 @@ const missing = roleNames.filter(role => !USERS[role]);
 if (missing.length) throw new Error(`Missing audit credentials for active human roles: ${missing.join(', ')}`);
 
 const browser = await chromium.launch({ headless: true }); const captures = [];
-for (const role of roleNames) captures.push(...await captureRole(browser, role, USERS[role], routes, STATES));
+const totalBaseCaptures = roleNames.length * routes.length * Object.keys(VIEWPORTS).length * STATES.length;
+const progress = { completed: 0, total: totalBaseCaptures };
+for (const role of roleNames) captures.push(...await captureRole(browser, role, USERS[role], routes, STATES, progress));
 await browser.close();
-const baseScreenshots = roleNames.length * routes.length * Object.keys(VIEWPORTS).length * STATES.length;
-const manifest = { generatedAt: new Date().toISOString(), configuredBaseUrl: CONFIGURED_BASE_URL, baseUrl: BASE_URL, roles: roleNames, serviceRoles, activeRoleDefinitions: activeRoles, routes, dynamicRouteExpansions: DYNAMIC_ROUTE_EXPANSIONS, localViewStates: LOCAL_VIEW_STATES, viewports: VIEWPORTS, states: STATES, expectedBaseScreenshots: baseScreenshots, actualCaptureRecords: captures.length, captures };
+const manifest = { generatedAt: new Date().toISOString(), configuredBaseUrl: CONFIGURED_BASE_URL, baseUrl: BASE_URL, roles: roleNames, serviceRoles, activeRoleDefinitions: activeRoles, routes, dynamicRouteExpansions: DYNAMIC_ROUTE_EXPANSIONS, localViewStates: LOCAL_VIEW_STATES, viewports: VIEWPORTS, states: STATES, expectedBaseScreenshots: totalBaseCaptures, actualCaptureRecords: captures.length, captures };
 fs.writeFileSync(path.join(OUT, 'manifest.json'), JSON.stringify(manifest, null, 2));
-fs.writeFileSync(path.join(OUT, 'README.txt'), ['Hidden Oasis Accounting comprehensive screenshot audit', `Generated: ${manifest.generatedAt}`, `Canonical base URL: ${manifest.baseUrl}`, `Human roles: ${roleNames.join(', ')}`, `Service roles (endpoint-only; no human UI): ${serviceRoles.join(', ') || 'none'}`, `Pages/routes: ${routes.length}`, `Viewports: ${Object.keys(VIEWPORTS).join(', ')}`, `Environment states: ${STATES.join(', ')}`, `Base screenshots: ${baseScreenshots}`, `Capture records including local UI substates: ${captures.length}`, '', 'manifest.json records every capture, local UI state, console error, failed request, route, role, environment state, viewport, active role definition, and dynamic route expansion.'].join('\n'));
-console.log(JSON.stringify({ configuredBaseUrl: CONFIGURED_BASE_URL, baseUrl: BASE_URL, humanRoles: roleNames.length, serviceRoles: serviceRoles.length, routes: routes.length, states: STATES.length, baseScreenshots, captureRecords: captures.length }, null, 2));
+fs.writeFileSync(path.join(OUT, 'README.txt'), ['Hidden Oasis Accounting comprehensive screenshot audit', `Generated: ${manifest.generatedAt}`, `Canonical base URL: ${manifest.baseUrl}`, `Human roles: ${roleNames.join(', ')}`, `Service roles (endpoint-only; no human UI): ${serviceRoles.join(', ') || 'none'}`, `Pages/routes: ${routes.length}`, `Viewports: ${Object.keys(VIEWPORTS).join(', ')}`, `Environment states: ${STATES.join(', ')}`, `Base screenshots: ${totalBaseCaptures}`, `Capture records including local UI substates: ${captures.length}`, '', 'manifest.json records requested and final URLs, redirect classification, settled/loading status, console errors, meaningful failed requests, benign aborted Next.js requests, local UI state, role, environment state, viewport, active role definition, and dynamic route expansion.'].join('\n'));
+console.log(JSON.stringify({ configuredBaseUrl: CONFIGURED_BASE_URL, baseUrl: BASE_URL, humanRoles: roleNames.length, serviceRoles: serviceRoles.length, routes: routes.length, states: STATES.length, baseScreenshots: totalBaseCaptures, captureRecords: captures.length }, null, 2));
