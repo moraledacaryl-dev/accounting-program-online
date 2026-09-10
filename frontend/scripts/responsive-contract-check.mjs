@@ -2,6 +2,7 @@ import fs from 'node:fs';
 
 const shell = fs.readFileSync(new URL('../app/app-shell.css', import.meta.url), 'utf8');
 const closure = fs.readFileSync(new URL('../app/pass-54-responsive-edge-case-closure.css', import.meta.url), 'utf8');
+const finalUx = fs.readFileSync(new URL('../app/pass-70-final-ux-wcag.css', import.meta.url), 'utf8');
 const layout = fs.readFileSync(new URL('../app/layout.js', import.meta.url), 'utf8');
 const sidebar = fs.readFileSync(new URL('../components/Sidebar.js', import.meta.url), 'utf8');
 
@@ -21,6 +22,9 @@ requireMatch(closure.includes('.page-header-actions > *'), 'Mobile page-header a
 requireMatch(sidebar.includes('const collapsed = desktopCollapsed && !mobileNavOpen;'), 'Mobile navigation must render expanded even when desktop sidebar preference is collapsed.');
 requireMatch(sidebar.includes("window.localStorage.setItem(SIDEBAR_KEY, desktopCollapsed ? '1' : '0')"), 'Mobile expansion must not overwrite the saved desktop collapse preference.');
 requireMatch(layout.includes("import './pass-54-responsive-edge-case-closure.css';"), 'Pass 54 responsive closure is not loaded.');
+requireMatch(finalUx.includes('.ownership-notice > div') && finalUx.includes('overflow: visible'), 'Ownership notice content must not clip on narrow screens.');
+requireMatch(finalUx.includes('.ownership-notice .badge') && finalUx.includes('width: fit-content'), 'Ownership notice badge must retain its intrinsic readable width.');
+requireMatch(finalUx.includes('@media (max-width: 720px)') && finalUx.includes('grid-template-columns: minmax(0, 1fr)'), 'Ownership notice must collapse to a single mobile column.');
 
 if (failures.length) {
   console.error('Responsive contract check failed:');

@@ -48,6 +48,26 @@
 
 .ownership-notice {
   scroll-margin-top: 72px;
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  align-items: start;
+  gap: 12px;
+  overflow: visible;
+}
+
+.ownership-notice > div {
+  min-width: 0;
+  overflow: visible;
+}
+
+.ownership-notice .badge {
+  display: inline-flex;
+  width: fit-content;
+  max-width: 100%;
+  white-space: normal;
+  overflow: visible;
+  overflow-wrap: normal;
+  word-break: normal;
 }
 
 .ownership-notice .button-link {
@@ -55,6 +75,17 @@
   display: inline-flex;
   align-items: center;
   justify-content: center;
+}
+
+@media (max-width: 720px) {
+  .ownership-notice {
+    grid-template-columns: minmax(0, 1fr);
+  }
+
+  .ownership-notice .button-link {
+    width: fit-content;
+    max-width: 100%;
+  }
 }
 
 /* WCAG 2.2 focus visibility: preserve a strong keyboard focus indicator on links and controls. */
