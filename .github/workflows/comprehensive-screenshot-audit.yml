@@ -6,7 +6,7 @@ on:
       base_url:
         description: Production/staging URL to audit
         required: true
-        default: https://hiddenoasis.app
+        default: https://accounting.hiddenoasis.app
         type: string
       states:
         description: Comma-separated environment states (live,api-error)
