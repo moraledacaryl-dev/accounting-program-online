@@ -5,17 +5,11 @@ import path from 'node:path';
 const BASE_URL = (process.env.AUDIT_BASE_URL || 'https://hiddenoasis.app').replace(/\/$/, '');
 const OUT = path.resolve(process.env.AUDIT_OUTPUT_DIR || 'audit-artifacts/screenshots');
 const USERS = JSON.parse(process.env.AUDIT_USERS_JSON || '{}');
-const VIEWPORTS = {
-  desktop: { width: 1440, height: 1000 },
-  tablet: { width: 768, height: 1024 },
-  mobile: { width: 390, height: 844 },
-};
+const VIEWPORTS = { desktop: { width: 1440, height: 1000 }, tablet: { width: 768, height: 1024 }, mobile: { width: 390, height: 844 } };
 const STATES = (process.env.AUDIT_STATES || 'live').split(',').map(v => v.trim()).filter(Boolean);
 const STATIC_SKIP = new Set(['/login']);
-
-function slug(value) {
-  return value.replace(/^\//, '').replace(/[^a-zA-Z0-9._-]+/g, '-') || 'root';
-}
+const SERVICE_ROLE = role => /(?:^|_)(?:integration|service)(?:_|$)/.test(role);
+const slug = value => value.replace(/^\//, '').replace(/[^a-zA-Z0-9._-]+/g, '-') || 'root';
 
 function discoverRoutes() {
   const root = path.resolve('app');
@@ -35,115 +29,56 @@ async function login(api, username, password) {
 
 async function discoverRoleMatrix(ownerState) {
   const api = await request.newContext({ baseURL: BASE_URL, storageState: ownerState });
-  const rolesResponse = await api.get('/api/roles-permissions/roles?active_only=true');
-  if (!rolesResponse.ok()) throw new Error(`Cannot enumerate active roles: HTTP ${rolesResponse.status()}`);
-  const roles = await rolesResponse.json();
-  await api.dispose();
-  return roles;
-}
-
-async function endpointManifest(ownerState) {
-  const api = await request.newContext({ baseURL: BASE_URL, storageState: ownerState });
-  let spec = null;
-  for (const url of ['/openapi.json', '/api/openapi.json']) {
-    const response = await api.get(url);
-    if (response.ok()) { spec = await response.json(); break; }
-  }
-  await api.dispose();
-  if (!spec) return { available: false, reason: 'OpenAPI is disabled in production; generate static manifest in workflow.' };
-  const endpoints = [];
-  for (const [route, methods] of Object.entries(spec.paths || {})) {
-    for (const [method, meta] of Object.entries(methods)) {
-      if (!['get','post','put','patch','delete','head','options'].includes(method)) continue;
-      endpoints.push({ method: method.toUpperCase(), route, operationId: meta.operationId || null, tags: meta.tags || [] });
-    }
-  }
-  return { available: true, count: endpoints.length, endpoints };
+  const response = await api.get('/api/roles-permissions/roles?active_only=true');
+  if (!response.ok()) throw new Error(`Cannot enumerate active roles: HTTP ${response.status()}`);
+  const roles = await response.json(); await api.dispose(); return roles;
 }
 
 async function captureRole(browser, roleName, credentials, routes, states) {
   const api = await request.newContext({ baseURL: BASE_URL });
-  const storageState = await login(api, credentials.username, credentials.password);
-  await api.dispose();
+  const storageState = await login(api, credentials.username, credentials.password); await api.dispose();
   const results = [];
-
-  for (const [viewportName, viewport] of Object.entries(VIEWPORTS)) {
-    for (const state of states) {
-      const context = await browser.newContext({ baseURL: BASE_URL, storageState, viewport, reducedMotion: 'reduce' });
-      for (const route of routes) {
-        const page = await context.newPage();
-        const consoleErrors = [];
-        const failedRequests = [];
-        page.on('console', msg => { if (msg.type() === 'error') consoleErrors.push(msg.text()); });
-        page.on('requestfailed', req => failedRequests.push({ url: req.url(), failure: req.failure()?.errorText || 'failed' }));
-        if (state === 'api-error') {
-          await page.route('**/api/**', async r => {
-            if (r.request().url().includes('/api/auth/me')) return r.continue();
-            return r.fulfill({ status: 503, contentType: 'application/json', body: JSON.stringify({ detail: 'Screenshot audit simulated API outage' }) });
-          });
-        }
-        const started = Date.now();
-        let status = 'ok';
-        let error = null;
-        try {
-          const response = await page.goto(route, { waitUntil: 'domcontentloaded', timeout: 30_000 });
-          await page.waitForTimeout(750);
-          const file = path.join(OUT, slug(roleName), viewportName, slug(state), `${slug(route)}.png`);
-          fs.mkdirSync(path.dirname(file), { recursive: true });
-          await page.screenshot({ path: file, fullPage: true });
-          if (response && response.status() >= 400) status = `http-${response.status()}`;
-        } catch (e) {
-          status = 'capture-error'; error = String(e);
-        }
-        results.push({ role: roleName, viewport: viewportName, state, route, status, error, durationMs: Date.now() - started, consoleErrors, failedRequests });
-        await page.close();
-      }
-      await context.close();
+  for (const [viewportName, viewport] of Object.entries(VIEWPORTS)) for (const state of states) {
+    const context = await browser.newContext({ baseURL: BASE_URL, storageState, viewport, reducedMotion: 'reduce' });
+    for (const route of routes) {
+      const page = await context.newPage(); const consoleErrors = []; const failedRequests = [];
+      page.on('console', msg => { if (msg.type() === 'error') consoleErrors.push(msg.text()); });
+      page.on('requestfailed', req => failedRequests.push({ url: req.url(), failure: req.failure()?.errorText || 'failed' }));
+      if (state === 'api-error') await page.route('**/api/**', async r => r.request().url().includes('/api/auth/me') ? r.continue() : r.fulfill({ status: 503, contentType: 'application/json', body: JSON.stringify({ detail: 'Screenshot audit simulated API outage' }) }));
+      const started = Date.now(); let status = 'ok'; let error = null;
+      try {
+        const response = await page.goto(route, { waitUntil: 'domcontentloaded', timeout: 30_000 });
+        await page.waitForTimeout(750);
+        const file = path.join(OUT, slug(roleName), viewportName, slug(state), `${slug(route)}.png`);
+        fs.mkdirSync(path.dirname(file), { recursive: true }); await page.screenshot({ path: file, fullPage: true });
+        if (response && response.status() >= 400) status = `http-${response.status()}`;
+      } catch (e) { status = 'capture-error'; error = String(e); }
+      results.push({ role: roleName, viewport: viewportName, state, route, status, error, durationMs: Date.now() - started, consoleErrors, failedRequests });
+      await page.close();
     }
+    await context.close();
   }
   return results;
 }
 
 fs.mkdirSync(OUT, { recursive: true });
 const routes = discoverRoutes();
-if (!Object.keys(USERS).length) throw new Error('AUDIT_USERS_JSON is required. Provide one real audit account per active role.');
+if (!Object.keys(USERS).length) throw new Error('AUDIT_USERS_JSON is required. Provide one real audit account per active human role.');
 const ownerEntry = USERS.owner || USERS.admin;
 if (!ownerEntry) throw new Error('AUDIT_USERS_JSON must include owner or admin so active roles can be enumerated.');
-
 const bootstrapApi = await request.newContext({ baseURL: BASE_URL });
-const ownerState = await login(bootstrapApi, ownerEntry.username, ownerEntry.password);
-await bootstrapApi.dispose();
+const ownerState = await login(bootstrapApi, ownerEntry.username, ownerEntry.password); await bootstrapApi.dispose();
 const activeRoles = await discoverRoleMatrix(ownerState);
-const roleNames = [...new Set(activeRoles.map(r => r.slug || r.key || r.name).filter(Boolean))];
+const allRoleNames = [...new Set(activeRoles.map(r => r.slug || r.key || r.name).filter(Boolean))];
+const serviceRoles = allRoleNames.filter(SERVICE_ROLE);
+const roleNames = allRoleNames.filter(role => !SERVICE_ROLE(role));
 const missing = roleNames.filter(role => !USERS[role]);
-if (missing.length) throw new Error(`Missing audit credentials for active roles: ${missing.join(', ')}`);
+if (missing.length) throw new Error(`Missing audit credentials for active human roles: ${missing.join(', ')}`);
 
-const browser = await chromium.launch({ headless: true });
-const captures = [];
+const browser = await chromium.launch({ headless: true }); const captures = [];
 for (const role of roleNames) captures.push(...await captureRole(browser, role, USERS[role], routes, STATES));
 await browser.close();
-
-const manifest = {
-  generatedAt: new Date().toISOString(),
-  baseUrl: BASE_URL,
-  roles: roleNames,
-  routes,
-  viewports: VIEWPORTS,
-  states: STATES,
-  expectedScreenshots: roleNames.length * routes.length * Object.keys(VIEWPORTS).length * STATES.length,
-  captures,
-  endpoints: await endpointManifest(ownerState),
-};
+const manifest = { generatedAt: new Date().toISOString(), baseUrl: BASE_URL, roles: roleNames, serviceRoles, activeRoleDefinitions: activeRoles, routes, viewports: VIEWPORTS, states: STATES, expectedScreenshots: roleNames.length * routes.length * Object.keys(VIEWPORTS).length * STATES.length, captures };
 fs.writeFileSync(path.join(OUT, 'manifest.json'), JSON.stringify(manifest, null, 2));
-fs.writeFileSync(path.join(OUT, 'README.txt'), [
-  'Hidden Oasis Accounting comprehensive screenshot audit',
-  `Generated: ${manifest.generatedAt}`,
-  `Roles: ${roleNames.join(', ')}`,
-  `Pages: ${routes.length}`,
-  `Viewports: ${Object.keys(VIEWPORTS).join(', ')}`,
-  `States: ${STATES.join(', ')}`,
-  `Expected screenshots: ${manifest.expectedScreenshots}`,
-  '',
-  'manifest.json records every capture, console error, failed request, route, role, state, and viewport.',
-].join('\n'));
-console.log(JSON.stringify({ roles: roleNames.length, routes: routes.length, states: STATES.length, screenshots: manifest.expectedScreenshots }, null, 2));
+fs.writeFileSync(path.join(OUT, 'README.txt'), ['Hidden Oasis Accounting comprehensive screenshot audit', `Generated: ${manifest.generatedAt}`, `Human roles: ${roleNames.join(', ')}`, `Service roles (endpoint-only; no human UI): ${serviceRoles.join(', ') || 'none'}`, `Pages: ${routes.length}`, `Viewports: ${Object.keys(VIEWPORTS).join(', ')}`, `States: ${STATES.join(', ')}`, `Expected screenshots: ${manifest.expectedScreenshots}`, '', 'manifest.json records every capture, console error, failed request, route, role, state, viewport, and active role definition.'].join('\n'));
+console.log(JSON.stringify({ humanRoles: roleNames.length, serviceRoles: serviceRoles.length, routes: routes.length, states: STATES.length, screenshots: manifest.expectedScreenshots }, null, 2));
