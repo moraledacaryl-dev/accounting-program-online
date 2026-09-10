@@ -1,0 +1,39 @@
+name: Diagnose Production Routing
+
+on:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  diagnose:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Inspect live nginx and Accounting routing
+        uses: appleboy/ssh-action@029f5b4aeeeb58fdfe1410a5d17f967dacf36262
+        with:
+          host: ${{ secrets.SERVER_HOST }}
+          username: ${{ secrets.SERVER_USER }}
+          key: ${{ secrets.SERVER_SSH_KEY }}
+          port: ${{ secrets.SERVER_PORT }}
+          script: |
+            set -euo pipefail
+            echo '=== services ==='
+            systemctl is-active accounting-backend accounting-frontend nginx || true
+            echo '=== listeners ==='
+            ss -ltnp | grep -E ':(80|443|8000|3000)\b' || true
+            echo '=== effective nginx lines relevant to hiddenoasis/api/proxy ==='
+            nginx -T 2>&1 | grep -nE 'server_name|location[[:space:]]+/?api|proxy_pass|limit_except|deny|return[[:space:]]+405' | sed -n '1,260p' || true
+            echo '=== direct backend health ==='
+            curl -sS -D - -o /dev/null http://127.0.0.1:8000/healthz | sed -n '1,20p'
+            echo '=== direct backend login route with intentionally invalid credentials ==='
+            curl -sS -D - -o /tmp/direct-login-body -X POST http://127.0.0.1:8000/api/auth/login -H 'Content-Type: application/json' --data '{"username":"__routing_probe__","password":"__routing_probe__"}' || true
+            sed -n '1,20p' /tmp/direct-login-body || true
+            rm -f /tmp/direct-login-body
+            echo '=== public nginx login route with intentionally invalid credentials ==='
+            curl -sS -D - -o /tmp/public-login-body -X POST https://hiddenoasis.app/api/auth/login -H 'Content-Type: application/json' --data '{"username":"__routing_probe__","password":"__routing_probe__"}' || true
+            sed -n '1,20p' /tmp/public-login-body || true
+            rm -f /tmp/public-login-body
+            echo '=== public OPTIONS ==='
+            curl -sS -D - -o /dev/null -X OPTIONS https://hiddenoasis.app/api/auth/login || true
