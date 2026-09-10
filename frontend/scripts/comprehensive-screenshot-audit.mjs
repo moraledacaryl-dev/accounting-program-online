@@ -2,7 +2,7 @@ import { chromium, request } from '@playwright/test';
 import fs from 'node:fs';
 import path from 'node:path';
 
-const CONFIGURED_BASE_URL = (process.env.AUDIT_BASE_URL || 'https://hiddenoasis.app').replace(/\/$/, '');
+const CONFIGURED_BASE_URL = (process.env.AUDIT_BASE_URL || 'https://accounting.hiddenoasis.app').replace(/\/$/, '');
 let BASE_URL = CONFIGURED_BASE_URL;
 const OUT = path.resolve(process.env.AUDIT_OUTPUT_DIR || 'audit-artifacts/screenshots');
 const USERS = JSON.parse(process.env.AUDIT_USERS_JSON || '{}');
