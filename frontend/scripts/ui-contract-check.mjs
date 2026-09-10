@@ -58,6 +58,15 @@ if (!approvals.includes('canApproveRecord') || !approvals.includes('RECORD_WRITE
 if (!approvals.includes('canActOnMoneyRow') || !approvals.includes("row.direction === 'in'")) {
   failures.push('Cashflow approval actions must remain direction-scoped');
 }
+if (!approvals.includes("const [loadError, setLoadError] = useState('')") || !approvals.includes("loadError ? '—'")) {
+  failures.push('Approvals must distinguish unavailable queue data from valid zero counts');
+}
+if (!approvals.includes('Approval queues unavailable') || !approvals.includes('Retry loading queues')) {
+  failures.push('Approvals must provide an explicit retryable queue-load failure state');
+}
+if (!approvals.includes("!loadError && tab === 'records'") || !approvals.includes("!loadError && tab === 'payroll'")) {
+  failures.push('Approvals must suppress empty-queue claims while queue loading has failed');
+}
 
 const roomFolios = fs.readFileSync(path.join(root, 'app/room-folios/page.js'), 'utf8');
 if (!roomFolios.includes("canManageFolios = can('folios.manage')")) {
