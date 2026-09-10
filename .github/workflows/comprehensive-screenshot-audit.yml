@@ -1,0 +1,123 @@
+name: Comprehensive Screenshot Audit
+
+on:
+  workflow_dispatch:
+    inputs:
+      base_url:
+        description: Production/staging URL to audit
+        required: true
+        default: https://hiddenoasis.app
+        type: string
+      states:
+        description: Comma-separated visual states (live,api-error)
+        required: true
+        default: live,api-error
+        type: string
+
+permissions:
+  contents: read
+
+jobs:
+  screenshot-audit:
+    runs-on: ubuntu-latest
+    timeout-minutes: 120
+    env:
+      AUDIT_BASE_URL: ${{ inputs.base_url }}
+      AUDIT_STATES: ${{ inputs.states }}
+      AUDIT_USERS_JSON: ${{ secrets.ACCOUNTING_SCREENSHOT_AUDIT_USERS_JSON }}
+      ENVIRONMENT: test
+      DATABASE_URL: sqlite:///./screenshot-audit-openapi.db
+      SECRET_KEY: cccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc
+      STARTUP_REQUIRE_MIGRATIONS: 'false'
+      ALLOW_DEFAULT_ADMIN_BOOTSTRAP: 'false'
+      ALLOW_DEMO_SEED: 'false'
+    steps:
+      - name: Check out exact workflow revision
+        shell: bash
+        run: |
+          set -euo pipefail
+          git init .
+          git remote add origin "https://github.com/${GITHUB_REPOSITORY}.git"
+          git fetch --no-tags --depth=1 origin "${GITHUB_SHA}"
+          git checkout --detach FETCH_HEAD
+
+      - name: Validate audit credential matrix exists
+        shell: bash
+        run: |
+          set -euo pipefail
+          test -n "$AUDIT_USERS_JSON" || { echo 'Missing ACCOUNTING_SCREENSHOT_AUDIT_USERS_JSON repository secret'; exit 1; }
+          python3 - <<'PY'
+          import json, os
+          users = json.loads(os.environ['AUDIT_USERS_JSON'])
+          if not isinstance(users, dict) or not users:
+              raise SystemExit('Audit credential secret must be a non-empty JSON object')
+          for role, value in users.items():
+              if not isinstance(value, dict) or not value.get('username') or not value.get('password'):
+                  raise SystemExit(f'Invalid audit credential entry for role {role}')
+          print(f'Credential matrix contains {len(users)} role accounts')
+          PY
+
+      - name: Install backend dependencies and export every API endpoint
+        working-directory: backend
+        run: |
+          python3 -m pip install --upgrade pip
+          python3 -m pip install -r requirements-test.txt
+          PYTHONPATH=. AUDIT_ENDPOINT_OUTPUT=../frontend/audit-artifacts/screenshots/endpoint-manifest.json python3 ../scripts/export-api-endpoint-manifest.py
+
+      - name: Build frontend
+        working-directory: frontend
+        env:
+          NEXT_PUBLIC_API_BASE: /api
+          NEXT_PUBLIC_INVENTORY_APP_URL: https://inventory.hiddenoasis.app
+          NEXT_PUBLIC_POS_APP_URL: https://pos.hiddenoasis.app
+          NEXT_PUBLIC_STAFF_PAYROLL_APP_URL: https://staff.hiddenoasis.app
+          NEXT_PUBLIC_OPERATIONS_APP_URL: https://operations.hiddenoasis.app
+        run: |
+          npm ci
+          npm run build
+
+      - name: Install pinned Chromium audit tooling
+        working-directory: frontend
+        run: |
+          npm install --no-save --package-lock=false @playwright/test@1.55.0
+          for source in /etc/apt/sources.list.d/*; do
+            if [ -f "$source" ] && grep -q 'dl.google.com/linux/chrome' "$source"; then sudo rm -f "$source"; fi
+          done
+          sudo rm -f /var/lib/apt/lists/dl.google.com_linux_chrome-stable_deb_*
+          npx playwright install --with-deps chromium
+
+      - name: Capture every active human role, page, viewport, and requested state
+        working-directory: frontend
+        run: node scripts/comprehensive-screenshot-audit.mjs
+
+      - name: Build audit index
+        if: always()
+        working-directory: frontend
+        run: |
+          python3 - <<'PY'
+          import json
+          from pathlib import Path
+          root = Path('audit-artifacts/screenshots')
+          manifest = root / 'manifest.json'
+          endpoints = root / 'endpoint-manifest.json'
+          summary = ['# Hidden Oasis Accounting Screenshot Audit', '']
+          if manifest.exists():
+              data = json.loads(manifest.read_text())
+              summary += [f"- Human roles: {len(data['roles'])}", f"- Service roles: {len(data.get('serviceRoles', []))}", f"- UI routes: {len(data['routes'])}", f"- States: {', '.join(data['states'])}", f"- Expected screenshots: {data['expectedScreenshots']}"]
+              failures = [x for x in data['captures'] if x['status'] != 'ok']
+              summary += [f"- Non-OK captures: {len(failures)}"]
+          if endpoints.exists():
+              data = json.loads(endpoints.read_text())
+              summary += [f"- API endpoints inventoried: {data['count']}"]
+          (root / 'SUMMARY.md').write_text('\n'.join(summary) + '\n')
+          print('\n'.join(summary))
+          PY
+
+      - name: Upload comprehensive screenshot evidence
+        if: always()
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
+        with:
+          name: accounting-comprehensive-screenshot-audit-${{ github.run_id }}
+          path: frontend/audit-artifacts/screenshots/
+          if-no-files-found: error
+          retention-days: 30
