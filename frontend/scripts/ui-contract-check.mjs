@@ -19,18 +19,14 @@ for (const sourceRoot of sourceRoots) {
   if (!fs.existsSync(dir)) continue;
   for (const file of walk(dir)) {
     const source = fs.readFileSync(file, 'utf8');
-    if (nativeDialogPattern.test(source)) {
-      failures.push(`${path.relative(root, file)} uses a native browser dialog`);
-    }
+    if (nativeDialogPattern.test(source)) failures.push(`${path.relative(root, file)} uses a native browser dialog`);
     nativeDialogPattern.lastIndex = 0;
   }
 }
 
 const shellContext = fs.readFileSync(path.join(root, 'components/app-shell/AppShellContext.js'), 'utf8');
 for (const callback of ['openMobileNav', 'closeMobileNav', 'toggleMobileNav']) {
-  if (!new RegExp(`const ${callback} = useCallback`).test(shellContext)) {
-    failures.push(`AppShellContext must keep ${callback} stable with useCallback`);
-  }
+  if (!new RegExp(`const ${callback} = useCallback`).test(shellContext)) failures.push(`AppShellContext must keep ${callback} stable with useCallback`);
 }
 
 const sidebar = fs.readFileSync(path.join(root, 'components/Sidebar.js'), 'utf8');
@@ -41,72 +37,41 @@ const login = fs.readFileSync(path.join(root, 'app/login/page.js'), 'utf8');
 if (!login.includes('aria-invalid')) failures.push('Login fields must expose aria-invalid after validation');
 
 const enhancer = fs.readFileSync(path.join(root, 'components/AccessibilityEnhancer.js'), 'utf8');
-if (!enhancer.includes('Ledger start date') || !enhancer.includes('Ledger status')) {
-  failures.push('Cash & Treasury filter accessibility labels are missing');
-}
+if (!enhancer.includes('Ledger start date') || !enhancer.includes('Ledger status')) failures.push('Cash & Treasury filter accessibility labels are missing');
 
 const approvals = fs.readFileSync(path.join(root, 'app/approvals/page.js'), 'utf8');
-if (!approvals.includes('readableRecordModules') || !approvals.includes('visibleTabs')) {
-  failures.push('Approvals must scope queues to effective read permissions');
-}
-if (!approvals.includes("can('payroll_periods.view') ? fetchPayrollPeriods") || !approvals.includes("can('journals.view') ? fetchJournalEntries")) {
-  failures.push('Approvals must not fetch hidden payroll or journal queues');
-}
-if (!approvals.includes('canApproveRecord') || !approvals.includes('RECORD_WRITE_REQUIREMENTS')) {
-  failures.push('Record approval actions must respect module write authority');
-}
-if (!approvals.includes('canActOnMoneyRow') || !approvals.includes("row.direction === 'in'")) {
-  failures.push('Cashflow approval actions must remain direction-scoped');
-}
-if (!approvals.includes("const [loadError, setLoadError] = useState('')") || !approvals.includes("loadError ? '—'")) {
-  failures.push('Approvals must distinguish unavailable queue data from valid zero counts');
-}
-if (!approvals.includes('Approval queues unavailable') || !approvals.includes('Retry loading queues')) {
-  failures.push('Approvals must provide an explicit retryable queue-load failure state');
-}
-if (!approvals.includes("!loadError && tab === 'records'") || !approvals.includes("!loadError && tab === 'payroll'")) {
-  failures.push('Approvals must suppress empty-queue claims while queue loading has failed');
-}
+if (!approvals.includes('readableRecordModules') || !approvals.includes('visibleTabs')) failures.push('Approvals must scope queues to effective read permissions');
+if (!approvals.includes("can('payroll_periods.view') ? fetchPayrollPeriods") || !approvals.includes("can('journals.view') ? fetchJournalEntries")) failures.push('Approvals must not fetch hidden payroll or journal queues');
+if (!approvals.includes('canApproveRecord') || !approvals.includes('RECORD_WRITE_REQUIREMENTS')) failures.push('Record approval actions must respect module write authority');
+if (!approvals.includes('canActOnMoneyRow') || !approvals.includes("row.direction === 'in'")) failures.push('Cashflow approval actions must remain direction-scoped');
+if (!approvals.includes("const [loadError, setLoadError] = useState('')") || !approvals.includes("loadError ? '—'")) failures.push('Approvals must distinguish unavailable queue data from valid zero counts');
+if (!approvals.includes('Approval queues unavailable') || !approvals.includes('Retry loading queues')) failures.push('Approvals must provide an explicit retryable queue-load failure state');
+if (!approvals.includes("!loadError && tab === 'records'") || !approvals.includes("!loadError && tab === 'payroll'")) failures.push('Approvals must suppress empty-queue claims while queue loading has failed');
 
 const roomFolios = fs.readFileSync(path.join(root, 'app/room-folios/page.js'), 'utf8');
-if (!roomFolios.includes("canManageFolios = can('folios.manage')")) {
-  failures.push('Room Folios must distinguish read-only and manage access');
-}
-if (!roomFolios.includes('canManageFolios && canViewBookings ? fetchBookings()') || !roomFolios.includes('canManageFolios && canViewGuests ? fetchGuests')) {
-  failures.push('Room Folios must not fetch booking/guest dependencies for read-only folio users');
-}
-if (!roomFolios.includes('Read-only folio access')) {
-  failures.push('Room Folios must render an explicit read-only state');
-}
+if (!roomFolios.includes("canManageFolios = can('folios.manage')")) failures.push('Room Folios must distinguish read-only and manage access');
+if (!roomFolios.includes('canManageFolios && canViewBookings ? fetchBookings()') || !roomFolios.includes('canManageFolios && canViewGuests ? fetchGuests')) failures.push('Room Folios must not fetch booking/guest dependencies for read-only folio users');
+if (!roomFolios.includes('Read-only folio access')) failures.push('Room Folios must render an explicit read-only state');
 
 const visualClosure = fs.readFileSync(path.join(root, 'app/visual-closure.css'), 'utf8');
 const layout = fs.readFileSync(path.join(root, 'app/layout.js'), 'utf8');
 const visualClosureImport = "import './visual-closure.css';";
-if (!layout.includes(visualClosureImport)) {
-  failures.push('Consolidated visual closure layer is not loaded');
-}
-if (!visualClosure.includes('--state-selected-ink: #214934')) {
-  failures.push('Selected light surfaces must keep a dark readable ink color');
-}
-if (!visualClosure.includes('.main .tab.active') || !visualClosure.includes("[aria-selected='true']")) {
-  failures.push('Selected tab state normalization is missing');
-}
-if (!visualClosure.includes('--state-disabled-bg') || !visualClosure.includes('.main button:disabled')) {
-  failures.push('Intentional disabled-button state is missing');
-}
+if (!layout.includes(visualClosureImport)) failures.push('Consolidated visual closure layer is not loaded');
+if (!visualClosure.includes('--state-selected-ink: #214934')) failures.push('Selected light surfaces must keep a dark readable ink color');
+if (!visualClosure.includes('.main .tab.active') || !visualClosure.includes("[aria-selected='true']")) failures.push('Selected tab state normalization is missing');
+if (!visualClosure.includes('--state-disabled-bg') || !visualClosure.includes('.main button:disabled')) failures.push('Intentional disabled-button state is missing');
 const sidebarStyles = fs.readFileSync(path.join(root, 'app/sidebar.css'), 'utf8');
-if (!sidebarStyles.includes('.sidebar .nav-group-items a.active') || !sidebarStyles.includes('var(--sidebar-active-ink')) {
-  failures.push('Sidebar active state must remain a soft surface with dark text');
-}
-if (!visualClosure.includes('.main[data-route="/reports"] > div > .section:first-child > .tabs .tab.active')) {
-  failures.push('Report-family selected state is not protected from the route-specific cascade');
-}
-if (!visualClosure.includes(':where(input, select, textarea):disabled')) {
-  failures.push('Disabled form-field state normalization is missing');
-}
-if (!visualClosure.includes('.main[data-route="/taxonomy-admin"] .grid-30-70')) {
-  failures.push('Taxonomy Administration must keep its live grid-30-70 layout contract');
-}
+if (!sidebarStyles.includes('.sidebar .nav-group-items a.active') || !sidebarStyles.includes('var(--sidebar-active-ink')) failures.push('Sidebar active state must remain a soft surface with dark text');
+if (!visualClosure.includes('.main[data-route="/reports"] > div > .section:first-child > .tabs .tab.active')) failures.push('Report-family selected state is not protected from the route-specific cascade');
+if (!visualClosure.includes(':where(input, select, textarea):disabled')) failures.push('Disabled form-field state normalization is missing');
+if (!visualClosure.includes('.main[data-route="/taxonomy-admin"] .grid-30-70')) failures.push('Taxonomy Administration must keep its live grid-30-70 layout contract');
+
+const screenshotAudit = fs.readFileSync(path.join(root, 'scripts/comprehensive-screenshot-audit.mjs'), 'utf8');
+if (!screenshotAudit.includes('waitForSettledPage') || !screenshotAudit.includes("status = 'incomplete-loading'")) failures.push('Screenshot audit must reject captures that remain in a loading/access-check state');
+if (!screenshotAudit.includes('requestedUrl') || !screenshotAudit.includes('finalUrl') || !screenshotAudit.includes("status = 'redirected'")) failures.push('Screenshot audit must record requested versus final URL and classify redirects');
+if (!screenshotAudit.includes('isBenignAbortedRequest') || !screenshotAudit.includes('benignAbortedRequests')) failures.push('Screenshot audit must separate benign Next.js aborted prefetches from meaningful request failures');
+if (!screenshotAudit.includes('discoverRepresentativeRoutes') || !screenshotAudit.includes('/api/payroll-periods?limit=1')) failures.push('Screenshot audit must discover a real payroll-period route instead of hard-coding ID 1');
+if (!screenshotAudit.includes('progress.completed') || !screenshotAudit.includes('START')) failures.push('Screenshot audit must emit per-capture progress telemetry');
 
 if (failures.length) {
   console.error('UI contract check failed:\n- ' + failures.join('\n- '));
