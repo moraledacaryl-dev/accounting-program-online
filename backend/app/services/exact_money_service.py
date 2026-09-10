@@ -4,6 +4,7 @@ from decimal import Decimal
 
 from sqlalchemy.orm import Session
 
+from app.core.business_clock import business_today
 from app.models.entities import FinancialAccount, Payable
 from app.services.journal_integrity_service import money
 
@@ -35,7 +36,7 @@ def update_payable_balance_exact(db: Session, payable_id: int) -> Payable:
     if balance_due <= MONEY_TOLERANCE:
         payable.balance_due = ZERO
         payable.status = 'settled'
-        payable.closed_at = payable.closed_at or __import__('app.core.business_clock', fromlist=['business_today']).business_today()
+        payable.closed_at = payable.closed_at or business_today()
     elif amount_paid > ZERO:
         payable.balance_due = balance_due
         payable.status = 'partial'
