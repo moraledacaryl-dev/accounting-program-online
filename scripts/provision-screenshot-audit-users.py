@@ -18,12 +18,31 @@ import shutil
 import subprocess
 import sys
 from urllib.error import HTTPError, URLError
+from urllib.parse import urlsplit
 from urllib.request import Request, urlopen
 
 DEFAULT_BASE_URL = "https://hiddenoasis.app"
 DEFAULT_REPO = "moraledacaryl-dev/accounting-program-online"
 SECRET_NAME = "ACCOUNTING_SCREENSHOT_AUDIT_USERS_JSON"
 SERVICE_ROLE_RE = re.compile(r"(?:^|_)(?:integration|service)(?:_|$)")
+
+
+def resolve_canonical_base_url(base_url: str) -> str:
+    configured = base_url.rstrip('/')
+    request = Request(f"{configured}/api/healthz", headers={"Accept": "application/json"}, method="GET")
+    try:
+        with urlopen(request, timeout=30) as response:
+            final = urlsplit(response.geturl())
+            if not final.scheme or not final.netloc:
+                raise RuntimeError("Health check resolved to an invalid URL.")
+            canonical = f"{final.scheme}://{final.netloc}"
+            if response.status >= 400:
+                raise RuntimeError(f"Health check failed with HTTP {response.status}")
+            return canonical
+    except HTTPError as exc:
+        raise RuntimeError(f"Cannot resolve canonical Accounting host: health check returned HTTP {exc.code}") from None
+    except URLError as exc:
+        raise RuntimeError(f"Cannot reach {configured}: {exc.reason}") from None
 
 
 def api_json(base_url: str, path: str, *, method: str = "GET", token: str | None = None, payload=None):
@@ -140,25 +159,28 @@ def main() -> int:
 
     print("This will create/refresh dedicated audit users in Accounting and rotate their audit-only passwords.")
     print("Passwords remain in memory and are sent directly to the GitHub Actions secret; they are never displayed.")
+    base_url = resolve_canonical_base_url(args.base_url)
+    if base_url != args.base_url.rstrip('/'):
+        print(f"Resolved canonical Accounting host: {base_url}")
     username = input("Existing Accounting owner/admin username: ").strip()
     password = getpass.getpass("Existing Accounting owner/admin password: ")
     if not username or not password:
         raise RuntimeError("Username and password are required.")
 
-    login = api_json(args.base_url, "/api/auth/login", method="POST", payload={"username": username, "password": password})
+    login = api_json(base_url, "/api/auth/login", method="POST", payload={"username": username, "password": password})
     token = str((login or {}).get("access_token") or "")
     if not token:
         raise RuntimeError("Login succeeded without returning an access token.")
 
-    me = api_json(args.base_url, "/api/auth/me", token=token)
+    me = api_json(base_url, "/api/auth/me", token=token)
     permissions = set((me or {}).get("permissions") or [])
     role = str((me or {}).get("role") or "")
     if role not in {"owner", "admin"} and "users.manage" not in permissions:
         raise RuntimeError("The supplied account does not have users.manage permission.")
 
-    roles = active_human_roles(args.base_url, token)
+    roles = active_human_roles(base_url, token)
     print("Active human roles: " + ", ".join(str(role["code"]) for role in roles))
-    matrix, touched = provision(args.base_url, token, roles)
+    matrix, touched = provision(base_url, token, roles)
     set_github_secret(args.repo, matrix)
 
     print(f"\n{SECRET_NAME} was set successfully for {args.repo}.")

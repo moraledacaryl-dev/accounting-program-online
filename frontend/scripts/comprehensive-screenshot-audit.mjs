@@ -2,7 +2,8 @@ import { chromium, request } from '@playwright/test';
 import fs from 'node:fs';
 import path from 'node:path';
 
-const BASE_URL = (process.env.AUDIT_BASE_URL || 'https://hiddenoasis.app').replace(/\/$/, '');
+const CONFIGURED_BASE_URL = (process.env.AUDIT_BASE_URL || 'https://hiddenoasis.app').replace(/\/$/, '');
+let BASE_URL = CONFIGURED_BASE_URL;
 const OUT = path.resolve(process.env.AUDIT_OUTPUT_DIR || 'audit-artifacts/screenshots');
 const USERS = JSON.parse(process.env.AUDIT_USERS_JSON || '{}');
 const VIEWPORTS = { desktop: { width: 1440, height: 1000 }, tablet: { width: 768, height: 1024 }, mobile: { width: 390, height: 844 } };
@@ -25,6 +26,18 @@ const LOCAL_VIEW_STATES = {
   '/dashboard': { group: 'Guest movement', labels: ['Arrivals', 'Departures', 'In-house'] },
   '/cashflow': { group: 'Cash workspace views', labels: ['Cash Overview', 'Cash Ledger', 'Transfers', 'Daily Close & Reconciliation', 'Cash Settings'] },
 };
+
+async function resolveCanonicalBaseUrl() {
+  const api = await request.newContext();
+  const response = await api.get(`${CONFIGURED_BASE_URL}/api/healthz`, { failOnStatusCode: false });
+  if (!response.ok()) {
+    await api.dispose();
+    throw new Error(`Cannot resolve canonical Accounting host: health check returned HTTP ${response.status()}`);
+  }
+  const final = new URL(response.url());
+  await api.dispose();
+  return `${final.protocol}//${final.host}`;
+}
 
 function discoverRoutes() {
   const root = path.resolve('app');
@@ -112,6 +125,8 @@ async function captureRole(browser, roleName, credentials, routes, states) {
 }
 
 fs.mkdirSync(OUT, { recursive: true });
+BASE_URL = await resolveCanonicalBaseUrl();
+if (BASE_URL !== CONFIGURED_BASE_URL) console.log(`Resolved canonical Accounting host: ${BASE_URL}`);
 const routes = discoverRoutes();
 if (!Object.keys(USERS).length) throw new Error('AUDIT_USERS_JSON is required. Provide one real audit account per active human role.');
 const ownerEntry = USERS.owner || USERS.admin;
@@ -130,7 +145,7 @@ const browser = await chromium.launch({ headless: true }); const captures = [];
 for (const role of roleNames) captures.push(...await captureRole(browser, role, USERS[role], routes, STATES));
 await browser.close();
 const baseScreenshots = roleNames.length * routes.length * Object.keys(VIEWPORTS).length * STATES.length;
-const manifest = { generatedAt: new Date().toISOString(), baseUrl: BASE_URL, roles: roleNames, serviceRoles, activeRoleDefinitions: activeRoles, routes, dynamicRouteExpansions: DYNAMIC_ROUTE_EXPANSIONS, localViewStates: LOCAL_VIEW_STATES, viewports: VIEWPORTS, states: STATES, expectedBaseScreenshots: baseScreenshots, actualCaptureRecords: captures.length, captures };
+const manifest = { generatedAt: new Date().toISOString(), configuredBaseUrl: CONFIGURED_BASE_URL, baseUrl: BASE_URL, roles: roleNames, serviceRoles, activeRoleDefinitions: activeRoles, routes, dynamicRouteExpansions: DYNAMIC_ROUTE_EXPANSIONS, localViewStates: LOCAL_VIEW_STATES, viewports: VIEWPORTS, states: STATES, expectedBaseScreenshots: baseScreenshots, actualCaptureRecords: captures.length, captures };
 fs.writeFileSync(path.join(OUT, 'manifest.json'), JSON.stringify(manifest, null, 2));
-fs.writeFileSync(path.join(OUT, 'README.txt'), ['Hidden Oasis Accounting comprehensive screenshot audit', `Generated: ${manifest.generatedAt}`, `Human roles: ${roleNames.join(', ')}`, `Service roles (endpoint-only; no human UI): ${serviceRoles.join(', ') || 'none'}`, `Pages/routes: ${routes.length}`, `Viewports: ${Object.keys(VIEWPORTS).join(', ')}`, `Environment states: ${STATES.join(', ')}`, `Base screenshots: ${baseScreenshots}`, `Capture records including local UI substates: ${captures.length}`, '', 'manifest.json records every capture, local UI state, console error, failed request, route, role, environment state, viewport, active role definition, and dynamic route expansion.'].join('\n'));
-console.log(JSON.stringify({ humanRoles: roleNames.length, serviceRoles: serviceRoles.length, routes: routes.length, states: STATES.length, baseScreenshots, captureRecords: captures.length }, null, 2));
+fs.writeFileSync(path.join(OUT, 'README.txt'), ['Hidden Oasis Accounting comprehensive screenshot audit', `Generated: ${manifest.generatedAt}`, `Canonical base URL: ${manifest.baseUrl}`, `Human roles: ${roleNames.join(', ')}`, `Service roles (endpoint-only; no human UI): ${serviceRoles.join(', ') || 'none'}`, `Pages/routes: ${routes.length}`, `Viewports: ${Object.keys(VIEWPORTS).join(', ')}`, `Environment states: ${STATES.join(', ')}`, `Base screenshots: ${baseScreenshots}`, `Capture records including local UI substates: ${captures.length}`, '', 'manifest.json records every capture, local UI state, console error, failed request, route, role, environment state, viewport, active role definition, and dynamic route expansion.'].join('\n'));
+console.log(JSON.stringify({ configuredBaseUrl: CONFIGURED_BASE_URL, baseUrl: BASE_URL, humanRoles: roleNames.length, serviceRoles: serviceRoles.length, routes: routes.length, states: STATES.length, baseScreenshots, captureRecords: captures.length }, null, 2));
