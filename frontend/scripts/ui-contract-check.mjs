@@ -68,9 +68,10 @@ if (!visualClosure.includes('.main[data-route="/taxonomy-admin"] .grid-30-70')) 
 
 const screenshotAudit = fs.readFileSync(path.join(root, 'scripts/comprehensive-screenshot-audit.mjs'), 'utf8');
 if (!screenshotAudit.includes('waitForSettledPage') || !screenshotAudit.includes("status = 'incomplete-loading'")) failures.push('Screenshot audit must reject captures that remain in a loading/access-check state');
+if (!screenshotAudit.includes('pageReadiness') || !screenshotAudit.includes('MIN_SETTLED_BODY_CHARS') || !screenshotAudit.includes('sparseBody')) failures.push('Screenshot audit must reject blank or shell-only captures as unsettled');
 if (!screenshotAudit.includes('requestedUrl') || !screenshotAudit.includes('finalUrl') || !screenshotAudit.includes("status = 'redirected'")) failures.push('Screenshot audit must record requested versus final URL and classify redirects');
 if (!screenshotAudit.includes('isBenignAbortedRequest') || !screenshotAudit.includes('benignAbortedRequests')) failures.push('Screenshot audit must separate benign Next.js aborted prefetches from meaningful request failures');
-if (!screenshotAudit.includes('discoverRepresentativeRoutes') || !screenshotAudit.includes('/api/payroll-periods?limit=1')) failures.push('Screenshot audit must discover a real payroll-period route instead of hard-coding ID 1');
+if (!screenshotAudit.includes('discoverRepresentativeRoutes') || !screenshotAudit.includes('/api/payroll-periods/?limit=1')) failures.push('Screenshot audit must discover a real payroll-period route instead of hard-coding ID 1');
 if (!screenshotAudit.includes('progress.completed') || !screenshotAudit.includes('START')) failures.push('Screenshot audit must emit per-capture progress telemetry');
 
 if (failures.length) {

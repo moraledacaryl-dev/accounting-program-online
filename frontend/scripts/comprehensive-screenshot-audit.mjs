@@ -12,6 +12,9 @@ const STATIC_SKIP = new Set(['/login']);
 const SERVICE_ROLE = role => /(?:^|_)(?:integration|service)(?:_|$)/.test(role);
 const slug = value => value.replace(/^\//, '').replace(/[^a-zA-Z0-9._-]+/g, '-') || 'root';
 const SETTLE_TIMEOUT_MS = Number(process.env.AUDIT_SETTLE_TIMEOUT_MS || 12_000);
+const MIN_SETTLED_BODY_CHARS = Number(process.env.AUDIT_MIN_SETTLED_BODY_CHARS || 80);
+const SETTLE_POLL_MS = Number(process.env.AUDIT_SETTLE_POLL_MS || 250);
+const REQUIRED_READY_POLLS = 2;
 const LOADING_MARKERS = [
   'Checking access',
   'Loading your permitted work areas',
@@ -79,7 +82,7 @@ async function discoverRoleMatrix(ownerState) {
 async function discoverRepresentativeRoutes(ownerState, routes) {
   const api = await request.newContext({ baseURL: BASE_URL, storageState: ownerState });
   try {
-    const response = await api.get('/api/payroll-periods?limit=1', { failOnStatusCode: false });
+    const response = await api.get('/api/payroll-periods/?limit=1', { failOnStatusCode: false });
     if (response.ok()) {
       const body = await response.json();
       const rows = Array.isArray(body) ? body : Array.isArray(body?.items) ? body.items : [];
@@ -98,19 +101,30 @@ function isBenignAbortedRequest(entry) {
   return url.includes('_rsc=') || url.includes('/_next/static/chunks/');
 }
 
-async function loadingMarkersPresent(page) {
+async function pageReadiness(page) {
   const text = await page.locator('body').innerText().catch(() => '');
-  return LOADING_MARKERS.filter(marker => text.includes(marker));
+  const normalized = text.replace(/\s+/g, ' ').trim();
+  const loadingMarkers = LOADING_MARKERS.filter(marker => normalized.includes(marker));
+  return {
+    loadingMarkers,
+    visibleBodyChars: normalized.length,
+    sparseBody: normalized.length < MIN_SETTLED_BODY_CHARS,
+  };
 }
 
 async function waitForSettledPage(page) {
   const started = Date.now();
-  let markers = await loadingMarkersPresent(page);
-  while (markers.length && Date.now() - started < SETTLE_TIMEOUT_MS) {
-    await page.waitForTimeout(250);
-    markers = await loadingMarkersPresent(page);
+  let readiness = await pageReadiness(page);
+  let readyPolls = 0;
+  while (Date.now() - started < SETTLE_TIMEOUT_MS) {
+    const ready = readiness.loadingMarkers.length === 0 && !readiness.sparseBody;
+    readyPolls = ready ? readyPolls + 1 : 0;
+    if (readyPolls >= REQUIRED_READY_POLLS) break;
+    await page.waitForTimeout(SETTLE_POLL_MS);
+    readiness = await pageReadiness(page);
   }
-  return { settled: markers.length === 0, loadingMarkers: markers, settleMs: Date.now() - started };
+  const settled = readiness.loadingMarkers.length === 0 && !readiness.sparseBody && readyPolls >= REQUIRED_READY_POLLS;
+  return { settled, ...readiness, settleMs: Date.now() - started };
 }
 
 async function saveCapture(page, resultBase, suffix = 'default') {
@@ -130,6 +144,7 @@ async function captureLocalViews(page, resultBase, results) {
     if (!(await button.count())) continue;
     try {
       await button.click({ timeout: 5_000 });
+      await page.waitForTimeout(SETTLE_POLL_MS);
       const settled = await waitForSettledPage(page);
       const screenshot = await saveCapture(page, resultBase, `view-${label}`);
       results.push({ ...resultBase, ...settled, uiState: `view:${label}`, status: settled.settled ? 'ok' : 'incomplete-loading', screenshot });
@@ -169,10 +184,10 @@ async function captureRole(browser, roleName, credentials, routes, states, progr
         else if (redirected) status = 'redirected';
         results.push({ ...base, uiState: 'default', status, error, screenshot });
         await captureLocalViews(page, base, results);
-        console.log(`${prefix} ${status.toUpperCase()} ${Date.now() - started}ms${redirected ? ` -> ${finalRoute}` : ''}`);
+        console.log(`${prefix} ${status.toUpperCase()} ${Date.now() - started}ms${redirected ? ` -> ${finalRoute}` : ''}${settled.sparseBody ? ` sparse=${settled.visibleBodyChars}` : ''}`);
       } catch (e) {
         status = 'capture-error'; error = String(e);
-        results.push({ role: roleName, viewport: viewportName, state, route, requestedUrl: new URL(route, BASE_URL).href, finalUrl: page.url(), finalRoute: null, redirected: false, settled: false, loadingMarkers: [], uiState: 'default', status, error, screenshot, durationMs: Date.now() - started, consoleErrors, failedRequests: failedRequestsRaw.filter(entry => !isBenignAbortedRequest(entry)), benignAbortedRequests: failedRequestsRaw.filter(isBenignAbortedRequest) });
+        results.push({ role: roleName, viewport: viewportName, state, route, requestedUrl: new URL(route, BASE_URL).href, finalUrl: page.url(), finalRoute: null, redirected: false, settled: false, loadingMarkers: [], visibleBodyChars: 0, sparseBody: true, uiState: 'default', status, error, screenshot, durationMs: Date.now() - started, consoleErrors, failedRequests: failedRequestsRaw.filter(entry => !isBenignAbortedRequest(entry)), benignAbortedRequests: failedRequestsRaw.filter(isBenignAbortedRequest) });
         console.log(`${prefix} CAPTURE-ERROR ${Date.now() - started}ms ${error}`);
       }
       await page.close();
@@ -207,5 +222,5 @@ for (const role of roleNames) captures.push(...await captureRole(browser, role, 
 await browser.close();
 const manifest = { generatedAt: new Date().toISOString(), configuredBaseUrl: CONFIGURED_BASE_URL, baseUrl: BASE_URL, roles: roleNames, serviceRoles, activeRoleDefinitions: activeRoles, routes, dynamicRouteExpansions: DYNAMIC_ROUTE_EXPANSIONS, localViewStates: LOCAL_VIEW_STATES, viewports: VIEWPORTS, states: STATES, expectedBaseScreenshots: totalBaseCaptures, actualCaptureRecords: captures.length, captures };
 fs.writeFileSync(path.join(OUT, 'manifest.json'), JSON.stringify(manifest, null, 2));
-fs.writeFileSync(path.join(OUT, 'README.txt'), ['Hidden Oasis Accounting comprehensive screenshot audit', `Generated: ${manifest.generatedAt}`, `Canonical base URL: ${manifest.baseUrl}`, `Human roles: ${roleNames.join(', ')}`, `Service roles (endpoint-only; no human UI): ${serviceRoles.join(', ') || 'none'}`, `Pages/routes: ${routes.length}`, `Viewports: ${Object.keys(VIEWPORTS).join(', ')}`, `Environment states: ${STATES.join(', ')}`, `Base screenshots: ${totalBaseCaptures}`, `Capture records including local UI substates: ${captures.length}`, '', 'manifest.json records requested and final URLs, redirect classification, settled/loading status, console errors, meaningful failed requests, benign aborted Next.js requests, local UI state, role, environment state, viewport, active role definition, and dynamic route expansion.'].join('\n'));
+fs.writeFileSync(path.join(OUT, 'README.txt'), ['Hidden Oasis Accounting comprehensive screenshot audit', `Generated: ${manifest.generatedAt}`, `Canonical base URL: ${manifest.baseUrl}`, `Human roles: ${roleNames.join(', ')}`, `Service roles (endpoint-only; no human UI): ${serviceRoles.join(', ') || 'none'}`, `Pages/routes: ${routes.length}`, `Viewports: ${Object.keys(VIEWPORTS).join(', ')}`, `Environment states: ${STATES.join(', ')}`, `Base screenshots: ${totalBaseCaptures}`, `Capture records including local UI substates: ${captures.length}`, '', 'manifest.json records requested and final URLs, redirect classification, settled/loading status, visible body size/sparse-render status, console errors, meaningful failed requests, benign aborted Next.js requests, local UI state, role, environment state, viewport, active role definition, and dynamic route expansion.'].join('\n'));
 console.log(JSON.stringify({ configuredBaseUrl: CONFIGURED_BASE_URL, baseUrl: BASE_URL, humanRoles: roleNames.length, serviceRoles: serviceRoles.length, routes: routes.length, states: STATES.length, baseScreenshots: totalBaseCaptures, captureRecords: captures.length }, null, 2));
