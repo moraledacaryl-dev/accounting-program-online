@@ -66,12 +66,26 @@ def update_beds24_settings(
     db: Session = Depends(get_db),
     user=Depends(require_permissions('integrations.manage')),
 ):
-    data = _preserve_blank_credentials(payload.model_dump(exclude_unset=True))
+    raw_data = payload.model_dump(exclude_unset=True)
+    reconnect_with_invite = bool(str(raw_data.get('invite_code') or '').strip())
+    data = _preserve_blank_credentials(raw_data)
+    if reconnect_with_invite:
+        # A newly supplied invite code is an explicit reconnect request. Clear only
+        # the stale API token pair so the next connection attempt exchanges the
+        # invite code via /authentication/setup. Other mappings/webhook settings
+        # remain untouched, and ordinary blank credential fields still preserve
+        # their previously stored values.
+        data['access_token'] = ''
+        data['refresh_token'] = ''
     try:
         settings = save_beds24_settings(db, data, updated_by=getattr(user, 'username', None))
         return {
             'settings': _credential_safe_settings(settings),
-            'message': 'Beds24 settings saved.',
+            'message': (
+                'Beds24 reconnect prepared. Old API tokens cleared; click Test Connection to exchange the new invite code.'
+                if reconnect_with_invite
+                else 'Beds24 settings saved.'
+            ),
         }
     except Exception as exc:
         db.rollback()
