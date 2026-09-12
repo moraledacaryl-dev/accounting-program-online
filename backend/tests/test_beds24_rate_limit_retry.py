@@ -6,20 +6,6 @@ import pytest
 from app.services import beds24_service
 
 
-class _FakeResponse:
-    def __init__(self, payload: bytes):
-        self._payload = payload
-
-    def __enter__(self):
-        return self
-
-    def __exit__(self, exc_type, exc, tb):
-        return False
-
-    def read(self):
-        return self._payload
-
-
 def _rate_limit_error(reset_seconds: int = 54) -> HTTPError:
     return HTTPError(
         url='https://beds24.com/api/v2/bookings',
@@ -34,39 +20,8 @@ def _rate_limit_error(reset_seconds: int = 54) -> HTTPError:
     )
 
 
-def test_historical_booking_request_waits_and_retries_after_429(monkeypatch):
+def test_historical_booking_request_fails_fast_with_retry_metadata(monkeypatch):
     calls = {'count': 0}
-    sleeps = []
-
-    def fake_urlopen(_request, timeout):
-        assert timeout == 30
-        calls['count'] += 1
-        if calls['count'] == 1:
-            raise _rate_limit_error(54)
-        return _FakeResponse(b'{"bookings":[]}')
-
-    monkeypatch.setattr(beds24_service, 'urlopen', fake_urlopen)
-    monkeypatch.setattr(beds24_service.time, 'sleep', lambda seconds: sleeps.append(seconds))
-
-    payload = beds24_service._api_get(
-        'https://beds24.com/api/v2',
-        '/bookings',
-        headers={'token': 'test-token'},
-        params={
-            'arrivalFrom': '2025-01-01',
-            'arrivalTo': '2025-01-31',
-            'limit': 99,
-        },
-    )
-
-    assert payload == {'bookings': []}
-    assert calls['count'] == 2
-    assert sleeps == [56]
-
-
-def test_non_historical_request_still_fails_fast_on_429(monkeypatch):
-    calls = {'count': 0}
-    sleeps = []
 
     def fake_urlopen(_request, timeout):
         assert timeout == 30
@@ -74,7 +29,34 @@ def test_non_historical_request_still_fails_fast_on_429(monkeypatch):
         raise _rate_limit_error(54)
 
     monkeypatch.setattr(beds24_service, 'urlopen', fake_urlopen)
-    monkeypatch.setattr(beds24_service.time, 'sleep', lambda seconds: sleeps.append(seconds))
+
+    with pytest.raises(beds24_service.Beds24ApiError) as exc_info:
+        beds24_service._api_get(
+            'https://beds24.com/api/v2',
+            '/bookings',
+            headers={'token': 'test-token'},
+            params={
+                'arrivalFrom': '2025-01-01',
+                'arrivalTo': '2025-01-31',
+                'limit': 99,
+            },
+        )
+
+    assert exc_info.value.status_code == 429
+    assert exc_info.value.retry_after_seconds == 54
+    assert exc_info.value.headers['x-five-min-limit-resets-in'] == '54'
+    assert calls['count'] == 1
+
+
+def test_non_historical_request_fails_fast_on_429(monkeypatch):
+    calls = {'count': 0}
+
+    def fake_urlopen(_request, timeout):
+        assert timeout == 30
+        calls['count'] += 1
+        raise _rate_limit_error(54)
+
+    monkeypatch.setattr(beds24_service, 'urlopen', fake_urlopen)
 
     with pytest.raises(beds24_service.Beds24ApiError) as exc_info:
         beds24_service._api_get(
@@ -87,32 +69,3 @@ def test_non_historical_request_still_fails_fast_on_429(monkeypatch):
     assert exc_info.value.status_code == 429
     assert exc_info.value.retry_after_seconds == 54
     assert calls['count'] == 1
-    assert sleeps == []
-
-
-def test_historical_booking_request_stops_after_bounded_retry_budget(monkeypatch):
-    calls = {'count': 0}
-    sleeps = []
-
-    def fake_urlopen(_request, timeout):
-        assert timeout == 30
-        calls['count'] += 1
-        raise _rate_limit_error(1)
-
-    monkeypatch.setattr(beds24_service, 'urlopen', fake_urlopen)
-    monkeypatch.setattr(beds24_service.time, 'sleep', lambda seconds: sleeps.append(seconds))
-
-    with pytest.raises(beds24_service.Beds24ApiError) as exc_info:
-        beds24_service._api_get(
-            'https://beds24.com/api/v2',
-            '/bookings',
-            headers={'token': 'test-token'},
-            params={
-                'arrivalFrom': '2025-01-01',
-                'arrivalTo': '2025-01-31',
-            },
-        )
-
-    assert exc_info.value.status_code == 429
-    assert calls['count'] == 4
-    assert sleeps == [3, 3, 3]
