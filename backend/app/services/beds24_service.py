@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import json
+import time
 from datetime import datetime
 from typing import Any
 from urllib.error import HTTPError, URLError
@@ -211,57 +212,84 @@ def save_beds24_settings(db: Session, updates: dict[str, Any], *, updated_by: st
 
 
 def _api_get(base_url: str, path: str, *, headers: dict[str, str] | None = None, params: dict[str, Any] | None = None) -> Any:
-    query = urlencode([(k, v) for k, v in (params or {}).items() if v is not None and str(v) != ''], doseq=True)
+    request_params = params or {}
+    query = urlencode([(k, v) for k, v in request_params.items() if v is not None and str(v) != ''], doseq=True)
     url = f'{base_url}{path}'
     if query:
         url = f'{url}?{query}'
-    req = Request(url, method='GET', headers={'accept': 'application/json', **(headers or {})})
-    try:
-        with urlopen(req, timeout=30) as response:
-            raw = response.read().decode('utf-8')
-            if not raw:
-                return {}
-            return json.loads(raw)
-    except HTTPError as exc:
-        response_headers = _normalize_headers(exc.headers)
+
+    # Historical backfills are the one flow expected to span multiple Beds24
+    # five-minute credit windows. Retry only date-ranged booking reads so normal
+    # interactive API actions continue to fail fast when the account is throttled.
+    historical_booking_request = (
+        path == '/bookings'
+        and bool(str(request_params.get('arrivalFrom') or '').strip())
+        and bool(str(request_params.get('arrivalTo') or '').strip())
+    )
+    max_attempts = 4 if historical_booking_request else 1
+
+    for attempt in range(max_attempts):
+        req = Request(url, method='GET', headers={'accept': 'application/json', **(headers or {})})
         try:
-            detail_raw = exc.read().decode('utf-8')
-            detail = json.loads(detail_raw) if detail_raw else None
-        except Exception:
-            detail = None
-        message = f'Beds24 request failed ({exc.code})'
-        if isinstance(detail, dict):
-            detail_message = detail.get('message') or detail.get('detail') or detail.get('error')
-            if detail_message:
-                message = f'{message}: {detail_message}'
-        retry_after = _rate_limit_retry_after(response_headers)
-        if exc.code == 429:
-            message = 'Beds24 rate limit reached (429).'
-            if retry_after:
-                message = f'{message} Wait about {retry_after} seconds before retrying.'
-            remaining = response_headers.get('x-five-min-limit-remaining')
-            reset = response_headers.get('x-five-min-limit-resets-in')
-            request_cost = response_headers.get('x-request-cost')
-            header_bits = []
-            if remaining is not None:
-                header_bits.append(f'remaining credits: {remaining}')
-            if reset is not None:
-                header_bits.append(f'resets in: {reset}s')
-            if request_cost is not None:
-                header_bits.append(f'request cost: {request_cost}')
-            if header_bits:
-                message = f'{message} ({", ".join(header_bits)})'
-        raise Beds24ApiError(
-            message,
-            status_code=exc.code,
-            payload={'detail': detail, 'headers': response_headers},
-            headers=response_headers,
-            retry_after_seconds=retry_after,
-        ) from exc
-    except URLError as exc:
-        raise Beds24ApiError(f'Beds24 connection failed: {exc.reason}') from exc
-    except Exception as exc:
-        raise Beds24ApiError(f'Beds24 request failed: {exc}') from exc
+            with urlopen(req, timeout=30) as response:
+                raw = response.read().decode('utf-8')
+                if not raw:
+                    return {}
+                return json.loads(raw)
+        except HTTPError as exc:
+            response_headers = _normalize_headers(exc.headers)
+            retry_after = _rate_limit_retry_after(response_headers)
+            if (
+                exc.code == 429
+                and historical_booking_request
+                and attempt + 1 < max_attempts
+            ):
+                # Beds24 normally supplies the remaining seconds in the current
+                # five-minute window. Fall back to one minute if the header is
+                # absent, and add a small buffer so the retry lands after reset.
+                wait_seconds = min(max(int(retry_after or 60) + 2, 1), 302)
+                time.sleep(wait_seconds)
+                continue
+
+            try:
+                detail_raw = exc.read().decode('utf-8')
+                detail = json.loads(detail_raw) if detail_raw else None
+            except Exception:
+                detail = None
+            message = f'Beds24 request failed ({exc.code})'
+            if isinstance(detail, dict):
+                detail_message = detail.get('message') or detail.get('detail') or detail.get('error')
+                if detail_message:
+                    message = f'{message}: {detail_message}'
+            if exc.code == 429:
+                message = 'Beds24 rate limit reached (429).'
+                if retry_after:
+                    message = f'{message} Wait about {retry_after} seconds before retrying.'
+                remaining = response_headers.get('x-five-min-limit-remaining')
+                reset = response_headers.get('x-five-min-limit-resets-in')
+                request_cost = response_headers.get('x-request-cost')
+                header_bits = []
+                if remaining is not None:
+                    header_bits.append(f'remaining credits: {remaining}')
+                if reset is not None:
+                    header_bits.append(f'resets in: {reset}s')
+                if request_cost is not None:
+                    header_bits.append(f'request cost: {request_cost}')
+                if header_bits:
+                    message = f'{message} ({", ".join(header_bits)})'
+            raise Beds24ApiError(
+                message,
+                status_code=exc.code,
+                payload={'detail': detail, 'headers': response_headers},
+                headers=response_headers,
+                retry_after_seconds=retry_after,
+            ) from exc
+        except URLError as exc:
+            raise Beds24ApiError(f'Beds24 connection failed: {exc.reason}') from exc
+        except Exception as exc:
+            raise Beds24ApiError(f'Beds24 request failed: {exc}') from exc
+
+    raise Beds24ApiError('Beds24 historical request exhausted its retry budget.')
 
 
 def _extract_token_payload(payload: Any) -> tuple[str, str]:
