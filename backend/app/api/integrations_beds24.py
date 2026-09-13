@@ -14,6 +14,7 @@ from app.schemas.beds24 import (
     Beds24SyncBookingPayload,
     Beds24SyncRecentPayload,
 )
+from app.services.beds24_guest_repair_service import repair_beds24_placeholder_guest_names
 from app.services.beds24_service import Beds24ApiError, load_beds24_settings, save_beds24_settings, test_beds24_connection
 from app.services.beds24_sync_service import (
     list_mapping_helpers,
@@ -112,7 +113,7 @@ def beds24_sync_booking(
     user=Depends(require_permissions('integrations.sync')),
 ):
     try:
-        return sync_booking_by_id(
+        result = sync_booking_by_id(
             db,
             payload.booking_id,
             source_type='manual',
@@ -121,6 +122,11 @@ def beds24_sync_booking(
             replace_mirror=bool(payload.force_resync),
             force_folio_mirror=bool(payload.force_resync),
         )
+        result['guest_name_repair'] = repair_beds24_placeholder_guest_names(
+            db,
+            beds24_booking_ids=[payload.booking_id],
+        )
+        return result
     except Beds24ApiError as exc:
         raise HTTPException(status_code=400, detail=str(exc))
     except ValueError as exc:
@@ -136,12 +142,17 @@ def beds24_rebuild_booking_mirror(
     user=Depends(require_permissions('integrations.manage')),
 ):
     try:
-        return rebuild_booking_mirror_by_id(
+        result = rebuild_booking_mirror_by_id(
             db,
             payload.booking_id,
             include_invoice_items=payload.include_invoice_items,
             triggered_by=getattr(user, 'username', None),
         )
+        result['guest_name_repair'] = repair_beds24_placeholder_guest_names(
+            db,
+            beds24_booking_ids=[payload.booking_id],
+        )
+        return result
     except Beds24ApiError as exc:
         raise HTTPException(status_code=400, detail=str(exc))
     except ValueError as exc:
@@ -157,7 +168,7 @@ def beds24_sync_recent(
     user=Depends(require_permissions('integrations.sync')),
 ):
     try:
-        return sync_recent_bookings(
+        result = sync_recent_bookings(
             db,
             limit=payload.limit,
             status=payload.status,
@@ -166,6 +177,17 @@ def beds24_sync_recent(
             source_type='manual',
             triggered_by=getattr(user, 'username', None),
         )
+        booking_ids = [
+            str(row.get('beds24_booking_id'))
+            for row in result.get('results', [])
+            if row.get('beds24_booking_id')
+        ]
+        if booking_ids:
+            result['guest_name_repair'] = repair_beds24_placeholder_guest_names(
+                db,
+                beds24_booking_ids=booking_ids,
+            )
+        return result
     except Beds24ApiError as exc:
         raise HTTPException(status_code=400, detail=str(exc))
     except ValueError as exc:
@@ -181,7 +203,7 @@ def beds24_sync_backfill(
     user=Depends(require_permissions('integrations.sync')),
 ):
     try:
-        return backfill_bookings_by_date_range(
+        result = backfill_bookings_by_date_range(
             db,
             from_date=payload.from_date,
             to_date=payload.to_date,
@@ -194,6 +216,13 @@ def beds24_sync_backfill(
             source_type='backfill_preview' if payload.dry_run else 'backfill',
             triggered_by=getattr(user, 'username', None),
         )
+        if not payload.dry_run:
+            result['guest_name_repair'] = repair_beds24_placeholder_guest_names(
+                db,
+                from_date=payload.from_date,
+                to_date=payload.to_date,
+            )
+        return result
     except Beds24ApiError as exc:
         raise HTTPException(status_code=400, detail=str(exc))
     except ValueError as exc:
@@ -312,7 +341,14 @@ async def beds24_webhook(
             query_secret=None,
             triggered_by='beds24_webhook',
         )
-        return {'ok': True, 'result': result}
+        booking_ids = [str(value) for value in result.get('booking_ids', []) if value]
+        repair = None
+        if booking_ids:
+            repair = repair_beds24_placeholder_guest_names(
+                db,
+                beds24_booking_ids=booking_ids,
+            )
+        return {'ok': True, 'result': result, 'guest_name_repair': repair}
     except Beds24ApiError as exc:
         raise HTTPException(status_code=400, detail=str(exc))
     except ValueError as exc:
