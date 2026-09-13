@@ -580,11 +580,12 @@ def _resolve_room(db: Session, settings: dict[str, Any], payload: dict[str, Any]
     auto_link_room = bool(settings.get('auto_link_room'))
 
     resolved: Room | None = None
-    local_id = room_map_by_room_id.get(room_id_raw) if room_id_raw else None
-    if local_id:
-        resolved = db.get(Room, int(local_id))
-    if not resolved:
-        local_id = room_map_by_unit_id.get(unit_id_raw) if unit_id_raw else None
+    if room_id_raw:
+        local_id = room_map_by_room_id.get(room_id_raw)
+        if local_id:
+            resolved = db.get(Room, int(local_id))
+    elif unit_id_raw:
+        local_id = room_map_by_unit_id.get(unit_id_raw)
         if local_id:
             resolved = db.get(Room, int(local_id))
 
