@@ -531,6 +531,43 @@ def _update_guest_non_destructive(guest: Guest | None, payload: dict[str, Any]):
         guest.notes = incoming_note
 
 
+
+def _apply_booking_guest_identity(
+    booking: Booking,
+    guest: Guest | None,
+    incoming_guest_name: str | None,
+) -> None:
+    """Apply Beds24 guest identity without destroying verified local identity."""
+    if guest:
+        booking.guest_id = guest.id
+        booking.guest_name = (
+            _norm(guest.full_name)
+            or _norm(incoming_guest_name)
+            or _norm(booking.guest_name)
+            or 'Unnamed Guest'
+        )
+        return
+
+    # A failed/blank Beds24 guest match must never unlink an existing local
+    # guest.  This is especially important for historical bookings repaired
+    # from verified local records when Beds24 no longer exposes the old name.
+    current_name = _norm(booking.guest_name)
+    incoming_name = _norm(incoming_guest_name)
+
+    # Once Accounting contains a genuine local name, keep it authoritative
+    # unless Beds24 resolves to an actual Guest record above.
+    if current_name and not _is_placeholder_guest_name(current_name):
+        return
+
+    # A usable Beds24 name may repair a placeholder booking even when guest
+    # matching/creation is disabled or otherwise cannot resolve a Guest.
+    if incoming_name and not _is_placeholder_guest_name(incoming_name):
+        booking.guest_name = incoming_name
+        return
+
+    if not current_name:
+        booking.guest_name = 'Unnamed Guest'
+
 def _resolve_room(db: Session, settings: dict[str, Any], payload: dict[str, Any]) -> tuple[Room | None, list[str]]:
     warnings: list[str] = []
     room_id_raw = _norm(payload.get('roomId'))
@@ -1305,8 +1342,7 @@ def sync_booking_payload(
     room_name = _norm(booking_payload.get('roomName')) or _norm(booking_payload.get('unitName')) or (room.name if room else booking.room_name)
     local_status = _map_status(booking_payload.get('status'), booking_payload.get('subStatus'), booking_payload.get('statusCode'))
 
-    booking.guest_id = guest.id if guest else None
-    booking.guest_name = guest.full_name if guest else (guest_name or booking.guest_name or 'Unnamed Guest')
+    _apply_booking_guest_identity(booking, guest, guest_name)
     booking.room_id = room.id if room else None
     booking.room_type_id = room.room_type_id if room and room.room_type_id else booking.room_type_id
     booking.channel_id = channel.id if channel else None
