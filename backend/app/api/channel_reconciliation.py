@@ -1,6 +1,5 @@
 from __future__ import annotations
 
-from datetime import date
 from decimal import Decimal, ROUND_HALF_UP
 
 from fastapi import APIRouter, Depends, HTTPException, Query
@@ -20,6 +19,7 @@ CENT = Decimal('0.01')
 
 class PayoutReconcileItem(BaseModel):
     booking_id: int
+    expected_amount: Decimal = Field(ge=0, max_digits=20, decimal_places=4)
     actual_amount: Decimal = Field(ge=0, max_digits=20, decimal_places=4)
 
 
@@ -57,19 +57,11 @@ def _deduction_percent(gross, actual) -> float | None:
 
 
 def _normal_room_rate(booking: Booking) -> Decimal:
-    """Return the normal/rack room value for the stay, falling back safely to booking value."""
+    """Return the fixed standard room rate, falling back safely to the booking value."""
     booking_value = _money(booking.gross_amount)
     rate_plan = getattr(booking, 'rate_plan', None)
-    nightly_rate = _money(getattr(rate_plan, 'base_rate', 0)) if rate_plan else Decimal('0.00')
-    if nightly_rate <= 0:
-        return booking_value
-    try:
-        check_in = date.fromisoformat(str(booking.check_in or '')[:10])
-        check_out = date.fromisoformat(str(booking.check_out or '')[:10])
-        nights = max((check_out - check_in).days, 1)
-    except (TypeError, ValueError):
-        nights = 1
-    return (nightly_rate * nights).quantize(CENT, rounding=ROUND_HALF_UP)
+    fixed_rate = _money(getattr(rate_plan, 'base_rate', 0)) if rate_plan else Decimal('0.00')
+    return fixed_rate if fixed_rate > 0 else booking_value
 
 
 def _booking_ref(booking: Booking) -> str:
@@ -131,9 +123,9 @@ def payout_bookings(
     for booking, channel, link, payout in rows:
         if payout and str(payout.status or '').strip().lower() == 'paid':
             continue
-        expected = _money(booking.gross_amount)
+        expected = _money(payout.gross_amount) if payout else _money(booking.gross_amount)
         original = _normal_room_rate(booking)
-        expected_difference = max(original - expected, Decimal('0.00')).quantize(CENT, rounding=ROUND_HALF_UP)
+        expected_difference = (original - expected).quantize(CENT, rounding=ROUND_HALF_UP)
         expected_difference_rate = (
             (expected_difference / original * Decimal('100')).quantize(Decimal('0.01'), rounding=ROUND_HALF_UP)
             if original > 0 else Decimal('0.00')
@@ -148,7 +140,6 @@ def payout_bookings(
             'booking_status': booking.status,
             'channel_id': channel.id,
             'channel_name': channel.name,
-            # UI semantics: original = normal room/rack value; expected = booked OTA payout/value.
             'original_amount': float(original),
             'expected_net_amount': float(expected),
             'expected_commission_rate': float(expected_difference_rate),
@@ -180,7 +171,7 @@ def reconciliation_history(
         expected = _money(payout.gross_amount)
         original = _normal_room_rate(booking)
         actual = _money(payout.net_amount)
-        display_difference = _deduction_amount(original, actual)
+        display_difference = _deduction_amount(original, expected)
         out.append({
             'id': payout.id,
             'booking_id': booking.id,
@@ -196,7 +187,7 @@ def reconciliation_history(
             'expected_amount': float(expected),
             'actual_amount': float(actual),
             'deduction_amount': float(display_difference),
-            'deduction_percent': _deduction_percent(original, actual),
+            'deduction_percent': _deduction_percent(original, expected),
             'payout_variance_amount': float(_deduction_amount(expected, actual)),
             'actual_payout_date': payout.actual_payout_date,
             'status': payout.status,
@@ -235,14 +226,9 @@ def reconcile_payout_batch(
             if existing and str(existing.status or '').strip().lower() == 'paid':
                 raise ValueError(f'Booking {item.booking_id} is already marked paid by its channel.')
 
-            # Accounting remains based on the booked/expected amount. The room-rate baseline is presentation only;
-            # otherwise a guest/OTA discount would be incorrectly posted as channel commission expense.
-            expected = _money(booking.gross_amount)
-            original = _normal_room_rate(booking)
+            expected = _money(item.expected_amount)
             actual = _money(item.actual_amount)
-            if max(expected, original) >= 0 and actual > max(expected, original):
-                raise ValueError(f'Booking {item.booking_id} payout cannot exceed its expected/original amount.')
-            accounting_deduction = _deduction_amount(expected, actual)
+            accounting_deduction = max(_deduction_amount(expected, actual), Decimal('0.00'))
 
             payout = existing or ChannelPayout()
             payout.channel_id = channel.id
