@@ -10,6 +10,7 @@ from app.api.asset_registry import router as asset_router
 from app.api.master import router as master_router
 from app.api.reservations import router as reservations_router
 from app.api.channel import router as channel_router
+from app.api.channel_reconciliation import router as channel_reconciliation_router
 from app.api.payroll import router as payroll_router
 from app.api.journals import router as journals_router
 from app.api.menu import router as menu_router
@@ -62,6 +63,7 @@ api_router.include_router(asset_router, prefix='/asset-registry', tags=['asset-r
 api_router.include_router(master_router, prefix='/master', tags=['master'])
 api_router.include_router(reservations_router, prefix='/reservations', tags=['reservations'])
 api_router.include_router(channel_router, prefix='/channel', tags=['channel'])
+api_router.include_router(channel_reconciliation_router, prefix='/channel-reconciliation', tags=['channel-reconciliation'])
 api_router.include_router(payroll_router, prefix='/payroll', tags=['payroll'])
 api_router.include_router(journals_router, prefix='/journals', tags=['journals'])
 api_router.include_router(menu_router, prefix='/menu', tags=['menu'])
