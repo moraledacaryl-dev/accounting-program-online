@@ -422,10 +422,19 @@ def _find_guest_normalized_name(db: Session, full_name: str) -> Guest | None:
         .all()
     )
     matches = [row for row in candidates if _canonical_guest_name(row.full_name) == canonical]
-    if not matches:
-        return None
-    matches.sort(key=_guest_sort_key)
-    return matches[0]
+    # Name-only matching must not choose arbitrarily between different Guests.
+    return matches[0] if len(matches) == 1 else None
+
+
+def _guest_matches_incoming_identity(guest: Guest | None, full_name: str, email: str, phones: list[str]) -> bool:
+    if not guest or _canonical_guest_name(guest.full_name) != _canonical_guest_name(full_name):
+        return False
+    if _norm(guest.email) and email and _norm_lower(guest.email) != _norm_lower(email):
+        return False
+    incoming_phones = {_normalize_phone(value) for value in phones if _norm(value)}
+    if _norm(guest.phone) and incoming_phones and _normalize_phone(guest.phone) not in incoming_phones:
+        return False
+    return True
 
 
 def _match_or_create_guest(db: Session, payload: dict[str, Any], *, auto_create_guest: bool) -> tuple[Guest | None, str]:
@@ -434,32 +443,37 @@ def _match_or_create_guest(db: Session, payload: dict[str, Any], *, auto_create_
     mobile = _extract_guest_value(payload, 'mobile', 'guestMobile')
     full_name, _name_strategy = _compose_guest_name(payload)
 
+    # Blank upstream identity cannot establish a new link or enrich a shared
+    # Guest using a booker's contact details. Preserve the booking below.
+    if _is_placeholder_guest_name(full_name):
+        return None, 'skipped_placeholder_guest'
+
     mapped = _find_guest_by_map(db, _beds24_guest_stable_keys(payload))
-    if mapped:
+    if _guest_matches_incoming_identity(mapped, full_name, email, [phone, mobile]):
         return mapped, 'beds24_guest_map'
 
     match = _find_guest_exact_email(db, email)
-    if match:
+    if _guest_matches_incoming_identity(match, full_name, email, [phone, mobile]):
         return match, 'exact_email'
 
     match = _find_guest_exact_phone(db, phone)
-    if match:
+    if _guest_matches_incoming_identity(match, full_name, email, [phone, mobile]):
         return match, 'exact_phone'
 
     match = _find_guest_exact_phone(db, mobile)
-    if match:
+    if _guest_matches_incoming_identity(match, full_name, email, [phone, mobile]):
         return match, 'exact_mobile'
 
     match = _find_guest_name_phone(db, full_name, phone)
-    if match:
+    if _guest_matches_incoming_identity(match, full_name, email, [phone, mobile]):
         return match, 'name_plus_phone'
 
     match = _find_guest_name_email(db, full_name, email)
-    if match:
+    if _guest_matches_incoming_identity(match, full_name, email, [phone, mobile]):
         return match, 'name_plus_email'
 
     match = _find_guest_normalized_name(db, full_name)
-    if match:
+    if _guest_matches_incoming_identity(match, full_name, email, [phone, mobile]):
         return match, 'normalized_name'
 
     if not auto_create_guest:
@@ -537,36 +551,31 @@ def _apply_booking_guest_identity(
     guest: Guest | None,
     incoming_guest_name: str | None,
 ) -> None:
-    """Apply Beds24 guest identity without destroying verified local identity."""
-    if guest:
-        booking.guest_id = guest.id
-        booking.guest_name = (
-            _norm(guest.full_name)
-            or _norm(incoming_guest_name)
-            or _norm(booking.guest_name)
-            or 'Unnamed Guest'
-        )
-        return
+    """Follow named Beds24 identity while preserving local identity on blanks.
 
-    # A failed/blank Beds24 guest match must never unlink an existing local
-    # guest.  This is especially important for historical bookings repaired
-    # from verified local records when Beds24 no longer exposes the old name.
-    current_name = _norm(booking.guest_name)
+    A contact or stable-key match is not sufficient to override a different
+    upstream name: bookers can share contact details across unrelated guests.
+    Never rename a Guest master to make the booking fit such a match.
+    """
     incoming_name = _norm(incoming_guest_name)
-
-    # Once Accounting contains a genuine local name, keep it authoritative
-    # unless Beds24 resolves to an actual Guest record above.
-    if current_name and not _is_placeholder_guest_name(current_name):
+    current_name = _norm(booking.guest_name)
+    if _is_placeholder_guest_name(incoming_name):
+        if not current_name:
+            booking.guest_name = 'Unnamed Guest'
         return
 
-    # A usable Beds24 name may repair a placeholder booking even when guest
-    # matching/creation is disabled or otherwise cannot resolve a Guest.
-    if incoming_name and not _is_placeholder_guest_name(incoming_name):
-        booking.guest_name = incoming_name
-        return
+    canonical = _canonical_guest_name(incoming_name)
+    if guest and _canonical_guest_name(guest.full_name) == canonical:
+        booking.guest = guest
+        booking.guest_id = guest.id
+    elif booking.guest_id is not None:
+        linked = booking.guest
+        if not linked or _canonical_guest_name(linked.full_name) != canonical:
+            booking.guest = None
+            booking.guest_id = None
 
-    if not current_name:
-        booking.guest_name = 'Unnamed Guest'
+    booking.guest_name = incoming_name
+
 
 def _resolve_room(db: Session, settings: dict[str, Any], payload: dict[str, Any]) -> tuple[Room | None, list[str]]:
     warnings: list[str] = []
@@ -1364,7 +1373,7 @@ def sync_booking_payload(
     if not map_row:
         map_row = Beds24BookingMap(beds24_booking_id=beds24_id)
     map_row.local_booking_id = booking.id
-    map_row.local_guest_id = guest.id if guest else None
+    map_row.local_guest_id = booking.guest_id
     map_row.beds24_property_id = _norm(booking_payload.get('propertyId')) or None
     map_row.beds24_room_id = _norm(booking_payload.get('roomId')) or None
     map_row.beds24_room_name = _norm(booking_payload.get('roomName')) or None
