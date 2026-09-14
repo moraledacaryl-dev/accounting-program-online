@@ -29,9 +29,10 @@ function groupHistory(rows) {
   }
   return Array.from(groups.values()).map((group) => ({
     ...group,
-    gross: group.rows.reduce((sum, row) => sum + num(row.gross_amount), 0),
+    original: group.rows.reduce((sum, row) => sum + num(row.gross_amount), 0),
+    expected: group.rows.reduce((sum, row) => sum + num(row.expected_amount), 0),
     actual: group.rows.reduce((sum, row) => sum + num(row.actual_amount), 0),
-    deduction: group.rows.reduce((sum, row) => sum + num(row.deduction_amount), 0),
+    difference: group.rows.reduce((sum, row) => sum + num(row.deduction_amount), 0),
   }));
 }
 
@@ -89,17 +90,26 @@ export default function PayoutsPage() {
 
   const chosen = useMemo(() => rows.filter((row) => selected[row.booking_id]?.checked), [rows, selected]);
   const totals = useMemo(() => {
-    const gross = chosen.reduce((sum, row) => sum + num(row.original_amount), 0);
+    const original = chosen.reduce((sum, row) => sum + num(row.original_amount), 0);
+    const expected = chosen.reduce((sum, row) => sum + num(row.expected_net_amount), 0);
     const actual = chosen.reduce((sum, row) => sum + num(selected[row.booking_id]?.actual), 0);
-    const deduction = gross - actual;
-    return { gross, actual, deduction, rate: gross > 0 ? deduction / gross * 100 : null };
+    const difference = original - actual;
+    const variance = expected - actual;
+    return { original, expected, actual, difference, variance, rate: original > 0 ? difference / original * 100 : null };
   }, [chosen, selected]);
   const expectedTotal = useMemo(() => rows.reduce((sum, row) => sum + num(row.expected_net_amount), 0), [rows]);
+  const originalTotal = useMemo(() => rows.reduce((sum, row) => sum + num(row.original_amount), 0), [rows]);
   const allocationMatches = amountReceived === '' || Math.abs(num(amountReceived) - totals.actual) < 0.005;
-  const completeAmounts = chosen.length > 0 && chosen.every((row) => selected[row.booking_id]?.actual !== '' && num(selected[row.booking_id]?.actual) >= 0 && num(selected[row.booking_id]?.actual) <= num(row.original_amount));
+  const completeAmounts = chosen.length > 0 && chosen.every((row) => selected[row.booking_id]?.actual !== '' && num(selected[row.booking_id]?.actual) >= 0 && num(selected[row.booking_id]?.actual) <= Math.max(num(row.original_amount), num(row.expected_net_amount)));
 
   function toggleRow(row, checked) {
-    setSelected((current) => ({ ...current, [row.booking_id]: { checked, actual: current[row.booking_id]?.actual ?? '' } }));
+    setSelected((current) => ({
+      ...current,
+      [row.booking_id]: {
+        checked,
+        actual: current[row.booking_id]?.actual ?? String(num(row.expected_net_amount).toFixed(2)),
+      },
+    }));
   }
 
   function setActual(row, value) {
@@ -109,7 +119,12 @@ export default function PayoutsPage() {
   function toggleAll(checked) {
     if (!checked) { setSelected({}); return; }
     const next = {};
-    rows.forEach((row) => { next[row.booking_id] = { checked: true, actual: selected[row.booking_id]?.actual ?? '' }; });
+    rows.forEach((row) => {
+      next[row.booking_id] = {
+        checked: true,
+        actual: selected[row.booking_id]?.actual ?? String(num(row.expected_net_amount).toFixed(2)),
+      };
+    });
     setSelected(next);
   }
 
@@ -139,7 +154,6 @@ export default function PayoutsPage() {
   }
 
   const historyGroups = useMemo(() => groupHistory(history), [history]);
-  const selectedChannel = channels.find((row) => String(row.id) === String(channelId));
 
   return (
     <div className="payout-page">
@@ -147,7 +161,7 @@ export default function PayoutsPage() {
         <div className="payout-hero">
           <div className="payout-hero-copy">
             <h1>Channel Payouts</h1>
-            <p className="muted">Reconcile OTA deposits against the bookings they cover. Select unpaid bookings, enter what the channel actually deposited, and Accounting calculates the channel deduction automatically.</p>
+            <p className="muted">Compare the normal room rate with the OTA booking value, then confirm what the channel actually deposited. Expected and actual payout start the same and only differ when the deposit really differs.</p>
           </div>
           <div className="payout-tabs" role="tablist" aria-label="Channel payout views">
             <button type="button" className={`payout-tab ${tab === 'awaiting' ? 'active' : ''}`} onClick={() => setTab('awaiting')}>Awaiting payout</button>
@@ -175,34 +189,35 @@ export default function PayoutsPage() {
           </div>
           <div className="payout-kpis">
             <div className="payout-kpi"><span>Awaiting bookings</span><strong>{rows.length}</strong></div>
-            <div className="payout-kpi"><span>Original booking value</span><strong>{money(rows.reduce((s, r) => s + num(r.original_amount), 0))}</strong></div>
+            <div className="payout-kpi"><span>Normal room rate</span><strong>{money(originalTotal)}</strong></div>
             <div className="payout-kpi"><span>Expected payout</span><strong>{money(expectedTotal)}</strong></div>
-            <div className="payout-kpi"><span>Default deduction</span><strong>{pct(selectedChannel?.default_commission_rate)}</strong></div>
+            <div className="payout-kpi"><span>Difference vs room rate</span><strong>{money(originalTotal - expectedTotal)}</strong></div>
           </div>
         </section>
 
         <section className="section">
           <div className="row wrap" style={{ justifyContent: 'space-between', marginBottom: 8 }}>
-            <div><h2>Bookings awaiting payout</h2><p className="muted small">A booking leaves this queue only after its channel payout is reconciled.</p></div>
+            <div><h2>Bookings awaiting payout</h2><p className="muted small">Actual payout is prefilled from the expected OTA booking value. Change it only when the bank deposit differs.</p></div>
             <button type="button" className="secondary" onClick={() => loadBookings(channelId, search).catch((err) => setError(err.message))}>Refresh</button>
           </div>
           <div className="table-wrap">
             <table className="table payout-table">
-              <thead><tr><th className="select-cell"><input aria-label="Select all bookings" type="checkbox" checked={rows.length > 0 && chosen.length === rows.length} onChange={(e) => toggleAll(e.target.checked)} /></th><th>Booking</th><th>Stay</th><th className="amount">Original</th><th className="amount">Expected</th><th className="amount">Actual payout</th><th className="amount">Channel deduction</th></tr></thead>
+              <thead><tr><th className="select-cell"><input aria-label="Select all bookings" type="checkbox" checked={rows.length > 0 && chosen.length === rows.length} onChange={(e) => toggleAll(e.target.checked)} /></th><th>Booking</th><th>Stay</th><th className="amount">Normal room rate</th><th className="amount">Expected payout</th><th className="amount">Actual payout</th><th className="amount">Difference vs room rate</th></tr></thead>
               <tbody>
                 {rows.map((row) => {
                   const entry = selected[row.booking_id] || {};
                   const actual = entry.actual === '' || entry.actual === undefined ? null : num(entry.actual);
-                  const deduction = actual === null ? null : num(row.original_amount) - actual;
-                  const rate = deduction === null || num(row.original_amount) <= 0 ? null : deduction / num(row.original_amount) * 100;
+                  const difference = actual === null ? num(row.original_amount) - num(row.expected_net_amount) : num(row.original_amount) - actual;
+                  const rate = num(row.original_amount) > 0 ? difference / num(row.original_amount) * 100 : null;
+                  const variance = actual === null ? null : num(row.expected_net_amount) - actual;
                   return <tr key={row.booking_id} className={entry.checked ? 'selected' : ''}>
                     <td className="select-cell"><input aria-label={`Select booking ${row.booking_ref}`} type="checkbox" checked={!!entry.checked} onChange={(e) => toggleRow(row, e.target.checked)} /></td>
                     <td><div className="booking-primary">{row.guest_name || 'Unnamed Guest'}</div><div className="booking-secondary">{row.booking_ref} · {row.room_name || 'Room not set'}</div></td>
                     <td><div>{row.check_in || '—'} → {row.check_out || '—'}</div><div className="booking-secondary">{row.booking_status}</div></td>
                     <td className="amount">{money(row.original_amount)}</td>
-                    <td className="amount"><div>{money(row.expected_net_amount)}</div><div className="payout-rate">less {pct(row.expected_commission_rate)}</div></td>
-                    <td className="amount"><input className="payout-amount-input" type="number" min="0" max={num(row.original_amount)} step="0.01" inputMode="decimal" placeholder="0.00" value={entry.actual ?? ''} onChange={(e) => setActual(row, e.target.value)} /></td>
-                    <td className="amount"><div className="payout-deduction">{deduction === null ? '—' : money(deduction)}</div><div className="payout-rate">{rate === null ? 'Enter actual payout' : `${pct(rate)} less`}</div></td>
+                    <td className="amount"><div>{money(row.expected_net_amount)}</div><div className="payout-rate">{money(row.expected_difference_amount)} below room rate</div></td>
+                    <td className="amount"><input className="payout-amount-input" type="number" min="0" max={Math.max(num(row.original_amount), num(row.expected_net_amount))} step="0.01" inputMode="decimal" placeholder={num(row.expected_net_amount).toFixed(2)} value={entry.actual ?? ''} onChange={(e) => setActual(row, e.target.value)} />{variance !== null && Math.abs(variance) >= 0.005 && <div className="payout-rate">{money(Math.abs(variance))} {variance > 0 ? 'below' : 'above'} expected</div>}</td>
+                    <td className="amount"><div className="payout-deduction">{money(difference)}</div><div className="payout-rate">{rate === null ? '—' : `${pct(rate)} below normal rate`}</div></td>
                   </tr>;
                 })}
                 {!rows.length && <tr><td colSpan="7" className="payout-empty">{loading ? 'Loading channel bookings…' : 'No unpaid bookings for this channel.'}</td></tr>}
@@ -215,14 +230,16 @@ export default function PayoutsPage() {
           <div>
             <div className="payout-summary-values">
               <div><span>Selected</span><strong>{chosen.length} booking{chosen.length === 1 ? '' : 's'}</strong></div>
-              <div><span>Original value</span><strong>{money(totals.gross)}</strong></div>
+              <div><span>Normal room rate</span><strong>{money(totals.original)}</strong></div>
+              <div><span>Expected payout</span><strong>{money(totals.expected)}</strong></div>
               <div><span>Actual payout</span><strong>{money(totals.actual)}</strong></div>
-              <div><span>Channel deduction</span><strong>{money(totals.deduction)} · {pct(totals.rate)}</strong></div>
+              <div><span>Difference vs room rate</span><strong>{money(totals.difference)} · {pct(totals.rate)}</strong></div>
             </div>
             <div className="form-grid" style={{ marginTop: 10 }}>
               <label>Bank payout received (optional cross-check)<input type="number" min="0" step="0.01" inputMode="decimal" value={amountReceived} placeholder={money(totals.actual).replace('₱','').trim()} onChange={(e) => setAmountReceived(e.target.value)} /></label>
               <label>Batch notes<input value={notes} placeholder="Optional note for this payout" onChange={(e) => setNotes(e.target.value)} /></label>
             </div>
+            {Math.abs(totals.variance) >= 0.005 && <div className="payout-match">Actual payout differs from expected by {money(Math.abs(totals.variance))}.</div>}
             {amountReceived !== '' && <div className={`payout-match ${allocationMatches ? 'payout-good' : 'error-text'}`}>{allocationMatches ? '✓ Allocations match the bank payout.' : `${money(Math.abs(num(amountReceived) - totals.actual))} remains ${num(amountReceived) > totals.actual ? 'unallocated' : 'over-allocated'}.`}</div>}
           </div>
           <div className="payout-actions">
@@ -233,11 +250,11 @@ export default function PayoutsPage() {
       </>}
 
       {tab === 'history' && <section className="section">
-        <div style={{ marginBottom: 10 }}><h2>Payout history</h2><p className="muted small">Every reconciled statement keeps its booking-level original amount, actual receipt, and channel deduction.</p></div>
+        <div style={{ marginBottom: 10 }}><h2>Payout history</h2><p className="muted small">History keeps the normal room-rate baseline, expected OTA amount, actual receipt, and resulting difference.</p></div>
         {!historyGroups.length && <div className="payout-empty">No reconciled booking payouts yet.</div>}
         {historyGroups.map((group) => <div className="payout-history-batch" key={group.key}>
-          <div className="payout-history-head"><strong>{group.channel}<br/><span>{group.reference}</span></strong><span>{group.date}</span><span>{group.rows.length} booking{group.rows.length === 1 ? '' : 's'}</span><span>Received<br/><strong>{money(group.actual)}</strong></span><span>Deduction<br/><strong>{money(group.deduction)} · {pct(group.gross > 0 ? group.deduction / group.gross * 100 : null)}</strong></span></div>
-          <div className="payout-history-body table-wrap"><table className="table"><thead><tr><th>Booking</th><th>Guest</th><th>Stay</th><th>Original</th><th>Actual payout</th><th>Deduction</th></tr></thead><tbody>{group.rows.map((row) => <tr key={row.id}><td>{row.booking_ref || `#${row.booking_id}`}</td><td>{row.guest_name || '—'}</td><td>{row.check_in || '—'} → {row.check_out || '—'}</td><td>{money(row.gross_amount)}</td><td>{money(row.actual_amount)}</td><td>{money(row.deduction_amount)} <span className="muted">({pct(row.deduction_percent)})</span></td></tr>)}</tbody></table></div>
+          <div className="payout-history-head"><strong>{group.channel}<br/><span>{group.reference}</span></strong><span>{group.date}</span><span>{group.rows.length} booking{group.rows.length === 1 ? '' : 's'}</span><span>Expected<br/><strong>{money(group.expected)}</strong></span><span>Received<br/><strong>{money(group.actual)}</strong></span></div>
+          <div className="payout-history-body table-wrap"><table className="table"><thead><tr><th>Booking</th><th>Guest</th><th>Stay</th><th>Normal room rate</th><th>Expected payout</th><th>Actual payout</th><th>Difference</th></tr></thead><tbody>{group.rows.map((row) => <tr key={row.id}><td>{row.booking_ref || `#${row.booking_id}`}</td><td>{row.guest_name || '—'}</td><td>{row.check_in || '—'} → {row.check_out || '—'}</td><td>{money(row.gross_amount)}</td><td>{money(row.expected_amount)}</td><td>{money(row.actual_amount)}</td><td>{money(row.deduction_amount)} <span className="muted">({pct(row.deduction_percent)})</span></td></tr>)}</tbody></table></div>
         </div>)}
       </section>}
     </div>
