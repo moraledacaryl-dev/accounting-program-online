@@ -434,32 +434,37 @@ def _match_or_create_guest(db: Session, payload: dict[str, Any], *, auto_create_
     mobile = _extract_guest_value(payload, 'mobile', 'guestMobile')
     full_name, _name_strategy = _compose_guest_name(payload)
 
+    # Blank upstream identity cannot establish a new link or enrich a shared
+    # Guest using a booker's contact details. Preserve the booking below.
+    if _is_placeholder_guest_name(full_name):
+        return None, 'skipped_placeholder_guest'
+
     mapped = _find_guest_by_map(db, _beds24_guest_stable_keys(payload))
-    if mapped:
+    if mapped and _canonical_guest_name(mapped.full_name) == _canonical_guest_name(full_name):
         return mapped, 'beds24_guest_map'
 
     match = _find_guest_exact_email(db, email)
-    if match:
+    if match and _canonical_guest_name(match.full_name) == _canonical_guest_name(full_name):
         return match, 'exact_email'
 
     match = _find_guest_exact_phone(db, phone)
-    if match:
+    if match and _canonical_guest_name(match.full_name) == _canonical_guest_name(full_name):
         return match, 'exact_phone'
 
     match = _find_guest_exact_phone(db, mobile)
-    if match:
+    if match and _canonical_guest_name(match.full_name) == _canonical_guest_name(full_name):
         return match, 'exact_mobile'
 
     match = _find_guest_name_phone(db, full_name, phone)
-    if match:
+    if match and _canonical_guest_name(match.full_name) == _canonical_guest_name(full_name):
         return match, 'name_plus_phone'
 
     match = _find_guest_name_email(db, full_name, email)
-    if match:
+    if match and _canonical_guest_name(match.full_name) == _canonical_guest_name(full_name):
         return match, 'name_plus_email'
 
     match = _find_guest_normalized_name(db, full_name)
-    if match:
+    if match and _canonical_guest_name(match.full_name) == _canonical_guest_name(full_name):
         return match, 'normalized_name'
 
     if not auto_create_guest:
@@ -537,36 +542,31 @@ def _apply_booking_guest_identity(
     guest: Guest | None,
     incoming_guest_name: str | None,
 ) -> None:
-    """Apply Beds24 guest identity without destroying verified local identity."""
-    if guest:
-        booking.guest_id = guest.id
-        booking.guest_name = (
-            _norm(guest.full_name)
-            or _norm(incoming_guest_name)
-            or _norm(booking.guest_name)
-            or 'Unnamed Guest'
-        )
-        return
+    """Follow named Beds24 identity while preserving local identity on blanks.
 
-    # A failed/blank Beds24 guest match must never unlink an existing local
-    # guest.  This is especially important for historical bookings repaired
-    # from verified local records when Beds24 no longer exposes the old name.
-    current_name = _norm(booking.guest_name)
+    A contact or stable-key match is not sufficient to override a different
+    upstream name: bookers can share contact details across unrelated guests.
+    Never rename a Guest master to make the booking fit such a match.
+    """
     incoming_name = _norm(incoming_guest_name)
-
-    # Once Accounting contains a genuine local name, keep it authoritative
-    # unless Beds24 resolves to an actual Guest record above.
-    if current_name and not _is_placeholder_guest_name(current_name):
+    current_name = _norm(booking.guest_name)
+    if _is_placeholder_guest_name(incoming_name):
+        if not current_name:
+            booking.guest_name = 'Unnamed Guest'
         return
 
-    # A usable Beds24 name may repair a placeholder booking even when guest
-    # matching/creation is disabled or otherwise cannot resolve a Guest.
-    if incoming_name and not _is_placeholder_guest_name(incoming_name):
-        booking.guest_name = incoming_name
-        return
+    canonical = _canonical_guest_name(incoming_name)
+    if guest and _canonical_guest_name(guest.full_name) == canonical:
+        booking.guest = guest
+        booking.guest_id = guest.id
+    elif booking.guest_id is not None:
+        linked = booking.guest
+        if not linked or _canonical_guest_name(linked.full_name) != canonical:
+            booking.guest = None
+            booking.guest_id = None
 
-    if not current_name:
-        booking.guest_name = 'Unnamed Guest'
+    booking.guest_name = incoming_name
+
 
 def _resolve_room(db: Session, settings: dict[str, Any], payload: dict[str, Any]) -> tuple[Room | None, list[str]]:
     warnings: list[str] = []
@@ -1364,7 +1364,7 @@ def sync_booking_payload(
     if not map_row:
         map_row = Beds24BookingMap(beds24_booking_id=beds24_id)
     map_row.local_booking_id = booking.id
-    map_row.local_guest_id = guest.id if guest else None
+    map_row.local_guest_id = booking.guest_id
     map_row.beds24_property_id = _norm(booking_payload.get('propertyId')) or None
     map_row.beds24_room_id = _norm(booking_payload.get('roomId')) or None
     map_row.beds24_room_name = _norm(booking_payload.get('roomName')) or None
