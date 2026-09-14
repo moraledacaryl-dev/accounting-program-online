@@ -422,10 +422,19 @@ def _find_guest_normalized_name(db: Session, full_name: str) -> Guest | None:
         .all()
     )
     matches = [row for row in candidates if _canonical_guest_name(row.full_name) == canonical]
-    if not matches:
-        return None
-    matches.sort(key=_guest_sort_key)
-    return matches[0]
+    # Name-only matching must not choose arbitrarily between different Guests.
+    return matches[0] if len(matches) == 1 else None
+
+
+def _guest_matches_incoming_identity(guest: Guest | None, full_name: str, email: str, phones: list[str]) -> bool:
+    if not guest or _canonical_guest_name(guest.full_name) != _canonical_guest_name(full_name):
+        return False
+    if _norm(guest.email) and email and _norm_lower(guest.email) != _norm_lower(email):
+        return False
+    incoming_phones = {_normalize_phone(value) for value in phones if _norm(value)}
+    if _norm(guest.phone) and incoming_phones and _normalize_phone(guest.phone) not in incoming_phones:
+        return False
+    return True
 
 
 def _match_or_create_guest(db: Session, payload: dict[str, Any], *, auto_create_guest: bool) -> tuple[Guest | None, str]:
@@ -440,31 +449,31 @@ def _match_or_create_guest(db: Session, payload: dict[str, Any], *, auto_create_
         return None, 'skipped_placeholder_guest'
 
     mapped = _find_guest_by_map(db, _beds24_guest_stable_keys(payload))
-    if mapped and _canonical_guest_name(mapped.full_name) == _canonical_guest_name(full_name):
+    if _guest_matches_incoming_identity(mapped, full_name, email, [phone, mobile]):
         return mapped, 'beds24_guest_map'
 
     match = _find_guest_exact_email(db, email)
-    if match and _canonical_guest_name(match.full_name) == _canonical_guest_name(full_name):
+    if _guest_matches_incoming_identity(match, full_name, email, [phone, mobile]):
         return match, 'exact_email'
 
     match = _find_guest_exact_phone(db, phone)
-    if match and _canonical_guest_name(match.full_name) == _canonical_guest_name(full_name):
+    if _guest_matches_incoming_identity(match, full_name, email, [phone, mobile]):
         return match, 'exact_phone'
 
     match = _find_guest_exact_phone(db, mobile)
-    if match and _canonical_guest_name(match.full_name) == _canonical_guest_name(full_name):
+    if _guest_matches_incoming_identity(match, full_name, email, [phone, mobile]):
         return match, 'exact_mobile'
 
     match = _find_guest_name_phone(db, full_name, phone)
-    if match and _canonical_guest_name(match.full_name) == _canonical_guest_name(full_name):
+    if _guest_matches_incoming_identity(match, full_name, email, [phone, mobile]):
         return match, 'name_plus_phone'
 
     match = _find_guest_name_email(db, full_name, email)
-    if match and _canonical_guest_name(match.full_name) == _canonical_guest_name(full_name):
+    if _guest_matches_incoming_identity(match, full_name, email, [phone, mobile]):
         return match, 'name_plus_email'
 
     match = _find_guest_normalized_name(db, full_name)
-    if match and _canonical_guest_name(match.full_name) == _canonical_guest_name(full_name):
+    if _guest_matches_incoming_identity(match, full_name, email, [phone, mobile]):
         return match, 'normalized_name'
 
     if not auto_create_guest:

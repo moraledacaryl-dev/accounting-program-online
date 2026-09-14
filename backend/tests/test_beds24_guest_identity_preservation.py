@@ -144,3 +144,19 @@ def test_sync_persists_consistent_booking_and_mapping_without_renaming_shared_gu
             assert booking.guest_id is None
     assert old.full_name == 'Shared Booker'
     assert (other_booking.guest_id, other_booking.guest_name) == (old_id, 'Shared Booker')
+
+
+@pytest.mark.parametrize('field,value', [('email', 'another@example.test'), ('phone', '987654321')])
+def test_same_name_with_conflicting_contact_is_not_linked(db, field, value):
+    candidate = Guest(full_name='Maria Santos', email='maria@example.test', phone='123456789', is_active=True)
+    db.add(candidate)
+    db.flush()
+    guest, _ = _match_or_create_guest(db, {'guestName': 'Maria Santos', field: value}, auto_create_guest=False)
+    assert guest is None
+
+
+def test_ambiguous_name_only_match_is_not_chosen_arbitrarily(db):
+    db.add_all([Guest(full_name='Maria Santos', is_active=True), Guest(full_name='Maria Santos', is_active=True)])
+    db.flush()
+    guest, _ = _match_or_create_guest(db, {'guestName': 'Maria Santos'}, auto_create_guest=False)
+    assert guest is None
