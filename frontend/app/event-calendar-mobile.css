@@ -1,0 +1,20 @@
+@media (max-width: 760px) {
+  .event-calendar-page .event-calendar-layout {
+    display: grid !important;
+    grid-template-columns: minmax(0, 1fr) !important;
+    gap: 12px !important;
+  }
+  .event-calendar-page .event-calendar-shell {
+    display: block !important;
+    overflow-x: auto !important;
+    overscroll-behavior-inline: contain;
+  }
+  .event-calendar-page .event-calendar-weekdays,
+  .event-calendar-page .event-calendar-grid {
+    min-width: 720px;
+  }
+  .event-calendar-page .event-calendar-inspector {
+    display: block !important;
+    position: static !important;
+  }
+}
