@@ -1,273 +1,245 @@
 'use client';
+
+import { useEffect, useMemo, useState } from 'react';
 import { businessDateISO } from '../../lib/businessDate';
-
-import { useEffect, useState } from 'react';
-import { createPayout, fetchPayoutChannelOptions, fetchPayouts, settlePayout, updatePayout } from '../../lib/api';
-import { shouldPreventEnterSubmit } from '../../lib/formBehavior';
+import { fetchPayoutChannelOptions, fetchPayouts, request } from '../../lib/api';
 import { useCurrentUser } from '../../lib/useCurrentUser';
-
-const PAYMENT_METHODS = ['ota_payout', 'bank_transfer', 'cash', 'gcash'];
-
-function todayISO() {
-  return businessDateISO();
-}
+import './channel-payouts.css';
 
 function money(value) {
-  return Number(value || 0).toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+  return Number(value || 0).toLocaleString('en-PH', { style: 'currency', currency: 'PHP', minimumFractionDigits: 2, maximumFractionDigits: 2 });
 }
 
-const EMPTY_FORM = {
-  channel_choice: '',
-  booking_ref: '',
-  gross_amount: '',
-  commission_amount: '',
-  net_amount: '',
-  payment_method: 'ota_payout',
-  auto_post_accounting: true,
-  expected_payout_date: '',
-  actual_payout_date: '',
-  status: 'pending',
-  notes: '',
-};
+function pct(value) {
+  if (value === null || value === undefined || Number.isNaN(Number(value))) return '—';
+  return `${Number(value).toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}%`;
+}
+
+function num(value) {
+  const parsed = Number(value);
+  return Number.isFinite(parsed) ? parsed : 0;
+}
+
+function groupHistory(rows) {
+  const groups = new Map();
+  for (const row of rows.filter((item) => item.booking_id)) {
+    const key = `${row.channel_id || row.channel}|${row.actual_payout_date || ''}|${row.payout_reference || `payout-${row.id}`}`;
+    if (!groups.has(key)) groups.set(key, { key, channel: row.channel_display_name || row.channel || 'Channel', date: row.actual_payout_date || '—', reference: row.payout_reference || `PAYOUT-${row.id}`, rows: [] });
+    groups.get(key).rows.push(row);
+  }
+  return Array.from(groups.values()).map((group) => ({
+    ...group,
+    gross: group.rows.reduce((sum, row) => sum + num(row.gross_amount), 0),
+    actual: group.rows.reduce((sum, row) => sum + num(row.net_amount), 0),
+    deduction: group.rows.reduce((sum, row) => sum + num(row.deduction_amount ?? row.commission_amount), 0),
+  }));
+}
 
 export default function PayoutsPage() {
   const { can } = useCurrentUser();
+  const canReconcile = can('cashflow.money_in') || can('cashflow.money_out') || can('reports.view');
+  const [tab, setTab] = useState('awaiting');
+  const [channels, setChannels] = useState([]);
+  const [channelId, setChannelId] = useState('');
   const [rows, setRows] = useState([]);
-  const [channelOptions, setChannelOptions] = useState([]);
-  const [legacyChannels, setLegacyChannels] = useState([]);
+  const [history, setHistory] = useState([]);
+  const [search, setSearch] = useState('');
+  const [selected, setSelected] = useState({});
+  const [payoutDate, setPayoutDate] = useState(businessDateISO());
+  const [reference, setReference] = useState('');
+  const [amountReceived, setAmountReceived] = useState('');
+  const [notes, setNotes] = useState('');
+  const [loading, setLoading] = useState(true);
+  const [saving, setSaving] = useState(false);
   const [error, setError] = useState('');
   const [notice, setNotice] = useState('');
-  const [editingId, setEditingId] = useState(null);
-  const [form, setForm] = useState({ ...EMPTY_FORM });
 
-  function parseChannelChoice(value) {
-    const selected = String(value || '').trim();
-    if (!selected) return { channel_id: null, channel: null };
-    if (selected.startsWith('id:')) {
-      const parsedId = Number(selected.slice(3));
-      return Number.isFinite(parsedId) && parsedId > 0
-        ? { channel_id: parsedId, channel: null }
-        : { channel_id: null, channel: null };
-    }
-    if (selected.startsWith('legacy:')) {
-      const legacyValue = selected.slice('legacy:'.length).trim();
-      return { channel_id: null, channel: legacyValue || null };
-    }
-    return { channel_id: null, channel: null };
+  async function loadOptions() {
+    const data = await fetchPayoutChannelOptions();
+    const available = Array.isArray(data?.channels) ? data.channels : [];
+    setChannels(available);
+    setChannelId((current) => current || (available[0]?.id ? String(available[0].id) : ''));
   }
 
-  async function load() {
-    const [data, options] = await Promise.all([
-      fetchPayouts(),
-      fetchPayoutChannelOptions(),
-    ]);
-    const payoutRows = Array.isArray(data) ? data : [];
-    const setupChannels = Array.isArray(options?.channels) ? options.channels : [];
-    const legacyFromApi = Array.isArray(options?.legacy_channels) ? options.legacy_channels : [];
-    setRows(payoutRows);
-    setChannelOptions(setupChannels);
+  async function loadHistory() {
+    const data = await fetchPayouts();
+    setHistory(Array.isArray(data) ? data : []);
+  }
 
-    const legacySet = new Set(legacyFromApi.map((value) => String(value || '').trim()).filter(Boolean));
-    for (const row of payoutRows) {
-      const label = String(row?.channel || '').trim();
-      if (!label) continue;
-      if (row?.channel_id) continue;
-      if (setupChannels.some((channel) => String(channel?.name || '').trim().toLowerCase() === label.toLowerCase())) continue;
-      if (setupChannels.some((channel) => String(channel?.code || '').trim().toLowerCase() === label.toLowerCase())) continue;
-      legacySet.add(label);
-    }
-    setLegacyChannels(Array.from(legacySet).sort((a, b) => a.localeCompare(b)));
-
-    setForm((prev) => {
-      if (prev.channel_choice) return prev;
-      if (!setupChannels.length) return prev;
-      return { ...prev, channel_choice: `id:${setupChannels[0].id}` };
-    });
+  async function loadBookings(nextChannelId = channelId, term = search) {
+    if (!nextChannelId) { setRows([]); return; }
+    const params = new URLSearchParams({ channel_id: String(nextChannelId), status: 'awaiting' });
+    if (term.trim()) params.set('search', term.trim());
+    const data = await request(`/channel/payout-bookings?${params.toString()}`);
+    setRows(Array.isArray(data) ? data : []);
   }
 
   useEffect(() => {
-    load().catch((e) => setError(e.message || 'Failed to load payouts.'));
+    setLoading(true);
+    Promise.all([loadOptions(), loadHistory()])
+      .catch((err) => setError(err.message || 'Failed to load channel payouts.'))
+      .finally(() => setLoading(false));
   }, []);
 
-  function resetForm() {
-    setEditingId(null);
-    setForm({
-      ...EMPTY_FORM,
-      channel_choice: channelOptions.length ? `id:${channelOptions[0].id}` : '',
-    });
+  useEffect(() => {
+    if (!channelId) return;
+    setSelected({});
+    loadBookings(channelId, search).catch((err) => setError(err.message || 'Failed to load bookings awaiting payout.'));
+  }, [channelId]);
+
+  const chosen = useMemo(() => rows.filter((row) => selected[row.booking_id]?.checked), [rows, selected]);
+  const totals = useMemo(() => {
+    const gross = chosen.reduce((sum, row) => sum + num(row.original_amount), 0);
+    const actual = chosen.reduce((sum, row) => sum + num(selected[row.booking_id]?.actual), 0);
+    const deduction = gross - actual;
+    return { gross, actual, deduction, rate: gross > 0 ? deduction / gross * 100 : null };
+  }, [chosen, selected]);
+  const expectedTotal = useMemo(() => rows.reduce((sum, row) => sum + num(row.expected_net_amount), 0), [rows]);
+  const allocationMatches = amountReceived === '' || Math.abs(num(amountReceived) - totals.actual) < 0.005;
+  const completeAmounts = chosen.length > 0 && chosen.every((row) => selected[row.booking_id]?.actual !== '' && num(selected[row.booking_id]?.actual) >= 0 && num(selected[row.booking_id]?.actual) <= num(row.original_amount));
+
+  function toggleRow(row, checked) {
+    setSelected((current) => ({ ...current, [row.booking_id]: { checked, actual: current[row.booking_id]?.actual ?? '' } }));
   }
 
-  async function submit(e) {
-    e.preventDefault();
-    setError('');
+  function setActual(row, value) {
+    setSelected((current) => ({ ...current, [row.booking_id]: { checked: true, actual: value } }));
+  }
+
+  function toggleAll(checked) {
+    if (!checked) { setSelected({}); return; }
+    const next = {};
+    rows.forEach((row) => { next[row.booking_id] = { checked: true, actual: selected[row.booking_id]?.actual ?? '' }; });
+    setSelected(next);
+  }
+
+  async function reconcile() {
+    if (!completeAmounts || !allocationMatches || !channelId) return;
+    setSaving(true); setError(''); setNotice('');
     try {
       const payload = {
-        ...form,
-        ...parseChannelChoice(form.channel_choice),
-        gross_amount: Number(form.gross_amount || 0),
-        commission_amount: Number(form.commission_amount || 0),
-        net_amount: Number(form.net_amount || 0),
-        auto_post_accounting: !!form.auto_post_accounting,
-      };
-      delete payload.channel_choice;
-      if (!payload.channel_id && !payload.channel) {
-        setError('Select a booking channel.');
-        return;
-      }
-
-      if (editingId) {
-        await updatePayout(editingId, payload);
-        setNotice(payload.auto_post_accounting ? 'Payout updated with accounting adjustments.' : 'Payout updated.');
-      } else {
-        await createPayout(payload);
-        setNotice(payload.auto_post_accounting ? 'Payout saved and linked to accounting.' : 'Payout saved.');
-      }
-
-      resetForm();
-      await load();
-    } catch (err) {
-      setError(err.message || 'Failed to save payout.');
-    }
-  }
-
-  function isSubmittable() {
-    const gross = Number(form.gross_amount || 0);
-    const net = Number(form.net_amount || 0);
-    return !!form.channel_choice && gross >= 0 && net >= 0;
-  }
-
-  function editRow(row) {
-    const choice = row.channel_id
-      ? `id:${row.channel_id}`
-      : (row.channel ? `legacy:${row.channel}` : (channelOptions.length ? `id:${channelOptions[0].id}` : ''));
-    setEditingId(row.id);
-    setForm({
-      channel_choice: choice,
-      booking_ref: row.booking_ref || '',
-      gross_amount: row.gross_amount ?? '',
-      commission_amount: row.commission_amount ?? '',
-      net_amount: row.net_amount ?? '',
-      payment_method: 'ota_payout',
-      auto_post_accounting: false,
-      expected_payout_date: row.expected_payout_date || '',
-      actual_payout_date: row.actual_payout_date || '',
-      status: row.status || 'pending',
-      notes: row.notes || '',
-    });
-  }
-
-  async function settle(row) {
-    setError('');
-    try {
-      await settlePayout(row.id, {
-        actual_payout_date: todayISO(),
+        channel_id: Number(channelId),
+        actual_payout_date: payoutDate,
+        payout_reference: reference.trim() || null,
+        amount_received: amountReceived === '' ? null : num(amountReceived),
         payment_method: 'bank_transfer',
-        auto_post_accounting: false,
-      });
-      setNotice(`Payout ${row.id} settled and linked to Accounting.`);
-      await load();
+        auto_post_accounting: true,
+        notes: notes.trim() || null,
+        items: chosen.map((row) => ({ booking_id: row.booking_id, actual_amount: num(selected[row.booking_id]?.actual) })),
+      };
+      const result = await request('/channel/payouts/reconcile', { method: 'POST', body: JSON.stringify(payload) });
+      setNotice(`${result.booking_count} booking${result.booking_count === 1 ? '' : 's'} reconciled. ${money(result.allocated_amount)} recorded as channel payout.`);
+      setSelected({}); setReference(''); setAmountReceived(''); setNotes('');
+      await Promise.all([loadBookings(channelId, search), loadHistory()]);
     } catch (err) {
-      setError(err.message || 'Failed to settle payout.');
+      setError(err.message || 'Failed to reconcile payout.');
+    } finally {
+      setSaving(false);
     }
   }
+
+  const historyGroups = useMemo(() => groupHistory(history), [history]);
+  const selectedChannel = channels.find((row) => String(row.id) === String(channelId));
 
   return (
-    <div>
+    <div className="payout-page">
       <section className="section">
-        <h1>Channel Payouts</h1>
-        <p className="muted">Track OTA gross, commission, expected net, actual receipt, and the linked settlement transaction. Settling posts once to Accounting.</p>
-        {!!notice && <p className="success-text">{notice}</p>}
-        {!!error && <p className="error-text">{error}</p>}
+        <div className="payout-hero">
+          <div className="payout-hero-copy">
+            <h1>Channel Payouts</h1>
+            <p className="muted">Reconcile OTA deposits against the bookings they cover. Select unpaid bookings, enter what the channel actually deposited, and Accounting calculates the channel deduction automatically.</p>
+          </div>
+          <div className="payout-tabs" role="tablist" aria-label="Channel payout views">
+            <button type="button" className={`payout-tab ${tab === 'awaiting' ? 'active' : ''}`} onClick={() => setTab('awaiting')}>Awaiting payout</button>
+            <button type="button" className={`payout-tab ${tab === 'history' ? 'active' : ''}`} onClick={() => setTab('history')}>Payout history</button>
+          </div>
+        </div>
+        {!!notice && <p className="success-text" style={{ marginTop: 12 }}>{notice}</p>}
+        {!!error && <p className="error-text" style={{ marginTop: 12 }}>{error}</p>}
       </section>
 
-      <div className="grid">
+      {tab === 'awaiting' && <>
         <section className="section">
-          <h2>{editingId ? `Edit Payout #${editingId}` : 'Add Payout'}</h2>
-          <form onSubmit={submit} onKeyDown={(event) => shouldPreventEnterSubmit(event, isSubmittable)}>
-            <div className="form-grid">
-              <label>Channel
-                <select value={form.channel_choice} onChange={e => setForm(f => ({ ...f, channel_choice: e.target.value }))}>
-                  <option value="">Select channel</option>
-                  {channelOptions.map((row) => (
-                    <option key={`channel-${row.id}`} value={`id:${row.id}`}>
-                      {row.name}{row.code ? ` (${row.code})` : ''}
-                    </option>
-                  ))}
-                  {legacyChannels.map((label) => (
-                    <option key={`legacy-${label}`} value={`legacy:${label}`}>Legacy: {label}</option>
-                  ))}
-                </select>
-              </label>
-              <label>Booking Ref<input value={form.booking_ref} onChange={e => setForm(f => ({ ...f, booking_ref: e.target.value }))} /></label>
-              <label>Gross<input type="number" step="0.01" inputMode="decimal" min="0" value={form.gross_amount} onChange={e => setForm(f => ({ ...f, gross_amount: e.target.value }))} /></label>
-              <label>Commission<input type="number" step="0.01" inputMode="decimal" min="0" value={form.commission_amount} onChange={e => setForm(f => ({ ...f, commission_amount: e.target.value }))} /></label>
-              <label>Net<input type="number" step="0.01" inputMode="decimal" min="0" value={form.net_amount} onChange={e => setForm(f => ({ ...f, net_amount: e.target.value }))} /></label>
-              <label>Payment Method
-                <select value={form.payment_method} onChange={e => setForm(f => ({ ...f, payment_method: e.target.value }))}>
-                  {PAYMENT_METHODS.map(row => <option key={row} value={row}>{row}</option>)}
-                </select>
-              </label>
-              <label>Auto Post Accounting
-                <select value={String(form.auto_post_accounting)} onChange={e => setForm(f => ({ ...f, auto_post_accounting: e.target.value === 'true' }))}>
-                  <option value="false">false</option>
-                  <option value="true">true</option>
-                </select>
-              </label>
-              <label>Expected Payout<input type="date" value={form.expected_payout_date} onChange={e => setForm(f => ({ ...f, expected_payout_date: e.target.value }))} /></label>
-              <label>Actual Payout<input type="date" value={form.actual_payout_date} onChange={e => setForm(f => ({ ...f, actual_payout_date: e.target.value }))} /></label>
-              <label>Status
-                <select value={form.status} onChange={e => setForm(f => ({ ...f, status: e.target.value }))}>
-                  <option value="pending">pending</option>
-                  <option value="scheduled">scheduled</option>
-                  <option value="paid">paid</option>
-                  <option value="cancelled">cancelled</option>
-                </select>
-              </label>
-            </div>
-            <label>Notes<textarea value={form.notes} onChange={e => setForm(f => ({ ...f, notes: e.target.value }))} /></label>
-            <div className="row wrap">
-              {(can('cashflow.money_in') || can('cashflow.money_out') || can('reports.view')) && (
-                <button type="submit" disabled={!isSubmittable()}>{editingId ? 'Update Payout' : 'Save Payout'}</button>
-              )}
-              {editingId && <button type="button" className="secondary" onClick={resetForm}>Cancel Edit</button>}
-            </div>
-          </form>
+          <div className="payout-filter-grid">
+            <label>Booking channel
+              <select value={channelId} onChange={(e) => setChannelId(e.target.value)} disabled={loading}>
+                {!channels.length && <option value="">No active channels</option>}
+                {channels.map((row) => <option key={row.id} value={row.id}>{row.name}{row.code ? ` · ${row.code}` : ''}</option>)}
+              </select>
+            </label>
+            <label>Guest or booking ID
+              <input value={search} placeholder="Search awaiting bookings" onChange={(e) => setSearch(e.target.value)} onKeyDown={(e) => { if (e.key === 'Enter') { e.preventDefault(); loadBookings(channelId, search).catch((err) => setError(err.message)); } }} />
+            </label>
+            <label>Payout date<input type="date" value={payoutDate} onChange={(e) => setPayoutDate(e.target.value)} /></label>
+            <label>Statement / reference<input value={reference} placeholder="Optional" onChange={(e) => setReference(e.target.value)} /></label>
+          </div>
+          <div className="payout-kpis">
+            <div className="payout-kpi"><span>Awaiting bookings</span><strong>{rows.length}</strong></div>
+            <div className="payout-kpi"><span>Original booking value</span><strong>{money(rows.reduce((s, r) => s + num(r.original_amount), 0))}</strong></div>
+            <div className="payout-kpi"><span>Expected payout</span><strong>{money(expectedTotal)}</strong></div>
+            <div className="payout-kpi"><span>Default deduction</span><strong>{pct(selectedChannel?.default_commission_rate)}</strong></div>
+          </div>
         </section>
 
         <section className="section">
-          <h2>Payout List</h2>
-          <table className="table">
-            <thead><tr><th>Channel</th><th>Booking Ref</th><th>Gross</th><th>Commission</th><th>Net</th><th>Status</th><th>Accounting</th><th></th></tr></thead>
-            <tbody>
-              {rows.map(r => (
-                <tr key={r.id}>
-                  <td>{r.channel_display_name || r.channel || '-'}</td>
-                  <td>{r.booking_ref || '-'}</td>
-                  <td>{money(r.gross_amount)}</td>
-                  <td>{money(r.commission_amount)}</td>
-                  <td>{money(r.net_amount)}</td>
-                  <td>{r.status}</td>
-                  <td className="small">
-                    {(r.accounting_links || []).map((link) => (
-                      <div key={link.id}>{link.link_type}: REC-{link.record_id} ({money(link.record_amount)})</div>
-                    ))}
-                    {!(r.accounting_links || []).length && <span className="muted">none</span>}
-                  </td>
-                  <td className="row wrap">
-                    {(can('cashflow.money_in') || can('cashflow.money_out') || can('reports.view')) && (
-                      <button className="secondary" type="button" onClick={() => editRow(r)}>Edit</button>
-                    )}
-                    {(can('cashflow.money_in') || can('cashflow.money_out') || can('reports.view')) && r.status !== 'paid' && (
-                      <button className="secondary" type="button" onClick={() => settle(r)}>Settle</button>
-                    )}
-                  </td>
-                </tr>
-              ))}
-              {!rows.length && <tr><td colSpan="8" className="muted">No payouts yet.</td></tr>}
-            </tbody>
-          </table>
+          <div className="row wrap" style={{ justifyContent: 'space-between', marginBottom: 8 }}>
+            <div><h2>Bookings awaiting payout</h2><p className="muted small">A booking leaves this queue only after its channel payout is reconciled.</p></div>
+            <button type="button" className="secondary" onClick={() => loadBookings(channelId, search).catch((err) => setError(err.message))}>Refresh</button>
+          </div>
+          <div className="table-wrap">
+            <table className="table payout-table">
+              <thead><tr><th className="select-cell"><input aria-label="Select all bookings" type="checkbox" checked={rows.length > 0 && chosen.length === rows.length} onChange={(e) => toggleAll(e.target.checked)} /></th><th>Booking</th><th>Stay</th><th className="amount">Original</th><th className="amount">Expected</th><th className="amount">Actual payout</th><th className="amount">Channel deduction</th></tr></thead>
+              <tbody>
+                {rows.map((row) => {
+                  const entry = selected[row.booking_id] || {};
+                  const actual = entry.actual === '' || entry.actual === undefined ? null : num(entry.actual);
+                  const deduction = actual === null ? null : num(row.original_amount) - actual;
+                  const rate = deduction === null || num(row.original_amount) <= 0 ? null : deduction / num(row.original_amount) * 100;
+                  return <tr key={row.booking_id} className={entry.checked ? 'selected' : ''}>
+                    <td className="select-cell"><input aria-label={`Select booking ${row.booking_ref}`} type="checkbox" checked={!!entry.checked} onChange={(e) => toggleRow(row, e.target.checked)} /></td>
+                    <td><div className="booking-primary">{row.guest_name || 'Unnamed Guest'}</div><div className="booking-secondary">{row.booking_ref} · {row.room_name || 'Room not set'}</div></td>
+                    <td><div>{row.check_in || '—'} → {row.check_out || '—'}</div><div className="booking-secondary">{row.booking_status}</div></td>
+                    <td className="amount">{money(row.original_amount)}</td>
+                    <td className="amount"><div>{money(row.expected_net_amount)}</div><div className="payout-rate">less {pct(row.expected_commission_rate)}</div></td>
+                    <td className="amount"><input className="payout-amount-input" type="number" min="0" max={num(row.original_amount)} step="0.01" inputMode="decimal" placeholder="0.00" value={entry.actual ?? ''} onChange={(e) => setActual(row, e.target.value)} /></td>
+                    <td className="amount"><div className="payout-deduction">{deduction === null ? '—' : money(deduction)}</div><div className="payout-rate">{rate === null ? 'Enter actual payout' : `${pct(rate)} less`}</div></td>
+                  </tr>;
+                })}
+                {!rows.length && <tr><td colSpan="7" className="payout-empty">{loading ? 'Loading channel bookings…' : 'No unpaid bookings for this channel.'}</td></tr>}
+              </tbody>
+            </table>
+          </div>
         </section>
-      </div>
+
+        {chosen.length > 0 && <section className="section payout-summary">
+          <div>
+            <div className="payout-summary-values">
+              <div><span>Selected</span><strong>{chosen.length} booking{chosen.length === 1 ? '' : 's'}</strong></div>
+              <div><span>Original value</span><strong>{money(totals.gross)}</strong></div>
+              <div><span>Actual payout</span><strong>{money(totals.actual)}</strong></div>
+              <div><span>Channel deduction</span><strong>{money(totals.deduction)} · {pct(totals.rate)}</strong></div>
+            </div>
+            <div className="form-grid" style={{ marginTop: 10 }}>
+              <label>Bank payout received (optional cross-check)<input type="number" min="0" step="0.01" inputMode="decimal" value={amountReceived} placeholder={money(totals.actual).replace('₱','').trim()} onChange={(e) => setAmountReceived(e.target.value)} /></label>
+              <label>Batch notes<input value={notes} placeholder="Optional note for this payout" onChange={(e) => setNotes(e.target.value)} /></label>
+            </div>
+            {amountReceived !== '' && <div className={`payout-match ${allocationMatches ? 'payout-good' : 'error-text'}`}>{allocationMatches ? '✓ Allocations match the bank payout.' : `${money(Math.abs(num(amountReceived) - totals.actual))} remains ${num(amountReceived) > totals.actual ? 'unallocated' : 'over-allocated'}.`}</div>}
+          </div>
+          <div className="payout-actions">
+            <button type="button" className="secondary" onClick={() => setSelected({})}>Clear selection</button>
+            <button type="button" disabled={!canReconcile || !completeAmounts || !allocationMatches || saving} onClick={reconcile}>{saving ? 'Recording…' : `Record payout ${money(totals.actual)}`}</button>
+          </div>
+        </section>}
+      </>}
+
+      {tab === 'history' && <section className="section">
+        <div style={{ marginBottom: 10 }}><h2>Payout history</h2><p className="muted small">Every reconciled statement keeps its booking-level gross amount, actual receipt, and channel deduction.</p></div>
+        {!historyGroups.length && <div className="payout-empty">No reconciled booking payouts yet.</div>}
+        {historyGroups.map((group) => <div className="payout-history-batch" key={group.key}>
+          <div className="payout-history-head"><strong>{group.channel}<br/><span>{group.reference}</span></strong><span>{group.date}</span><span>{group.rows.length} booking{group.rows.length === 1 ? '' : 's'}</span><span>Received<br/><strong>{money(group.actual)}</strong></span><span>Deduction<br/><strong>{money(group.deduction)} · {pct(group.gross > 0 ? group.deduction / group.gross * 100 : null)}</strong></span></div>
+          <div className="payout-history-body table-wrap"><table className="table"><thead><tr><th>Booking</th><th>Guest</th><th>Stay</th><th>Original</th><th>Actual payout</th><th>Deduction</th></tr></thead><tbody>{group.rows.map((row) => <tr key={row.id}><td>{row.booking_ref || `#${row.booking_id}`}</td><td>{row.guest_name || '—'}</td><td>{row.check_in || '—'} → {row.check_out || '—'}</td><td>{money(row.gross_amount)}</td><td>{money(row.net_amount)}</td><td>{money(row.deduction_amount ?? row.commission_amount)} <span className="muted">({pct(row.deduction_percent)})</span></td></tr>)}</tbody></table></div>
+        </div>)}
+      </section>}
     </div>
   );
 }
