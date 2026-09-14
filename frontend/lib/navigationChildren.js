@@ -4,6 +4,10 @@ export const navigationChildren = {
     { href: '/bookings', label: 'Bookings' },
     { href: '/bookings/calendar', label: 'Calendar' },
   ],
+  '/events': [
+    { href: '/events', label: 'Events' },
+    { href: '/events/calendar', label: 'Calendar' },
+  ],
   '/room-types': [
     { href: '/room-types', label: 'Room Types' },
     { href: '/rooms', label: 'Rooms' },
