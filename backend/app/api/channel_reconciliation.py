@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+from datetime import date
 from decimal import Decimal, ROUND_HALF_UP
 
 from fastapi import APIRouter, Depends, HTTPException, Query
@@ -53,6 +54,22 @@ def _deduction_percent(gross, actual) -> float | None:
     if original <= 0:
         return None
     return float((_deduction_amount(original, actual) / original * Decimal('100')).quantize(Decimal('0.01'), rounding=ROUND_HALF_UP))
+
+
+def _normal_room_rate(booking: Booking) -> Decimal:
+    """Return the normal/rack room value for the stay, falling back safely to booking value."""
+    booking_value = _money(booking.gross_amount)
+    rate_plan = getattr(booking, 'rate_plan', None)
+    nightly_rate = _money(getattr(rate_plan, 'base_rate', 0)) if rate_plan else Decimal('0.00')
+    if nightly_rate <= 0:
+        return booking_value
+    try:
+        check_in = date.fromisoformat(str(booking.check_in or '')[:10])
+        check_out = date.fromisoformat(str(booking.check_out or '')[:10])
+        nights = max((check_out - check_in).days, 1)
+    except (TypeError, ValueError):
+        nights = 1
+    return (nightly_rate * nights).quantize(CENT, rounding=ROUND_HALF_UP)
 
 
 def _booking_ref(booking: Booking) -> str:
@@ -114,9 +131,13 @@ def payout_bookings(
     for booking, channel, link, payout in rows:
         if payout and str(payout.status or '').strip().lower() == 'paid':
             continue
-        gross = _money(booking.gross_amount)
-        expected_rate = Decimal(str(channel.default_commission_rate or 0))
-        expected_net = (gross * (Decimal('1') - expected_rate / Decimal('100'))).quantize(CENT, rounding=ROUND_HALF_UP)
+        expected = _money(booking.gross_amount)
+        original = _normal_room_rate(booking)
+        expected_difference = max(original - expected, Decimal('0.00')).quantize(CENT, rounding=ROUND_HALF_UP)
+        expected_difference_rate = (
+            (expected_difference / original * Decimal('100')).quantize(Decimal('0.01'), rounding=ROUND_HALF_UP)
+            if original > 0 else Decimal('0.00')
+        )
         out.append({
             'booking_id': booking.id,
             'booking_ref': _booking_ref(booking),
@@ -127,9 +148,11 @@ def payout_bookings(
             'booking_status': booking.status,
             'channel_id': channel.id,
             'channel_name': channel.name,
-            'original_amount': float(gross),
-            'expected_commission_rate': float(expected_rate),
-            'expected_net_amount': float(expected_net),
+            # UI semantics: original = normal room/rack value; expected = booked OTA payout/value.
+            'original_amount': float(original),
+            'expected_net_amount': float(expected),
+            'expected_commission_rate': float(expected_difference_rate),
+            'expected_difference_amount': float(expected_difference),
             'pending_payout_id': payout.id if payout else None,
             'pending_actual_amount': float(_money(payout.net_amount)) if payout else None,
         })
@@ -154,8 +177,10 @@ def reconciliation_history(
     rows = query.order_by(ChannelPayout.actual_payout_date.desc(), ChannelPayout.id.desc()).all()
     out = []
     for link, payout, booking, channel in rows:
-        gross = _money(payout.gross_amount)
+        expected = _money(payout.gross_amount)
+        original = _normal_room_rate(booking)
         actual = _money(payout.net_amount)
+        display_difference = _deduction_amount(original, actual)
         out.append({
             'id': payout.id,
             'booking_id': booking.id,
@@ -167,10 +192,12 @@ def reconciliation_history(
             'channel_id': channel.id,
             'channel_name': channel.name,
             'payout_reference': link.payout_reference,
-            'gross_amount': float(gross),
+            'gross_amount': float(original),
+            'expected_amount': float(expected),
             'actual_amount': float(actual),
-            'deduction_amount': float(_deduction_amount(gross, actual)),
-            'deduction_percent': _deduction_percent(gross, actual),
+            'deduction_amount': float(display_difference),
+            'deduction_percent': _deduction_percent(original, actual),
+            'payout_variance_amount': float(_deduction_amount(expected, actual)),
             'actual_payout_date': payout.actual_payout_date,
             'status': payout.status,
             'notes': payout.notes,
@@ -208,18 +235,21 @@ def reconcile_payout_batch(
             if existing and str(existing.status or '').strip().lower() == 'paid':
                 raise ValueError(f'Booking {item.booking_id} is already marked paid by its channel.')
 
-            gross = _money(booking.gross_amount)
+            # Accounting remains based on the booked/expected amount. The room-rate baseline is presentation only;
+            # otherwise a guest/OTA discount would be incorrectly posted as channel commission expense.
+            expected = _money(booking.gross_amount)
+            original = _normal_room_rate(booking)
             actual = _money(item.actual_amount)
-            if gross >= 0 and actual > gross:
-                raise ValueError(f'Booking {item.booking_id} payout cannot exceed its original amount.')
-            deduction = _deduction_amount(gross, actual)
+            if max(expected, original) >= 0 and actual > max(expected, original):
+                raise ValueError(f'Booking {item.booking_id} payout cannot exceed its expected/original amount.')
+            accounting_deduction = _deduction_amount(expected, actual)
 
             payout = existing or ChannelPayout()
             payout.channel_id = channel.id
             payout.channel = channel.name
             payout.booking_ref = _booking_ref(booking)
-            payout.gross_amount = gross
-            payout.commission_amount = deduction
+            payout.gross_amount = expected
+            payout.commission_amount = accounting_deduction
             payout.net_amount = actual
             payout.actual_payout_date = payload.actual_payout_date
             payout.status = 'paid'
@@ -242,7 +272,7 @@ def reconcile_payout_batch(
                 _post_commission_delta(
                     db,
                     payout,
-                    target_amount=float(deduction),
+                    target_amount=float(accounting_deduction),
                     tx_date=payload.actual_payout_date,
                     payment_method=payload.payment_method,
                     username=getattr(user, 'username', None),
