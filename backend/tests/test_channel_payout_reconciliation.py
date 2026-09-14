@@ -3,7 +3,7 @@ from decimal import Decimal
 import pytest
 from pydantic import ValidationError
 
-from app.api.channel import PayoutReconcileBatch, _deduction_amount, _deduction_percent
+from app.api.channel_reconciliation import PayoutReconcileBatch, _deduction_amount, _deduction_percent
 
 
 def test_channel_deduction_uses_actual_receipt():

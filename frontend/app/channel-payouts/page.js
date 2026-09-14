@@ -2,7 +2,7 @@
 
 import { useEffect, useMemo, useState } from 'react';
 import { businessDateISO } from '../../lib/businessDate';
-import { fetchPayoutChannelOptions, fetchPayouts, request } from '../../lib/api';
+import { request } from '../../lib/api';
 import { useCurrentUser } from '../../lib/useCurrentUser';
 import './channel-payouts.css';
 
@@ -22,16 +22,16 @@ function num(value) {
 
 function groupHistory(rows) {
   const groups = new Map();
-  for (const row of rows.filter((item) => item.booking_id)) {
-    const key = `${row.channel_id || row.channel}|${row.actual_payout_date || ''}|${row.payout_reference || `payout-${row.id}`}`;
-    if (!groups.has(key)) groups.set(key, { key, channel: row.channel_display_name || row.channel || 'Channel', date: row.actual_payout_date || '—', reference: row.payout_reference || `PAYOUT-${row.id}`, rows: [] });
+  for (const row of rows) {
+    const key = `${row.channel_id}|${row.actual_payout_date || ''}|${row.payout_reference || `payout-${row.id}`}`;
+    if (!groups.has(key)) groups.set(key, { key, channel: row.channel_name || 'Channel', date: row.actual_payout_date || '—', reference: row.payout_reference || `PAYOUT-${row.id}`, rows: [] });
     groups.get(key).rows.push(row);
   }
   return Array.from(groups.values()).map((group) => ({
     ...group,
     gross: group.rows.reduce((sum, row) => sum + num(row.gross_amount), 0),
-    actual: group.rows.reduce((sum, row) => sum + num(row.net_amount), 0),
-    deduction: group.rows.reduce((sum, row) => sum + num(row.deduction_amount ?? row.commission_amount), 0),
+    actual: group.rows.reduce((sum, row) => sum + num(row.actual_amount), 0),
+    deduction: group.rows.reduce((sum, row) => sum + num(row.deduction_amount), 0),
   }));
 }
 
@@ -55,22 +55,22 @@ export default function PayoutsPage() {
   const [notice, setNotice] = useState('');
 
   async function loadOptions() {
-    const data = await fetchPayoutChannelOptions();
-    const available = Array.isArray(data?.channels) ? data.channels : [];
+    const data = await request('/channel-reconciliation/channels');
+    const available = Array.isArray(data) ? data : [];
     setChannels(available);
     setChannelId((current) => current || (available[0]?.id ? String(available[0].id) : ''));
   }
 
   async function loadHistory() {
-    const data = await fetchPayouts();
+    const data = await request('/channel-reconciliation/history');
     setHistory(Array.isArray(data) ? data : []);
   }
 
   async function loadBookings(nextChannelId = channelId, term = search) {
     if (!nextChannelId) { setRows([]); return; }
-    const params = new URLSearchParams({ channel_id: String(nextChannelId), status: 'awaiting' });
+    const params = new URLSearchParams({ channel_id: String(nextChannelId) });
     if (term.trim()) params.set('search', term.trim());
-    const data = await request(`/channel/payout-bookings?${params.toString()}`);
+    const data = await request(`/channel-reconciliation/bookings?${params.toString()}`);
     setRows(Array.isArray(data) ? data : []);
   }
 
@@ -127,7 +127,7 @@ export default function PayoutsPage() {
         notes: notes.trim() || null,
         items: chosen.map((row) => ({ booking_id: row.booking_id, actual_amount: num(selected[row.booking_id]?.actual) })),
       };
-      const result = await request('/channel/payouts/reconcile', { method: 'POST', body: JSON.stringify(payload) });
+      const result = await request('/channel-reconciliation/reconcile', { method: 'POST', body: JSON.stringify(payload) });
       setNotice(`${result.booking_count} booking${result.booking_count === 1 ? '' : 's'} reconciled. ${money(result.allocated_amount)} recorded as channel payout.`);
       setSelected({}); setReference(''); setAmountReceived(''); setNotes('');
       await Promise.all([loadBookings(channelId, search), loadHistory()]);
@@ -233,11 +233,11 @@ export default function PayoutsPage() {
       </>}
 
       {tab === 'history' && <section className="section">
-        <div style={{ marginBottom: 10 }}><h2>Payout history</h2><p className="muted small">Every reconciled statement keeps its booking-level gross amount, actual receipt, and channel deduction.</p></div>
+        <div style={{ marginBottom: 10 }}><h2>Payout history</h2><p className="muted small">Every reconciled statement keeps its booking-level original amount, actual receipt, and channel deduction.</p></div>
         {!historyGroups.length && <div className="payout-empty">No reconciled booking payouts yet.</div>}
         {historyGroups.map((group) => <div className="payout-history-batch" key={group.key}>
           <div className="payout-history-head"><strong>{group.channel}<br/><span>{group.reference}</span></strong><span>{group.date}</span><span>{group.rows.length} booking{group.rows.length === 1 ? '' : 's'}</span><span>Received<br/><strong>{money(group.actual)}</strong></span><span>Deduction<br/><strong>{money(group.deduction)} · {pct(group.gross > 0 ? group.deduction / group.gross * 100 : null)}</strong></span></div>
-          <div className="payout-history-body table-wrap"><table className="table"><thead><tr><th>Booking</th><th>Guest</th><th>Stay</th><th>Original</th><th>Actual payout</th><th>Deduction</th></tr></thead><tbody>{group.rows.map((row) => <tr key={row.id}><td>{row.booking_ref || `#${row.booking_id}`}</td><td>{row.guest_name || '—'}</td><td>{row.check_in || '—'} → {row.check_out || '—'}</td><td>{money(row.gross_amount)}</td><td>{money(row.net_amount)}</td><td>{money(row.deduction_amount ?? row.commission_amount)} <span className="muted">({pct(row.deduction_percent)})</span></td></tr>)}</tbody></table></div>
+          <div className="payout-history-body table-wrap"><table className="table"><thead><tr><th>Booking</th><th>Guest</th><th>Stay</th><th>Original</th><th>Actual payout</th><th>Deduction</th></tr></thead><tbody>{group.rows.map((row) => <tr key={row.id}><td>{row.booking_ref || `#${row.booking_id}`}</td><td>{row.guest_name || '—'}</td><td>{row.check_in || '—'} → {row.check_out || '—'}</td><td>{money(row.gross_amount)}</td><td>{money(row.actual_amount)}</td><td>{money(row.deduction_amount)} <span className="muted">({pct(row.deduction_percent)})</span></td></tr>)}</tbody></table></div>
         </div>)}
       </section>}
     </div>
