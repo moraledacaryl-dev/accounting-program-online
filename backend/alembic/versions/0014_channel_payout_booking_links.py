@@ -1,12 +1,12 @@
 """Link channel payouts to bookings for statement reconciliation.
 
-Revision ID: 0014_channel_payout_booking_links
+Revision ID: 0014_payout_booking_links
 Revises: 0013_money_precision
 """
 from alembic import op
 import sqlalchemy as sa
 
-revision = '0014_channel_payout_booking_links'
+revision = '0014_payout_booking_links'
 down_revision = '0013_money_precision'
 branch_labels = None
 depends_on = None
