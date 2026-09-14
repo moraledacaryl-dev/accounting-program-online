@@ -20,7 +20,7 @@ async function fixture(page, permissions = ['*']) {
 const routeGroups = {
   overview: ['/dashboard', '/start-of-day', '/review-inbox', '/approvals', '/'],
   money: ['/cashflow', '/cashflow/ledger', '/cashflow/settings', '/cashflow/money-in', '/cashflow/money-out', '/cashflow/transfers', '/cashflow/daily-cash', '/cashflow/reconciliation', '/cashflow/accounts', '/cashflow/templates', '/cashflow/1', '/treasury'],
-  sales: ['/cashflow/receivables', '/bookings', '/bookings/calendar', '/bookings/1', '/guests', '/guests/1', '/room-folios', '/room-folios/1', '/channel-payouts', '/events'],
+  sales: ['/cashflow/receivables', '/bookings', '/bookings/calendar', '/bookings/1', '/guests', '/guests/1', '/room-folios', '/room-folios/1', '/channel-payouts', '/events', '/events/calendar'],
   purchases: ['/cashflow/payables', '/suppliers', '/purchase-requests', '/purchase-orders', '/receiving'],
   accounting: ['/journals', '/chart-of-accounts', '/account-mapping', '/bir', '/assets', '/reports', '/attachments'],
   integrations: ['/integrations/beds24', '/integrations/payroll', '/restaurant-ops', '/inventory-items', '/inventory-reconciliation', '/stock-movements', '/menu-items', '/menu-categories', '/recipes', '/staff-meals', '/setup-imports', '/employees', '/attendance', '/payroll-periods', '/payroll-periods/1', '/payroll'],
