@@ -37,9 +37,43 @@ set -a
 set +a
 export PATH="$OLD_PATH"
 
+npm_audit_with_network_retry() {
+  local attempt=1
+  local max_attempts=3
+  local output
+  local status
+
+  while true; do
+    set +e
+    output="$(npm audit --omit=dev 2>&1)"
+    status=$?
+    set -e
+    printf '%s\n' "$output"
+
+    if [ "$status" -eq 0 ]; then
+      return 0
+    fi
+
+    # npm audit also exits non-zero for real vulnerability findings. Retry only
+    # failures that clearly indicate the registry/audit endpoint was unreachable.
+    if ! printf '%s\n' "$output" | grep -Eqi 'audit endpoint returned an error|Client network socket disconnected|ECONNRESET|ETIMEDOUT|EAI_AGAIN|ENETUNREACH|ECONNREFUSED|socket hang up'; then
+      return "$status"
+    fi
+
+    if [ "$attempt" -ge "$max_attempts" ]; then
+      echo "npm audit registry/network failure persisted after $max_attempts attempts." >&2
+      return "$status"
+    fi
+
+    echo "Transient npm audit registry/network failure; retrying ($attempt/$max_attempts)..." >&2
+    sleep $((attempt * 5))
+    attempt=$((attempt + 1))
+  done
+}
+
 cd "$RELEASE/frontend"
 npm ci
-npm audit --omit=dev
+npm_audit_with_network_retry
 npm run qa:ui
 rm -rf .next
 npm run build
