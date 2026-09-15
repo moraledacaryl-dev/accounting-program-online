@@ -5,7 +5,8 @@ from types import SimpleNamespace
 import pytest
 from pydantic import ValidationError
 
-from app.api.channel_reconciliation import PayoutReconcileBatch, _deduction_amount, _deduction_percent, _normal_room_rate, _stay_nights
+from app.api.channel_reconciliation import PayoutReconcileBatch, _channel_stay_nights, _deduction_amount, _deduction_percent, _normal_room_rate, _stay_nights
+from app.models.entities import Beds24BookingMap
 
 
 class _RatePlanQuery:
@@ -19,11 +20,25 @@ class _RatePlanQuery:
         return self.plans
 
 
+class _Beds24MapQuery:
+    def __init__(self, mapping):
+        self.mapping = mapping
+
+    def filter(self, *args, **kwargs):
+        return self
+
+    def first(self):
+        return self.mapping
+
+
 class _Db:
-    def __init__(self, plans):
+    def __init__(self, plans, beds24_mapping=None):
         self.plans = plans
+        self.beds24_mapping = beds24_mapping
 
     def query(self, model):
+        if model is Beds24BookingMap:
+            return _Beds24MapQuery(self.beds24_mapping)
         return _RatePlanQuery(self.plans)
 
 
@@ -38,33 +53,54 @@ def test_zero_original_has_no_misleading_percentage():
 
 
 def test_normal_room_rate_uses_room_types_standard_plan_not_booking_ota_plan():
-    booking = SimpleNamespace(gross_amount=2100, room_type_id=4, room_name='Cafe Suite', room=None, check_in='2026-09-15', check_out='2026-09-16', rate_plan=SimpleNamespace(id=99, code='AGODA', name='Agoda Promo', base_rate=2100))
+    booking = SimpleNamespace(id=None, gross_amount=2100, room_type_id=4, room_name='Cafe Suite', room=None, check_in='2026-09-15', check_out='2026-09-16', rate_plan=SimpleNamespace(id=99, code='AGODA', name='Agoda Promo', base_rate=2100))
     plans = [SimpleNamespace(id=99, code='AGODA', name='Agoda Promo', base_rate=2100), SimpleNamespace(id=7, code='STANDARD', name='Standard Flexible', base_rate=2500)]
     assert _normal_room_rate(_Db(plans), booking) == Decimal('2500.00')
 
 
 def test_normal_room_rate_multiplies_standard_plan_by_persisted_string_stay_dates():
-    booking = SimpleNamespace(gross_amount=6300, room_type_id=4, room_name='Cafe Suite', room=None, check_in='2026-09-15', check_out='2026-09-18')
+    booking = SimpleNamespace(id=None, gross_amount=6300, room_type_id=4, room_name='Cafe Suite', room=None, check_in='2026-09-15', check_out='2026-09-18')
     plans = [SimpleNamespace(id=7, code='STANDARD', name='Standard Flexible', base_rate=2500)]
     assert _stay_nights(booking) == 3
     assert _normal_room_rate(_Db(plans), booking) == Decimal('7500.00')
 
 
+def test_channel_stay_nights_uses_beds24_dates_instead_of_later_local_extension():
+    booking = SimpleNamespace(id=42, check_in='2026-09-15', check_out='2026-09-20')
+    mapping = SimpleNamespace(beds24_check_in='2026-09-15', beds24_check_out='2026-09-18')
+    db = _Db([], beds24_mapping=mapping)
+    assert _stay_nights(booking) == 5
+    assert _channel_stay_nights(db, booking) == 3
+
+
+def test_standard_value_excludes_direct_extension_after_agoda_booking():
+    booking = SimpleNamespace(id=42, gross_amount=11300, room_type_id=4, room_name='Cafe Suite', room=None, check_in='2026-09-15', check_out='2026-09-20')
+    mapping = SimpleNamespace(beds24_check_in='2026-09-15', beds24_check_out='2026-09-18')
+    plans = [SimpleNamespace(id=7, code='STANDARD', name='Standard Flexible', base_rate=2500)]
+    assert _normal_room_rate(_Db(plans, beds24_mapping=mapping), booking) == Decimal('7500.00')
+
+
+def test_channel_stay_nights_falls_back_when_beds24_dates_are_missing():
+    booking = SimpleNamespace(id=42, check_in='2026-09-15', check_out='2026-09-20')
+    mapping = SimpleNamespace(beds24_check_in=None, beds24_check_out=None)
+    assert _channel_stay_nights(_Db([], beds24_mapping=mapping), booking) == 5
+
+
 def test_normal_room_rate_accepts_standard_named_plan():
-    booking = SimpleNamespace(gross_amount=2200, room_type_id=4, room_name='Cafe Suite', room=None)
+    booking = SimpleNamespace(id=None, gross_amount=2200, room_type_id=4, room_name='Cafe Suite', room=None)
     plans = [SimpleNamespace(id=7, code='FLEX', name='Standard Flexible', base_rate=2500)]
     assert _normal_room_rate(_Db(plans), booking) == Decimal('2500.00')
 
 
 @pytest.mark.parametrize(('room_name', 'nightly_rate'), [('Cafe Suite', '2500.00'), ('Grandeur', '3500.00'), ('Solace', '4000.00'), ('Twinspire', '3000.00'), ('Skyroom', '3200.00'), ('Sky Room', '3200.00'), ('Perch 1', '4200.00'), ('Perch 2', '4300.00'), ('Crown', '3300.00')])
 def test_normal_room_rate_uses_published_rate_times_stay_nights_when_standard_plan_missing(room_name, nightly_rate):
-    booking = SimpleNamespace(gross_amount=1999, room_type_id=4, room_name=room_name, room=None, check_in='2026-09-15', check_out='2026-09-18')
+    booking = SimpleNamespace(id=None, gross_amount=1999, room_type_id=4, room_name=room_name, room=None, check_in='2026-09-15', check_out='2026-09-18')
     plans = [SimpleNamespace(id=9, code='AGODA', name='Agoda Promo', base_rate=1999)]
     assert _normal_room_rate(_Db(plans), booking) == Decimal(nightly_rate) * 3
 
 
 def test_normal_room_rate_falls_back_to_booking_value_for_unknown_room_without_standard_plan():
-    booking = SimpleNamespace(gross_amount=5400, room_type_id=4, room_name='Unknown Room', room=None, check_in='2026-09-15', check_out='2026-09-18')
+    booking = SimpleNamespace(id=None, gross_amount=5400, room_type_id=4, room_name='Unknown Room', room=None, check_in='2026-09-15', check_out='2026-09-18')
     plans = [SimpleNamespace(id=9, code='AGODA', name='Agoda Promo', base_rate=3000)]
     assert _normal_room_rate(_Db(plans), booking) == Decimal('5400.00')
 

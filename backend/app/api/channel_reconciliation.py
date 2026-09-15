@@ -12,7 +12,7 @@ from app.api.channel import _post_commission_delta, _post_settlement_delta
 from app.api.deps import require_any_permissions
 from app.db.database import get_db
 from app.models.channel_payout_reconciliation import ChannelPayoutBookingLink
-from app.models.entities import Booking, BookingChannel, ChannelPayout, RatePlan
+from app.models.entities import Beds24BookingMap, Booking, BookingChannel, ChannelPayout, RatePlan
 
 router = APIRouter()
 CENT = Decimal('0.01')
@@ -105,19 +105,35 @@ def _stay_date(value) -> date | None:
         return None
 
 
-def _stay_nights(booking: Booking) -> int:
-    """Return chargeable lodging nights from persisted ISO dates, with one night as the safe minimum."""
-    check_in = _stay_date(getattr(booking, 'check_in', None))
-    check_out = _stay_date(getattr(booking, 'check_out', None))
+def _date_range_nights(check_in_value, check_out_value) -> int | None:
+    check_in = _stay_date(check_in_value)
+    check_out = _stay_date(check_out_value)
     if check_in is None or check_out is None:
-        return 1
+        return None
     return max(1, (check_out - check_in).days)
 
 
+def _stay_nights(booking: Booking) -> int:
+    """Return operational lodging nights from the booking, with one night as the safe minimum."""
+    return _date_range_nights(getattr(booking, 'check_in', None), getattr(booking, 'check_out', None)) or 1
+
+
+def _channel_stay_nights(db: Session, booking: Booking) -> int:
+    """Return OTA-booked nights when Beds24 has channel dates; ignore later local stay extensions."""
+    booking_id = getattr(booking, 'id', None)
+    if booking_id:
+        mapping = db.query(Beds24BookingMap).filter(Beds24BookingMap.local_booking_id == booking_id).first()
+        if mapping:
+            mapped_nights = _date_range_nights(mapping.beds24_check_in, mapping.beds24_check_out)
+            if mapped_nights is not None:
+                return mapped_nights
+    return _stay_nights(booking)
+
+
 def _normal_room_rate(db: Session, booking: Booking) -> Decimal:
-    """Return standard nightly rate times stay nights; never use an OTA promo as the baseline."""
+    """Return standard nightly rate times channel-booked nights; never price a later direct extension as OTA."""
     booking_value = _money(booking.gross_amount)
-    nights = Decimal(_stay_nights(booking))
+    nights = Decimal(_channel_stay_nights(db, booking))
     room_type_id = getattr(booking, 'room_type_id', None)
     if not room_type_id:
         room = getattr(booking, 'room', None)
