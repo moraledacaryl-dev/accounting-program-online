@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+from datetime import date, datetime
 from decimal import Decimal, ROUND_HALF_UP
 
 from fastapi import APIRouter, Depends, HTTPException, Query
@@ -90,16 +91,27 @@ def _published_room_rate(booking: Booking) -> Decimal | None:
     return _PUBLISHED_ROOM_RATES.get(room_name)
 
 
+def _stay_date(value) -> date | None:
+    if isinstance(value, datetime):
+        return value.date()
+    if isinstance(value, date):
+        return value
+    text = str(value or '').strip()
+    if not text:
+        return None
+    try:
+        return date.fromisoformat(text[:10])
+    except ValueError:
+        return None
+
+
 def _stay_nights(booking: Booking) -> int:
-    """Return chargeable lodging nights, with one night as the safe minimum."""
-    check_in = getattr(booking, 'check_in', None)
-    check_out = getattr(booking, 'check_out', None)
+    """Return chargeable lodging nights from persisted ISO dates, with one night as the safe minimum."""
+    check_in = _stay_date(getattr(booking, 'check_in', None))
+    check_out = _stay_date(getattr(booking, 'check_out', None))
     if check_in is None or check_out is None:
         return 1
-    try:
-        return max(1, int((check_out - check_in).days))
-    except (AttributeError, TypeError):
-        return 1
+    return max(1, (check_out - check_in).days)
 
 
 def _normal_room_rate(db: Session, booking: Booking) -> Decimal:
