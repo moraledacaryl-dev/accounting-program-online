@@ -90,9 +90,22 @@ def _published_room_rate(booking: Booking) -> Decimal | None:
     return _PUBLISHED_ROOM_RATES.get(room_name)
 
 
+def _stay_nights(booking: Booking) -> int:
+    """Return chargeable lodging nights, with one night as the safe minimum."""
+    check_in = getattr(booking, 'check_in', None)
+    check_out = getattr(booking, 'check_out', None)
+    if check_in is None or check_out is None:
+        return 1
+    try:
+        return max(1, int((check_out - check_in).days))
+    except (AttributeError, TypeError):
+        return 1
+
+
 def _normal_room_rate(db: Session, booking: Booking) -> Decimal:
-    """Return the configured standard plan, then the published room baseline, never an OTA promo plan."""
+    """Return standard nightly rate times stay nights; never use an OTA promo as the baseline."""
     booking_value = _money(booking.gross_amount)
+    nights = Decimal(_stay_nights(booking))
     room_type_id = getattr(booking, 'room_type_id', None)
     if not room_type_id:
         room = getattr(booking, 'room', None)
@@ -108,11 +121,11 @@ def _normal_room_rate(db: Session, booking: Booking) -> Decimal:
         standard_plans = [plan for plan in plans if _standard_plan_rank(plan)[0] < 99 and _money(plan.base_rate) > 0]
         if standard_plans:
             plan = min(standard_plans, key=_standard_plan_rank)
-            return _money(plan.base_rate)
+            return _money(_money(plan.base_rate) * nights)
 
     published_rate = _published_room_rate(booking)
     if published_rate is not None:
-        return _money(published_rate)
+        return _money(published_rate * nights)
     return booking_value
 
 
