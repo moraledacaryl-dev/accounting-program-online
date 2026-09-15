@@ -16,6 +16,17 @@ from app.models.entities import Booking, BookingChannel, ChannelPayout, RatePlan
 router = APIRouter()
 CENT = Decimal('0.01')
 _STANDARD_RATE_NAMES = ('standard', 'normal', 'rack')
+_PUBLISHED_ROOM_RATES = {
+    'cafe suite': Decimal('2500.00'),
+    'grandeur': Decimal('3500.00'),
+    'solace': Decimal('4000.00'),
+    'twinspire': Decimal('3000.00'),
+    'skyroom': Decimal('3200.00'),
+    'sky room': Decimal('3200.00'),
+    'perch 1': Decimal('4200.00'),
+    'perch 2': Decimal('4300.00'),
+    'crown': Decimal('3300.00'),
+}
 
 
 class PayoutReconcileItem(BaseModel):
@@ -71,27 +82,38 @@ def _standard_plan_rank(plan: RatePlan) -> tuple[int, int]:
     return (99, int(getattr(plan, 'id', 0) or 0))
 
 
+def _published_room_rate(booking: Booking) -> Decimal | None:
+    room_name = str(getattr(booking, 'room_name', '') or '').strip().lower()
+    if not room_name:
+        room = getattr(booking, 'room', None)
+        room_name = str(getattr(room, 'name', '') or '').strip().lower() if room else ''
+    return _PUBLISHED_ROOM_RATES.get(room_name)
+
+
 def _normal_room_rate(db: Session, booking: Booking) -> Decimal:
-    """Return the room type's configured Standard/Normal/Rack rate, never the OTA booking plan."""
+    """Return the configured standard plan, then the published room baseline, never an OTA promo plan."""
     booking_value = _money(booking.gross_amount)
     room_type_id = getattr(booking, 'room_type_id', None)
     if not room_type_id:
         room = getattr(booking, 'room', None)
         room_type_id = getattr(room, 'room_type_id', None) if room else None
-    if not room_type_id:
-        return booking_value
 
-    plans = (
-        db.query(RatePlan)
-        .filter(RatePlan.room_type_id == room_type_id)
-        .filter(RatePlan.is_active == True)
-        .all()
-    )
-    standard_plans = [plan for plan in plans if _standard_plan_rank(plan)[0] < 99 and _money(plan.base_rate) > 0]
-    if not standard_plans:
-        return booking_value
-    plan = min(standard_plans, key=_standard_plan_rank)
-    return _money(plan.base_rate)
+    if room_type_id:
+        plans = (
+            db.query(RatePlan)
+            .filter(RatePlan.room_type_id == room_type_id)
+            .filter(RatePlan.is_active == True)
+            .all()
+        )
+        standard_plans = [plan for plan in plans if _standard_plan_rank(plan)[0] < 99 and _money(plan.base_rate) > 0]
+        if standard_plans:
+            plan = min(standard_plans, key=_standard_plan_rank)
+            return _money(plan.base_rate)
+
+    published_rate = _published_room_rate(booking)
+    if published_rate is not None:
+        return _money(published_rate)
+    return booking_value
 
 
 def _booking_ref(booking: Booking) -> str:

@@ -40,6 +40,7 @@ def test_normal_room_rate_uses_room_types_standard_plan_not_booking_ota_plan():
     booking = SimpleNamespace(
         gross_amount=2100,
         room_type_id=4,
+        room_name='Cafe Suite',
         room=None,
         rate_plan=SimpleNamespace(id=99, code='AGODA', name='Agoda Promo', base_rate=2100),
     )
@@ -51,13 +52,33 @@ def test_normal_room_rate_uses_room_types_standard_plan_not_booking_ota_plan():
 
 
 def test_normal_room_rate_accepts_standard_named_plan():
-    booking = SimpleNamespace(gross_amount=2200, room_type_id=4, room=None)
+    booking = SimpleNamespace(gross_amount=2200, room_type_id=4, room_name='Cafe Suite', room=None)
     plans = [SimpleNamespace(id=7, code='FLEX', name='Standard Flexible', base_rate=2500)]
     assert _normal_room_rate(_Db(plans), booking) == Decimal('2500.00')
 
 
-def test_normal_room_rate_falls_back_to_booking_value_without_standard_plan():
-    booking = SimpleNamespace(gross_amount=5400, room_type_id=4, room=None)
+@pytest.mark.parametrize(
+    ('room_name', 'expected'),
+    [
+        ('Cafe Suite', '2500.00'),
+        ('Grandeur', '3500.00'),
+        ('Solace', '4000.00'),
+        ('Twinspire', '3000.00'),
+        ('Skyroom', '3200.00'),
+        ('Sky Room', '3200.00'),
+        ('Perch 1', '4200.00'),
+        ('Perch 2', '4300.00'),
+        ('Crown', '3300.00'),
+    ],
+)
+def test_normal_room_rate_uses_hidden_oasis_published_rate_when_standard_plan_missing(room_name, expected):
+    booking = SimpleNamespace(gross_amount=1999, room_type_id=4, room_name=room_name, room=None)
+    plans = [SimpleNamespace(id=9, code='AGODA', name='Agoda Promo', base_rate=1999)]
+    assert _normal_room_rate(_Db(plans), booking) == Decimal(expected)
+
+
+def test_normal_room_rate_falls_back_to_booking_value_for_unknown_room_without_standard_plan():
+    booking = SimpleNamespace(gross_amount=5400, room_type_id=4, room_name='Unknown Room', room=None)
     plans = [SimpleNamespace(id=9, code='AGODA', name='Agoda Promo', base_rate=3000)]
     assert _normal_room_rate(_Db(plans), booking) == Decimal('5400.00')
 
