@@ -2,6 +2,8 @@ from fastapi import APIRouter, Depends
 from sqlalchemy import and_, func, or_
 from sqlalchemy.orm import Session, selectinload
 
+from app.services.beds24_cancellation_service import ordinary_stay_condition
+
 from app.api.deps import require_permissions
 from app.core.business_clock import business_today
 from app.db.database import get_db
@@ -197,6 +199,7 @@ def summary(db: Session = Depends(get_db), user=Depends(require_permissions('das
             func.count(Booking.id),
             func.coalesce(func.sum(Booking.gross_amount), 0),
         )
+        .filter(ordinary_stay_condition())
         .group_by(Booking.channel)
         .order_by(func.count(Booking.id).desc())
         .limit(8)

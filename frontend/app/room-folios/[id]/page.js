@@ -28,6 +28,8 @@ const LINE_TYPES = [
   'minibar',
   'cafe_room_charge',
   'manual_charge',
+  'cancellation_fee',
+  'nonrefundable_charge',
   'deposit',
   'payment',
   'refund',
@@ -43,6 +45,8 @@ const LINE_LABELS = {
   minibar: 'Mini bar',
   cafe_room_charge: 'Cafe / room service',
   manual_charge: 'Manual charge',
+  cancellation_fee: 'Cancellation fee',
+  nonrefundable_charge: 'Non-refundable retained charge',
   deposit: 'Deposit',
   payment: 'Payment',
   refund: 'Refund',
@@ -297,6 +301,16 @@ export default function RoomFolioDetailPage({ params }) {
         {!!notice && <p className="success-text">{notice}</p>}
         {!!error && <p className="error-text">{error}</p>}
       </section>
+
+      {folio.booking_cancelled && (
+        <section className="card">
+          <h2>Cancelled stay</h2>
+          <p>The ordinary room stay is no longer collectible. Original charges and payment history remain below.</p>
+          <p>Cancelled room amount: ₱{php(folio.cancelled_stay_amount)} · Cancellation / non-refundable charges: ₱{php(folio.cancellation_fees)} · Refunds recorded: ₱{php(folio.refunds)}</p>
+          {Number(folio.unallocated_payments || 0) > 0 && <p>₱{php(folio.unallocated_payments)} remains to be reviewed for refund or documented retention. Cancellation alone does not record a refund or fee.</p>}
+          {Number(folio.synthetic_prepaid_settlement || 0) > 0 && <p>The imported prepaid OTA settlement is not proof of cash received. Confirm actual receipts in Channel Payouts.</p>}
+        </section>
+      )}
 
       <div className="card-grid">
         <section className="card stat-card"><div className="small muted">Charges</div><div className="kpi">{php(folio.charges || 0)}</div></section>

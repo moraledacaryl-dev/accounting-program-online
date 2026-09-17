@@ -1297,6 +1297,13 @@ def sync_booking_payload(
     if not beds24_id:
         raise ValueError('Beds24 booking payload does not contain booking id.')
 
+    # Cancellation must bypass all identity, guest matching and financial mirrors.
+    if _norm_lower(booking_payload.get('status')) in {'cancelled', 'canceled'}:
+        from app.services.beds24_cancellation_service import apply_beds24_cancellation
+        result = apply_beds24_cancellation(db, booking_payload, source_type=source_type)
+        db.commit()
+        return result
+
     settings = load_beds24_settings(db)
     warnings: list[str] = []
     guest_name, guest_name_strategy = _compose_guest_name(booking_payload)
@@ -1496,7 +1503,10 @@ def sync_booking_by_id(
         )
         if not bookings:
             raise ValueError(f'Beds24 booking {booking_id} not found.')
-        row = bookings[0]
+        matches = [row for row in bookings if _extract_booking_id(row) == booking_id]
+        if len(matches) != 1:
+            raise ValueError(f'Expected one exact Beds24 booking {booking_id}.')
+        row = matches[0]
         result = sync_booking_payload(
             db,
             row,
@@ -2227,16 +2237,22 @@ def execute_reset_mode(db: Session, mode: str, *, confirmation: str, triggered_b
 def extract_webhook_booking_ids(payload: Any) -> list[str]:
     found: set[str] = set()
 
-    def walk(node: Any):
+    def walk(node: Any, *, booking_container=True):
         if isinstance(node, dict):
             for key, value in node.items():
-                if key in {'id', 'bookingId', 'booking_id', 'bookId', 'book_id'} and value is not None and str(value).strip():
-                    found.add(str(value).strip())
-                else:
+                normalized = key.replace('_', '').lower()
+                if normalized in {'bookingid', 'bookid'} or (normalized == 'id' and booking_container):
+                    if isinstance(value, (str, int)) and str(value).strip():
+                        found.add(str(value).strip())
+                elif normalized in {'bookingids', 'bookids'} and isinstance(value, list):
+                    found.update(str(item).strip() for item in value if isinstance(item, (str, int)) and str(item).strip())
+                elif normalized in {'booking', 'bookings', 'data', 'payload'}:
                     walk(value)
+                elif isinstance(value, (dict, list)):
+                    walk(value, booking_container=False)
         elif isinstance(node, list):
             for item in node:
-                walk(item)
+                walk(item, booking_container=booking_container)
 
     walk(payload)
     return sorted(found)
@@ -2304,11 +2320,7 @@ def sync_from_webhook(
             'errors': errors,
         }
 
-    # Fallback path: fetch recent full bookings when webhook payload does not carry ids.
-    return sync_recent_bookings(
-        db,
-        limit=25,
-        include_invoice_items=settings.get('include_invoice_items'),
-        source_type='webhook',
-        triggered_by=triggered_by,
-    )
+    # An unidentified event must never resync unrelated reservations.
+    _upsert_sync_log(db, event_type='webhook_missing_booking_id', source_type='webhook',
+                    status='error', message='Webhook missing booking ID; no bookings changed.')
+    raise ValueError('Webhook contains no booking ID. Send bookingId in JSON or form data.')

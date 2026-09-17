@@ -1,5 +1,7 @@
 from __future__ import annotations
 
+from urllib.parse import parse_qs
+
 from fastapi import APIRouter, Depends, HTTPException, Query, Request
 from sqlalchemy.orm import Session
 
@@ -14,7 +16,7 @@ from app.schemas.beds24 import (
     Beds24SyncBookingPayload,
     Beds24SyncRecentPayload,
 )
-from app.services.beds24_cancellation_service import neutralize_cancelled_beds24_bookings
+from app.services.beds24_cancellation_service import neutralize_cancelled_beds24_bookings, refresh_beds24_cancellation
 from app.services.beds24_guest_repair_service import repair_beds24_placeholder_guest_names
 from app.services.beds24_service import Beds24ApiError, load_beds24_settings, save_beds24_settings, test_beds24_connection
 from app.services.beds24_sync_service import (
@@ -86,6 +88,15 @@ def beds24_test_connection(db: Session = Depends(get_db), user=Depends(require_p
         raise HTTPException(status_code=500, detail=str(exc))
 
 
+@router.post('/sync/booking/cancellation')
+def beds24_refresh_cancellation(payload: Beds24SyncBookingPayload, db: Session = Depends(get_db), user=Depends(require_permissions('integrations.sync'))):
+    try:
+        return refresh_beds24_cancellation(db, payload.booking_id)
+    except (Beds24ApiError, ValueError) as exc:
+        db.rollback()
+        raise HTTPException(status_code=400, detail=str(exc))
+
+
 @router.post('/sync/booking')
 def beds24_sync_booking(payload: Beds24SyncBookingPayload, db: Session = Depends(get_db), user=Depends(require_permissions('integrations.sync'))):
     try:
@@ -99,7 +110,8 @@ def beds24_sync_booking(payload: Beds24SyncBookingPayload, db: Session = Depends
             force_folio_mirror=bool(payload.force_resync),
         )
         result['cancellation_cleanup'] = neutralize_cancelled_beds24_bookings(db, beds24_booking_ids=[payload.booking_id])
-        result['guest_name_repair'] = repair_beds24_placeholder_guest_names(db, beds24_booking_ids=[payload.booking_id])
+        if not result.get('status_only'):
+            result['guest_name_repair'] = repair_beds24_placeholder_guest_names(db, beds24_booking_ids=[payload.booking_id])
         return result
     except Beds24ApiError as exc:
         raise HTTPException(status_code=400, detail=str(exc))
@@ -119,7 +131,8 @@ def beds24_rebuild_booking_mirror(payload: Beds24SyncBookingPayload, db: Session
             triggered_by=getattr(user, 'username', None),
         )
         result['cancellation_cleanup'] = neutralize_cancelled_beds24_bookings(db, beds24_booking_ids=[payload.booking_id])
-        result['guest_name_repair'] = repair_beds24_placeholder_guest_names(db, beds24_booking_ids=[payload.booking_id])
+        if not result.get('status_only'):
+            result['guest_name_repair'] = repair_beds24_placeholder_guest_names(db, beds24_booking_ids=[payload.booking_id])
         return result
     except Beds24ApiError as exc:
         raise HTTPException(status_code=400, detail=str(exc))
@@ -243,9 +256,12 @@ async def beds24_webhook(request: Request, db: Session = Depends(get_db)):
     if 'secret' in request.query_params:
         raise HTTPException(status_code=400, detail='Webhook credentials must be sent in a supported request header.')
     try:
-        payload = await request.json()
-    except Exception:
-        payload = {}
+        if request.headers.get('content-type', '').split(';')[0] == 'application/x-www-form-urlencoded':
+            payload = {key: values[-1] for key, values in parse_qs((await request.body()).decode()).items()}
+        else:
+            payload = await request.json()
+    except (ValueError, UnicodeDecodeError):
+        raise HTTPException(status_code=400, detail='Invalid Beds24 webhook payload.')
     try:
         result = sync_from_webhook(
             db,
@@ -259,7 +275,11 @@ async def beds24_webhook(request: Request, db: Session = Depends(get_db)):
         cancellation_cleanup = {'cancelled_bookings_neutralized': 0, 'beds24_folio_lines_removed': 0, 'receivables_closed': 0}
         if booking_ids:
             cancellation_cleanup = neutralize_cancelled_beds24_bookings(db, beds24_booking_ids=booking_ids)
-            repair = repair_beds24_placeholder_guest_names(db, beds24_booking_ids=booking_ids)
+            identity_ids = [str(row['beds24_booking_id']) for row in result.get('results', []) if row.get('beds24_booking_id') and not row.get('status_only')]
+            if identity_ids:
+                repair = repair_beds24_placeholder_guest_names(db, beds24_booking_ids=identity_ids)
+        if result.get('failed'):
+            raise Beds24ApiError('One or more Beds24 bookings could not be processed; retry the event.')
         return {'ok': True, 'result': result, 'cancellation_cleanup': cancellation_cleanup, 'guest_name_repair': repair}
     except Beds24ApiError as exc:
         raise HTTPException(status_code=400, detail=str(exc))

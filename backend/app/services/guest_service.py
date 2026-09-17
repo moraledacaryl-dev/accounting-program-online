@@ -38,6 +38,8 @@ POSITIVE_FOLIO_TYPES = {
     'minibar',
     'cafe_room_charge',
     'manual_charge',
+    'cancellation_fee',
+    'nonrefundable_charge',
 }
 NEGATIVE_FOLIO_TYPES = {'deposit', 'payment', 'refund', 'reversal'}
 
@@ -169,10 +171,19 @@ def folio_balance_summary(folio: BookingFolio) -> dict:
     deposits = 0.0
     refunds = 0.0
     reversals = 0.0
+    room_charges = 0.0
+    cancellation_fees = 0.0
+    synthetic_payments = 0.0
 
     for line in folio.lines or []:
         amount = float(line.amount or 0)
         line_type = (line.line_type or '').strip().lower()
+        if line_type == 'room_charge':
+            room_charges += amount
+        if line_type in {'cancellation_fee', 'nonrefundable_charge'}:
+            cancellation_fees += amount
+        if line_type in {'payment', 'deposit'} and str(line.external_line_key or '').endswith(':prepaid_settlement') and not line.linked_money_transaction_id:
+            synthetic_payments += amount
         if line_type in POSITIVE_FOLIO_TYPES:
             charges += amount
         elif line_type == 'deposit':
@@ -189,8 +200,21 @@ def folio_balance_summary(folio: BookingFolio) -> dict:
         else:
             charges += amount
 
-    balance = charges - payments
+    historical_balance = charges - payments
+    cancelled = bool(folio.booking and str(folio.booking.status or '').lower() in {'cancelled', 'canceled'})
+    actual_net_payments = payments - synthetic_payments
+    collectible_charges = charges - room_charges if cancelled else charges
+    balance = max(collectible_charges - max(actual_net_payments, 0), 0) if cancelled else historical_balance
     return {
+        'booking_cancelled': cancelled,
+        'cancelled_stay_amount': round(room_charges if cancelled else 0, 4),
+        'collectible_charges': round(collectible_charges, 4),
+        'historical_balance': round(historical_balance, 4),
+        'cancellation_fees': round(cancellation_fees, 4),
+        'synthetic_prepaid_settlement': round(synthetic_payments, 4),
+        'actual_net_payments': round(actual_net_payments, 4),
+        'unallocated_payments': round(max(actual_net_payments - collectible_charges, 0), 4) if cancelled else 0,
+
         'charges': round(charges, 4),
         'payments': round(payments, 4),
         'deposits': round(deposits, 4),

@@ -22,7 +22,7 @@ from app.models.entities import (
     StaffMealIngredient,
     StaffMealLog,
 )
-from app.services.guest_service import ensure_booking_folio
+from app.services.guest_service import ensure_booking_folio, folio_balance_summary
 from app.services.restaurant_service import (
     consume_inventory_requirements,
     create_approved_record,
@@ -104,6 +104,8 @@ def _serialize_booking(booking: Booking) -> dict:
         'status': booking.status,
         'check_in': booking.check_in,
         'check_out': booking.check_out,
+        'balance_due': (sum(folio_balance_summary(folio)['balance'] for folio in booking.folios) if _normalize(booking.status) in {'cancelled', 'canceled'} else float(booking.gross_amount or 0) - float(booking.deposit_amount or 0)),
+        'cancelled_stay_balance_due': 0 if _normalize(booking.status) in {'cancelled', 'canceled'} else None,
         'gross_amount': booking.gross_amount,
         'deposit_amount': booking.deposit_amount,
         'breakfast_included': booking.breakfast_included,
