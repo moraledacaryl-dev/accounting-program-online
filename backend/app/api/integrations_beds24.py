@@ -14,6 +14,7 @@ from app.schemas.beds24 import (
     Beds24SyncBookingPayload,
     Beds24SyncRecentPayload,
 )
+from app.services.beds24_cancellation_service import neutralize_cancelled_beds24_bookings
 from app.services.beds24_guest_repair_service import repair_beds24_placeholder_guest_names
 from app.services.beds24_service import Beds24ApiError, load_beds24_settings, save_beds24_settings, test_beds24_connection
 from app.services.beds24_sync_service import (
@@ -52,41 +53,23 @@ def _preserve_blank_credentials(data: dict) -> dict:
 
 
 @router.get('/settings')
-def get_beds24_settings(
-    db: Session = Depends(get_db),
-    user=Depends(require_permissions('integrations.view')),
-):
-    return {
-        'settings': _credential_safe_settings(load_beds24_settings(db)),
-    }
+def get_beds24_settings(db: Session = Depends(get_db), user=Depends(require_permissions('integrations.view'))):
+    return {'settings': _credential_safe_settings(load_beds24_settings(db))}
 
 
 @router.put('/settings')
-def update_beds24_settings(
-    payload: Beds24SettingsUpdate,
-    db: Session = Depends(get_db),
-    user=Depends(require_permissions('integrations.manage')),
-):
+def update_beds24_settings(payload: Beds24SettingsUpdate, db: Session = Depends(get_db), user=Depends(require_permissions('integrations.manage'))):
     raw_data = payload.model_dump(exclude_unset=True)
     reconnect_with_invite = bool(str(raw_data.get('invite_code') or '').strip())
     data = _preserve_blank_credentials(raw_data)
     if reconnect_with_invite:
-        # A newly supplied invite code is an explicit reconnect request. Clear only
-        # the stale API token pair so the next connection attempt exchanges the
-        # invite code via /authentication/setup. Other mappings/webhook settings
-        # remain untouched, and ordinary blank credential fields still preserve
-        # their previously stored values.
         data['access_token'] = ''
         data['refresh_token'] = ''
     try:
         settings = save_beds24_settings(db, data, updated_by=getattr(user, 'username', None))
         return {
             'settings': _credential_safe_settings(settings),
-            'message': (
-                'Beds24 reconnect prepared. Old API tokens cleared; click Test Connection to exchange the new invite code.'
-                if reconnect_with_invite
-                else 'Beds24 settings saved.'
-            ),
+            'message': ('Beds24 reconnect prepared. Old API tokens cleared; click Test Connection to exchange the new invite code.' if reconnect_with_invite else 'Beds24 settings saved.'),
         }
     except Exception as exc:
         db.rollback()
@@ -94,10 +77,7 @@ def update_beds24_settings(
 
 
 @router.post('/test-connection')
-def beds24_test_connection(
-    db: Session = Depends(get_db),
-    user=Depends(require_permissions('integrations.sync')),
-):
+def beds24_test_connection(db: Session = Depends(get_db), user=Depends(require_permissions('integrations.sync'))):
     try:
         return test_beds24_connection(db)
     except Beds24ApiError as exc:
@@ -107,11 +87,7 @@ def beds24_test_connection(
 
 
 @router.post('/sync/booking')
-def beds24_sync_booking(
-    payload: Beds24SyncBookingPayload,
-    db: Session = Depends(get_db),
-    user=Depends(require_permissions('integrations.sync')),
-):
+def beds24_sync_booking(payload: Beds24SyncBookingPayload, db: Session = Depends(get_db), user=Depends(require_permissions('integrations.sync'))):
     try:
         result = sync_booking_by_id(
             db,
@@ -122,10 +98,8 @@ def beds24_sync_booking(
             replace_mirror=bool(payload.force_resync),
             force_folio_mirror=bool(payload.force_resync),
         )
-        result['guest_name_repair'] = repair_beds24_placeholder_guest_names(
-            db,
-            beds24_booking_ids=[payload.booking_id],
-        )
+        result['cancellation_cleanup'] = neutralize_cancelled_beds24_bookings(db, beds24_booking_ids=[payload.booking_id])
+        result['guest_name_repair'] = repair_beds24_placeholder_guest_names(db, beds24_booking_ids=[payload.booking_id])
         return result
     except Beds24ApiError as exc:
         raise HTTPException(status_code=400, detail=str(exc))
@@ -136,11 +110,7 @@ def beds24_sync_booking(
 
 
 @router.post('/sync/booking/rebuild')
-def beds24_rebuild_booking_mirror(
-    payload: Beds24SyncBookingPayload,
-    db: Session = Depends(get_db),
-    user=Depends(require_permissions('integrations.manage')),
-):
+def beds24_rebuild_booking_mirror(payload: Beds24SyncBookingPayload, db: Session = Depends(get_db), user=Depends(require_permissions('integrations.manage'))):
     try:
         result = rebuild_booking_mirror_by_id(
             db,
@@ -148,10 +118,8 @@ def beds24_rebuild_booking_mirror(
             include_invoice_items=payload.include_invoice_items,
             triggered_by=getattr(user, 'username', None),
         )
-        result['guest_name_repair'] = repair_beds24_placeholder_guest_names(
-            db,
-            beds24_booking_ids=[payload.booking_id],
-        )
+        result['cancellation_cleanup'] = neutralize_cancelled_beds24_bookings(db, beds24_booking_ids=[payload.booking_id])
+        result['guest_name_repair'] = repair_beds24_placeholder_guest_names(db, beds24_booking_ids=[payload.booking_id])
         return result
     except Beds24ApiError as exc:
         raise HTTPException(status_code=400, detail=str(exc))
@@ -162,11 +130,7 @@ def beds24_rebuild_booking_mirror(
 
 
 @router.post('/sync/recent')
-def beds24_sync_recent(
-    payload: Beds24SyncRecentPayload,
-    db: Session = Depends(get_db),
-    user=Depends(require_permissions('integrations.sync')),
-):
+def beds24_sync_recent(payload: Beds24SyncRecentPayload, db: Session = Depends(get_db), user=Depends(require_permissions('integrations.sync'))):
     try:
         result = sync_recent_bookings(
             db,
@@ -177,16 +141,10 @@ def beds24_sync_recent(
             source_type='manual',
             triggered_by=getattr(user, 'username', None),
         )
-        booking_ids = [
-            str(row.get('beds24_booking_id'))
-            for row in result.get('results', [])
-            if row.get('beds24_booking_id')
-        ]
+        booking_ids = [str(row.get('beds24_booking_id')) for row in result.get('results', []) if row.get('beds24_booking_id')]
         if booking_ids:
-            result['guest_name_repair'] = repair_beds24_placeholder_guest_names(
-                db,
-                beds24_booking_ids=booking_ids,
-            )
+            result['cancellation_cleanup'] = neutralize_cancelled_beds24_bookings(db, beds24_booking_ids=booking_ids)
+            result['guest_name_repair'] = repair_beds24_placeholder_guest_names(db, beds24_booking_ids=booking_ids)
         return result
     except Beds24ApiError as exc:
         raise HTTPException(status_code=400, detail=str(exc))
@@ -197,11 +155,7 @@ def beds24_sync_recent(
 
 
 @router.post('/sync/backfill')
-def beds24_sync_backfill(
-    payload: Beds24BackfillPayload,
-    db: Session = Depends(get_db),
-    user=Depends(require_permissions('integrations.sync')),
-):
+def beds24_sync_backfill(payload: Beds24BackfillPayload, db: Session = Depends(get_db), user=Depends(require_permissions('integrations.sync'))):
     try:
         result = backfill_bookings_by_date_range(
             db,
@@ -217,11 +171,8 @@ def beds24_sync_backfill(
             triggered_by=getattr(user, 'username', None),
         )
         if not payload.dry_run:
-            result['guest_name_repair'] = repair_beds24_placeholder_guest_names(
-                db,
-                from_date=payload.from_date,
-                to_date=payload.to_date,
-            )
+            result['cancellation_cleanup'] = neutralize_cancelled_beds24_bookings(db)
+            result['guest_name_repair'] = repair_beds24_placeholder_guest_names(db, from_date=payload.from_date, to_date=payload.to_date)
         return result
     except Beds24ApiError as exc:
         raise HTTPException(status_code=400, detail=str(exc))
@@ -232,11 +183,7 @@ def beds24_sync_backfill(
 
 
 @router.post('/folio-lines/reclassify')
-def beds24_reclassify_folio_lines(
-    payload: Beds24FolioLineReclassifyPayload,
-    db: Session = Depends(get_db),
-    user=Depends(require_permissions('integrations.manage')),
-):
+def beds24_reclassify_folio_lines(payload: Beds24FolioLineReclassifyPayload, db: Session = Depends(get_db), user=Depends(require_permissions('integrations.manage'))):
     try:
         return reclassify_historical_folio_lines(
             db,
@@ -255,39 +202,22 @@ def beds24_reclassify_folio_lines(
 
 
 @router.get('/logs')
-def beds24_logs(
-    db: Session = Depends(get_db),
-    user=Depends(require_any_permissions('integrations.logs.view', 'integrations.sync', 'integrations.manage')),
-    limit: int = Query(200, ge=1, le=2000),
-    status: str | None = None,
-    source_type: str | None = None,
-):
+def beds24_logs(db: Session = Depends(get_db), user=Depends(require_any_permissions('integrations.logs.view', 'integrations.sync', 'integrations.manage')), limit: int = Query(200, ge=1, le=2000), status: str | None = None, source_type: str | None = None):
     return list_sync_logs(db, limit=limit, status=status, source_type=source_type)
 
 
 @router.get('/sync-state')
-def beds24_sync_state(
-    db: Session = Depends(get_db),
-    user=Depends(require_any_permissions('integrations.logs.view', 'integrations.sync', 'integrations.manage')),
-    limit: int = Query(100, ge=1, le=1000),
-):
+def beds24_sync_state(db: Session = Depends(get_db), user=Depends(require_any_permissions('integrations.logs.view', 'integrations.sync', 'integrations.manage')), limit: int = Query(100, ge=1, le=1000)):
     return list_sync_state(db, limit=limit)
 
 
 @router.get('/mapping-helpers')
-def beds24_mapping_helpers(
-    db: Session = Depends(get_db),
-    user=Depends(require_permissions('integrations.view')),
-):
+def beds24_mapping_helpers(db: Session = Depends(get_db), user=Depends(require_permissions('integrations.view'))):
     return list_mapping_helpers(db)
 
 
 @router.post('/reset/preview')
-def beds24_reset_preview(
-    payload: Beds24ResetPreviewPayload,
-    db: Session = Depends(get_db),
-    user=Depends(require_permissions('integrations.manage')),
-):
+def beds24_reset_preview(payload: Beds24ResetPreviewPayload, db: Session = Depends(get_db), user=Depends(require_permissions('integrations.manage'))):
     try:
         return preview_reset_mode(db, payload.mode)
     except ValueError as exc:
@@ -297,18 +227,9 @@ def beds24_reset_preview(
 
 
 @router.post('/reset/execute')
-def beds24_reset_execute(
-    payload: Beds24ResetExecutePayload,
-    db: Session = Depends(get_db),
-    user=Depends(require_permissions('integrations.manage')),
-):
+def beds24_reset_execute(payload: Beds24ResetExecutePayload, db: Session = Depends(get_db), user=Depends(require_permissions('integrations.manage'))):
     try:
-        return execute_reset_mode(
-            db,
-            payload.mode,
-            confirmation=payload.confirmation,
-            triggered_by=getattr(user, 'username', None),
-        )
+        return execute_reset_mode(db, payload.mode, confirmation=payload.confirmation, triggered_by=getattr(user, 'username', None))
     except ValueError as exc:
         db.rollback()
         raise HTTPException(status_code=400, detail=str(exc))
@@ -318,21 +239,13 @@ def beds24_reset_execute(
 
 
 @router.post('/webhook')
-async def beds24_webhook(
-    request: Request,
-    db: Session = Depends(get_db),
-):
+async def beds24_webhook(request: Request, db: Session = Depends(get_db)):
     if 'secret' in request.query_params:
-        raise HTTPException(
-            status_code=400,
-            detail='Webhook credentials must be sent in a supported request header.',
-        )
-
+        raise HTTPException(status_code=400, detail='Webhook credentials must be sent in a supported request header.')
     try:
         payload = await request.json()
     except Exception:
         payload = {}
-
     try:
         result = sync_from_webhook(
             db,
@@ -343,12 +256,11 @@ async def beds24_webhook(
         )
         booking_ids = [str(value) for value in result.get('booking_ids', []) if value]
         repair = None
+        cancellation_cleanup = {'cancelled_bookings_neutralized': 0, 'beds24_folio_lines_removed': 0, 'receivables_closed': 0}
         if booking_ids:
-            repair = repair_beds24_placeholder_guest_names(
-                db,
-                beds24_booking_ids=booking_ids,
-            )
-        return {'ok': True, 'result': result, 'guest_name_repair': repair}
+            cancellation_cleanup = neutralize_cancelled_beds24_bookings(db, beds24_booking_ids=booking_ids)
+            repair = repair_beds24_placeholder_guest_names(db, beds24_booking_ids=booking_ids)
+        return {'ok': True, 'result': result, 'cancellation_cleanup': cancellation_cleanup, 'guest_name_repair': repair}
     except Beds24ApiError as exc:
         raise HTTPException(status_code=400, detail=str(exc))
     except ValueError as exc:
