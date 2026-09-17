@@ -6,40 +6,24 @@ import pytest
 from pydantic import ValidationError
 
 from app.api.channel_reconciliation import PayoutReconcileBatch, _channel_stay_nights, _deduction_amount, _deduction_percent, _normal_room_rate, _stay_nights
+from app.models.channel_payout_reconciliation import ChannelBookingStaySnapshot
 from app.models.entities import Beds24BookingMap
 
 
-class _RatePlanQuery:
-    def __init__(self, plans):
-        self.plans = plans
-
-    def filter(self, *args, **kwargs):
-        return self
-
-    def all(self):
-        return self.plans
-
-
-class _Beds24MapQuery:
-    def __init__(self, mapping):
-        self.mapping = mapping
-
-    def filter(self, *args, **kwargs):
-        return self
-
-    def first(self):
-        return self.mapping
+class _Query:
+    def __init__(self, rows=None, first=None): self.rows, self.first_row = rows or [], first
+    def filter(self, *args, **kwargs): return self
+    def all(self): return self.rows
+    def first(self): return self.first_row
 
 
 class _Db:
-    def __init__(self, plans, beds24_mapping=None):
-        self.plans = plans
-        self.beds24_mapping = beds24_mapping
-
+    def __init__(self, plans, beds24_mapping=None, stay_snapshot=None):
+        self.plans, self.beds24_mapping, self.stay_snapshot = plans, beds24_mapping, stay_snapshot
     def query(self, model):
-        if model is Beds24BookingMap:
-            return _Beds24MapQuery(self.beds24_mapping)
-        return _RatePlanQuery(self.plans)
+        if model is ChannelBookingStaySnapshot: return _Query(first=self.stay_snapshot)
+        if model is Beds24BookingMap: return _Query(first=self.beds24_mapping)
+        return _Query(rows=self.plans)
 
 
 def test_channel_deduction_uses_actual_receipt():
@@ -65,25 +49,33 @@ def test_normal_room_rate_multiplies_standard_plan_by_persisted_string_stay_date
     assert _normal_room_rate(_Db(plans), booking) == Decimal('7500.00')
 
 
-def test_channel_stay_nights_uses_beds24_dates_instead_of_later_local_extension():
+def test_channel_stay_nights_uses_immutable_snapshot_after_local_and_beds24_extension():
     booking = SimpleNamespace(id=42, check_in='2026-09-15', check_out='2026-09-20')
-    mapping = SimpleNamespace(beds24_check_in='2026-09-15', beds24_check_out='2026-09-18')
-    db = _Db([], beds24_mapping=mapping)
+    snapshot = SimpleNamespace(ota_check_in='2026-09-15', ota_check_out='2026-09-18')
+    mapping = SimpleNamespace(beds24_check_in='2026-09-15', beds24_check_out='2026-09-20')
+    db = _Db([], beds24_mapping=mapping, stay_snapshot=snapshot)
     assert _stay_nights(booking) == 5
     assert _channel_stay_nights(db, booking) == 3
 
 
 def test_standard_value_excludes_direct_extension_after_agoda_booking():
     booking = SimpleNamespace(id=42, gross_amount=11300, room_type_id=4, room_name='Cafe Suite', room=None, check_in='2026-09-15', check_out='2026-09-20')
-    mapping = SimpleNamespace(beds24_check_in='2026-09-15', beds24_check_out='2026-09-18')
+    snapshot = SimpleNamespace(ota_check_in='2026-09-15', ota_check_out='2026-09-18')
+    mapping = SimpleNamespace(beds24_check_in='2026-09-15', beds24_check_out='2026-09-20')
     plans = [SimpleNamespace(id=7, code='STANDARD', name='Standard Flexible', base_rate=2500)]
-    assert _normal_room_rate(_Db(plans, beds24_mapping=mapping), booking) == Decimal('7500.00')
+    assert _normal_room_rate(_Db(plans, mapping, snapshot), booking) == Decimal('7500.00')
 
 
-def test_channel_stay_nights_falls_back_when_beds24_dates_are_missing():
+def test_channel_stay_nights_uses_beds24_dates_when_snapshot_not_yet_available():
     booking = SimpleNamespace(id=42, check_in='2026-09-15', check_out='2026-09-20')
-    mapping = SimpleNamespace(beds24_check_in=None, beds24_check_out=None)
-    assert _channel_stay_nights(_Db([], beds24_mapping=mapping), booking) == 5
+    mapping = SimpleNamespace(beds24_check_in='2026-09-15', beds24_check_out='2026-09-18')
+    assert _channel_stay_nights(_Db([], beds24_mapping=mapping), booking) == 3
+
+
+def test_channel_stay_nights_falls_back_when_beds24_dates_are_missing_or_malformed():
+    booking = SimpleNamespace(id=42, check_in='2026-09-15', check_out='2026-09-20')
+    for mapping in (SimpleNamespace(beds24_check_in=None, beds24_check_out=None), SimpleNamespace(beds24_check_in='bad', beds24_check_out='also-bad')):
+        assert _channel_stay_nights(_Db([], beds24_mapping=mapping), booking) == 5
 
 
 def test_normal_room_rate_accepts_standard_named_plan():
