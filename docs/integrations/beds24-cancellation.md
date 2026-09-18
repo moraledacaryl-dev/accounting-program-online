@@ -25,7 +25,10 @@ fee receivables are untouched. Ambiguous allocation across multiple receivables
 requires review. Refund/reversal recalculation cannot recreate the room claim.
 
 Folio summaries retain original charges, deposits, payments, refunds and reversals.
-They exclude room charges from collectible charges on a cancelled booking. Explicit
+They exclude room charges and associated Beds24-imported VAT/city-tax invoice
+lines from collectible charges on a cancelled booking. Original tax rows remain
+unchanged; explicitly classified cancellation/non-refundable tax charges remain
+collectible. Explicit
 `cancellation_fee` and `nonrefundable_charge` lines remain collectible/classified;
 the code never invents either from an old room price. Unallocated payments are
 shown for refund/retention review. Synthetic prepaid OTA settlement lines remain

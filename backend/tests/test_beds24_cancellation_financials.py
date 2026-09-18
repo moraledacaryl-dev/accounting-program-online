@@ -258,3 +258,42 @@ def test_unpaid_cancellation_fee_survives_in_same_guest_receivable(db):
     from app.services.cashflow_service import _update_receivable_balance
     _update_receivable_balance(db, receivable.id)
     assert receivable.balance_due == 1000
+
+
+@pytest.mark.parametrize('room,vat,city_tax', [(5000, 600, 500), (6400, 768, 640), (6000, 720, 600)])
+def test_cancelled_stay_includes_imported_taxes_without_erasing_them(db, room, vat, city_tax):
+    booking = setup_booking(db)
+    folio = BookingFolio(booking=booking, folio_no='TAX-FOLIO')
+    db.add(folio); db.flush()
+    total = room + vat + city_tax
+    db.add_all([
+        BookingFolioLine(folio=folio, line_type='room_charge', amount=room, external_source='beds24'),
+        BookingFolioLine(folio=folio, line_type='manual_charge', description='VAT', amount=vat, external_source='beds24'),
+        BookingFolioLine(folio=folio, line_type='manual_charge', description='City tax', amount=city_tax, external_source='beds24'),
+        BookingFolioLine(folio=folio, line_type='deposit', amount=total, external_source='beds24', external_line_key='beds24:93138380:prepaid_settlement'),
+    ])
+    receivable = Receivable(source_type='booking', source_id=booking.id, gross_amount=total, amount_collected=0, balance_due=total)
+    db.add(receivable); db.commit()
+    original_lines = [columns(row) for row in folio.lines]
+    cancellation.apply_beds24_cancellation(db, payload()); db.commit()
+    assert [columns(row) for row in folio.lines] == original_lines
+    assert folio_balance_summary(folio)['balance'] == 0
+    assert folio_balance_summary(folio)['cancelled_stay_amount'] == total
+    assert receivable.balance_due == 0
+    assert receivable.gross_amount == total
+    assert receivable.amount_collected == 0
+
+
+def test_explicit_retained_tax_is_not_cancelled_with_the_room(db):
+    booking = setup_booking(db)
+    folio = BookingFolio(booking=booking, folio_no='RETAINED-TAX')
+    db.add(folio); db.flush()
+    db.add_all([
+        BookingFolioLine(folio=folio, line_type='room_charge', amount=9000),
+        BookingFolioLine(folio=folio, line_type='nonrefundable_charge', description='VAT', amount=120, external_source='beds24'),
+        BookingFolioLine(folio=folio, line_type='manual_charge', description='VAT', amount=60),
+    ])
+    db.commit()
+    cancellation.apply_beds24_cancellation(db, payload()); db.commit()
+    assert folio_balance_summary(folio)['balance'] == 180
+    assert folio_balance_summary(folio)['cancellation_fees'] == 120
