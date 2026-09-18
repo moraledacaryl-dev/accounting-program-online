@@ -670,6 +670,9 @@ def _build_management_report(db: Session, start_date: str | None = None, end_dat
         if _norm(row.status) in {'no_show', 'noshow'}:
             no_show += 1
 
+        if _norm(row.status) in {'cancelled', 'canceled'}:
+            continue
+
         if _date_between(row.check_in):
             arrivals += 1
             room_type = (row.room_type or 'Unassigned').strip() or 'Unassigned'

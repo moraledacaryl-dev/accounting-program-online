@@ -6,6 +6,8 @@ from typing import Iterable
 from sqlalchemy import and_, func, or_
 from sqlalchemy.orm import Session, selectinload
 
+from app.services.beds24_cancellation_service import ordinary_receivable_condition, cancelled_receivable_balance
+
 from app.core.business_clock import business_today
 from app.models.entities import (
     AccountTransfer,
@@ -703,6 +705,13 @@ def _update_receivable_balance(db: Session, receivable_id: int):
     adjustment_total = db.query(func.coalesce(func.sum(ReceivableAdjustment.amount), 0)).filter(
         ReceivableAdjustment.receivable_id == receivable.id
     ).scalar() or 0
+    if not db.query(Receivable.id).filter(Receivable.id == receivable.id, ordinary_receivable_condition()).first():
+        # Refund/reversal changes cash history, never reopens a cancelled room claim.
+        receivable.balance_due = cancelled_receivable_balance(db, receivable.source_id, float(receivable.amount_collected or 0))
+        receivable.status = ('partial' if receivable.amount_collected else 'open') if receivable.balance_due else 'written_off'
+        receivable.closed_at = None if receivable.balance_due else (receivable.closed_at or _today())
+        db.add(receivable)
+        return
     receivable.balance_due = round(float(receivable.gross_amount or 0) + float(adjustment_total) - float(receivable.amount_collected or 0), 4)
     if receivable.balance_due <= 0.0001:
         receivable.balance_due = 0.0

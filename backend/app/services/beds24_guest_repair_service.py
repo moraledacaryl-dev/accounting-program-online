@@ -5,6 +5,7 @@ import re
 import unicodedata
 from typing import Any
 
+from sqlalchemy import func
 from sqlalchemy.orm import Session
 
 from app.models.entities import Beds24BookingMap, Booking, Guest
@@ -81,6 +82,7 @@ def repair_beds24_placeholder_guest_names(
     query = (
         db.query(Beds24BookingMap)
         .join(Booking, Booking.id == Beds24BookingMap.local_booking_id)
+        .filter(func.lower(func.coalesce(Booking.status, "")).notin_(["cancelled", "canceled"]))
     )
 
     normalized_ids = sorted({str(value).strip() for value in (beds24_booking_ids or []) if str(value).strip()})
