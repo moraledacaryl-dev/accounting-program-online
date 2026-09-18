@@ -178,7 +178,14 @@ def folio_balance_summary(folio: BookingFolio) -> dict:
     for line in folio.lines or []:
         amount = float(line.amount or 0)
         line_type = (line.line_type or '').strip().lower()
-        if line_type == 'room_charge':
+        # Beds24 imports ordinary stay taxes as manual_charge invoice rows.
+        # Preserve the rows, but do not leave their cancelled stay tax collectible.
+        imported_stay_tax = (
+            line_type == 'manual_charge'
+            and line.external_source == 'beds24'
+            and (line.description or '').strip().casefold() in {'vat', 'city tax'}
+        )
+        if line_type == 'room_charge' or imported_stay_tax:
             room_charges += amount
         if line_type in {'cancellation_fee', 'nonrefundable_charge'}:
             cancellation_fees += amount
