@@ -10,6 +10,7 @@ import {
   retryIntegrationReviewItem,
 } from '../../lib/api';
 import { fetchFinancialAccounts } from '../../lib/cashflowApi';
+import { businessDateISO } from '../../lib/businessDate';
 
 const effectLabels = {
   cash_in: 'Cash In',
@@ -68,8 +69,10 @@ export default function ReviewInboxPage() {
     setBusy(true);
     try {
       await acceptIntegrationReviewItem(item.id, {
-        account_id: item.proposed_account_id || accounts[0]?.id || null,
-        category: 'Connected App',
+        account_id: item.proposed_account_id || null,
+        actual_amount_paid: item.actual_amount_paid === '' || item.actual_amount_paid == null ? null : Number(item.actual_amount_paid),
+        transaction_date: businessDateISO(),
+        category: item.proposed_links?.category || 'Connected App',
       });
       setSelected(null);
       await load();
@@ -199,7 +202,7 @@ export default function ReviewInboxPage() {
           <div className="row wrap">
             {selected.status === 'ready_for_review' ? (
               <>
-                <button type="button" disabled={busy} onClick={() => accept(selected)}>{busy ? 'Processing…' : 'Accept into accounting'}</button>
+                <button type="button" disabled={busy || (['cash_in', 'cash_out', 'settlement'].includes(selected.financial_effect) && !selected.proposed_account_id)} onClick={() => accept(selected)}>{busy ? 'Processing…' : 'Accept into accounting'}</button>
                 <button type="button" className="danger" disabled={busy} onClick={() => reject(selected)}>Reject</button>
               </>
             ) : null}
@@ -231,6 +234,29 @@ export default function ReviewInboxPage() {
                     {accounts.map((account) => <option key={account.id} value={account.id}>{account.name}</option>)}
                   </select>
                 </label>
+              ) : null}
+              {selected.source_app === 'staff' && selected.financial_effect === 'cash_out' && selected.source_event_id?.endsWith(':Paid') ? (
+                <div className="stack" style={{ gap: '0.5rem' }}>
+                  <label>
+                    Actual amount paid
+                    <input
+                      type="number"
+                      min="0.01"
+                      step="0.01"
+                      placeholder={Number(selected.amount || 0).toFixed(2)}
+                      value={selected.actual_amount_paid ?? ''}
+                      onChange={(event) => setSelected({ ...selected, actual_amount_paid: event.target.value })}
+                    />
+                  </label>
+                  <p className="small muted">
+                    Exact payroll remains {formatMoney(selected)}. Enter the amount actually handed or transferred only when you rounded the payment; Accounting records the difference without changing Staff & Payroll or the payslip.
+                  </p>
+                  {selected.actual_amount_paid ? (
+                    <p className="small">
+                      Rounding difference: {(Number(selected.actual_amount_paid) - Number(selected.amount || 0)).toLocaleString(undefined, { style: 'currency', currency: selected.currency || 'PHP', signDisplay: 'always' })}
+                    </p>
+                  ) : null}
+                </div>
               ) : null}
             </div>
 
