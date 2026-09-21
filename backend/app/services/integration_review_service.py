@@ -78,7 +78,11 @@ def validate_review_payload(db: Session, payload: IntegrationReviewCreate | dict
 
     if effect in CASH_EFFECTS:
         if not account_id:
-            errors.append('A proposed financial account is required for cash and settlement effects.')
+            # Connected source apps know that cash moved, but they do not own
+            # Accounting's cash/bank/GCash account master. Keep the event
+            # reviewable and require the reviewer to choose the real account
+            # before acceptance/posting.
+            warnings.append('Select the actual financial account before posting this cash or settlement event.')
         else:
             account = db.query(FinancialAccount).filter(FinancialAccount.id == int(account_id)).first()
             if not account:
