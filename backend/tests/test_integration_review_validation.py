@@ -74,3 +74,26 @@ def test_invalid_revision_and_currency_are_rejected():
     assert result['valid'] is False
     assert any('source_revision' in error for error in result['errors'])
     assert any('currency' in error for error in result['errors'])
+
+
+def test_cash_out_without_source_owned_account_is_reviewable():
+    payload = _payload(
+        source_app='staff',
+        source_event_id='payroll-run:11:Paid',
+        source_entity_type='Payroll Run',
+        source_entity_id='11',
+        financial_effect='cash_out',
+        amount=92176.70,
+        proposed_account_id=None,
+        proposed_journal=None,
+        proposed_links={
+            'category': 'Payroll',
+            'subcategory': 'Net Pay',
+            'payment_method': 'bank_transfer',
+            'counterparty_name': 'Employees',
+        },
+    )
+    result = validate_review_payload(MagicMock(), payload)
+    assert result['valid'] is True
+    assert result['errors'] == []
+    assert any('actual financial account' in warning for warning in result['warnings'])
