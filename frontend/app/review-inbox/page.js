@@ -71,7 +71,7 @@ export default function ReviewInboxPage() {
       await acceptIntegrationReviewItem(item.id, {
         account_id: item.proposed_account_id || null,
         actual_amount_paid: item.actual_amount_paid === '' || item.actual_amount_paid == null ? null : Number(item.actual_amount_paid),
-        transaction_date: businessDateISO(),
+        transaction_date: item.transaction_date || businessDateISO(),
         category: item.proposed_links?.category || 'Connected App',
       });
       setSelected(null);
@@ -237,11 +237,22 @@ export default function ReviewInboxPage() {
               ) : null}
               {selected.source_app === 'staff' && selected.financial_effect === 'cash_out' && selected.source_event_id?.endsWith(':Paid') ? (
                 <div className="stack" style={{ gap: '0.5rem' }}>
+                  <p className="small muted">
+                    This one review settles the matching approved payroll liability, so you do not need to process a separate Approved row.
+                  </p>
+                  <label>
+                    Payment date
+                    <input
+                      type="date"
+                      value={selected.transaction_date || businessDateISO()}
+                      onChange={(event) => setSelected({ ...selected, transaction_date: event.target.value })}
+                    />
+                  </label>
                   <label>
                     Actual amount paid
                     <input
                       type="number"
-                      min="0.01"
+                      min={Number(selected.amount || 0).toFixed(2)}
                       step="0.01"
                       placeholder={Number(selected.amount || 0).toFixed(2)}
                       value={selected.actual_amount_paid ?? ''}
