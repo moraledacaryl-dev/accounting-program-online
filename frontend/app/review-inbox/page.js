@@ -34,6 +34,20 @@ function sourceInitials(value) {
   return String(value || '?').slice(0, 3);
 }
 
+function payrollDetails(item) {
+  const payload = item?.payload || {};
+  const run = payload.run || payload.payload?.run || {};
+  const rows = payload.items || payload.payload?.items || [];
+  const start = run.period_start || run.start_date || run.payroll_start || run.date_from || run.from_date || run.cutoff_start;
+  const end = run.period_end || run.end_date || run.payroll_end || run.date_to || run.to_date || run.cutoff_end;
+  const payment = run.payment_date || run.paid_at || run.paid_date || payload.payment_date;
+  return { run, rows: Array.isArray(rows) ? rows : [], start, end, payment };
+}
+
+function roundedUpAmount(value) {
+  return Math.ceil(Number(value || 0));
+}
+
 export default function ReviewInboxPage() {
   const [items, setItems] = useState([]);
   const [summary, setSummary] = useState(null);
@@ -237,6 +251,46 @@ export default function ReviewInboxPage() {
               ) : null}
               {selected.source_app === 'staff' && selected.financial_effect === 'cash_out' && selected.source_event_id?.endsWith(':Paid') ? (
                 <div className="stack" style={{ gap: '0.5rem' }}>
+                  {(() => {
+                    const details = payrollDetails(selected);
+                    const roundedTotal = details.rows.reduce((sum, employee) => sum + roundedUpAmount(employee.net_pay), 0);
+                    return (
+                      <>
+                        <div className="review-detail-summary">
+                          <div><strong>Payroll period</strong><span className="small muted">{details.start || 'Not supplied'} → {details.end || 'Not supplied'}</span></div>
+                          <div><strong>Source payment date</strong><span className="small muted">{details.payment || 'Not supplied'}</span></div>
+                        </div>
+                        {details.rows.length ? (
+                          <div>
+                            <strong>Employee round-up preview</strong>
+                            <p className="small muted">Automatically rounds each employee's exact net pay up to the next whole peso. Payslips remain exact.</p>
+                            <div className="table-wrap">
+                              <table className="table">
+                                <thead><tr><th>Employee</th><th>Exact net</th><th>Rounded up</th><th>Difference</th></tr></thead>
+                                <tbody>
+                                  {details.rows.map((employee, index) => {
+                                    const exact = Number(employee.net_pay || 0);
+                                    const rounded = roundedUpAmount(exact);
+                                    return (
+                                      <tr key={employee.id || employee.employee_id || index}>
+                                        <td>{employee.full_name || employee.employee_name || employee.employee_code || `Employee ${index + 1}`}</td>
+                                        <td>{exact.toLocaleString(undefined, { style: 'currency', currency: selected.currency || 'PHP' })}</td>
+                                        <td>{rounded.toLocaleString(undefined, { style: 'currency', currency: selected.currency || 'PHP' })}</td>
+                                        <td>{(rounded - exact).toLocaleString(undefined, { style: 'currency', currency: selected.currency || 'PHP', signDisplay: 'always' })}</td>
+                                      </tr>
+                                    );
+                                  })}
+                                </tbody>
+                              </table>
+                            </div>
+                            <button type="button" className="secondary" onClick={() => setSelected({ ...selected, actual_amount_paid: roundedTotal.toFixed(2) })}>
+                              Use employee-by-employee rounded total ({roundedTotal.toLocaleString(undefined, { style: 'currency', currency: selected.currency || 'PHP' })})
+                            </button>
+                          </div>
+                        ) : <p className="small muted">Employee-level payroll rows were not supplied with this event, so automatic per-employee rounding is unavailable.</p>}
+                      </>
+                    );
+                  })()}
                   <p className="small muted">
                     This one review settles the matching approved payroll liability, so you do not need to process a separate Approved row.
                   </p>
