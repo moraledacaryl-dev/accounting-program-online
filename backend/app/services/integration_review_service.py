@@ -222,6 +222,16 @@ def create_review_item(db: Session, payload: IntegrationReviewCreate):
     return _serialize(row)
 
 
+def _staff_payroll_approval_has_paid_partner(db: Session, row: IntegrationReviewItem) -> bool:
+    if row.source_app != 'staff' or not str(row.source_event_id or '').endswith(':Approved'):
+        return False
+    return db.query(IntegrationReviewItem.id).filter(
+        IntegrationReviewItem.source_app == 'staff',
+        IntegrationReviewItem.source_entity_id == row.source_entity_id,
+        IntegrationReviewItem.source_event_id.endswith(':Paid'),
+    ).first() is not None
+
+
 def list_review_items(db: Session, *, status=None, source_app=None, financial_effect=None, q=None, limit=200):
     query = db.query(IntegrationReviewItem).options(selectinload(IntegrationReviewItem.proposed_account))
     if status:
@@ -237,12 +247,20 @@ def list_review_items(db: Session, *, status=None, source_app=None, financial_ef
             | IntegrationReviewItem.source_entity_id.ilike(like)
             | IntegrationReviewItem.payload_json.ilike(like)
         )
-    return [_serialize(row) for row in query.order_by(IntegrationReviewItem.id.desc()).limit(limit).all()]
+    rows = query.order_by(IntegrationReviewItem.id.desc()).limit(limit).all()
+    # Staff sends both Approved (liability) and Paid (settlement) lifecycle
+    # events. Once Paid exists, present the run as one review workflow instead
+    # of two apparently duplicated rows. The Approved row is retained for audit
+    # and is consumed automatically when Paid is accepted.
+    return [_serialize(row) for row in rows if not _staff_payroll_approval_has_paid_partner(db, row)]
 
 
 def summary(db: Session):
-    rows = db.query(IntegrationReviewItem.status, func.count(IntegrationReviewItem.id)).group_by(IntegrationReviewItem.status).all()
-    by_status = {status: count for status, count in rows}
+    rows = db.query(IntegrationReviewItem).all()
+    visible = [row for row in rows if not _staff_payroll_approval_has_paid_partner(db, row)]
+    by_status: dict[str, int] = {}
+    for row in visible:
+        by_status[row.status] = by_status.get(row.status, 0) + 1
     return {
         'total': sum(by_status.values()),
         'by_status': by_status,
@@ -316,7 +334,124 @@ def accept_item(db: Session, item_id: int, decision: IntegrationReviewDecision, 
     if decision.actual_amount_paid is not None and not (row.source_app == 'staff' and row.source_event_id.endswith(':Paid') and effect == 'cash_out'):
         raise ValueError('actual_amount_paid is supported only for Staff & Payroll paid cash-out events.')
 
-    if effect in CASH_EFFECTS:
+    is_staff_payroll_paid = row.source_app == 'staff' and row.source_event_id.endswith(':Paid') and effect == 'cash_out'
+
+    if is_staff_payroll_paid:
+        account_id = decision.account_id or row.proposed_account_id
+        account = db.query(FinancialAccount).filter(FinancialAccount.id == int(account_id)).first() if account_id else None
+        if not account or not account.is_active:
+            raise ValueError('An active financial account is required.')
+        if str(account.currency or 'PHP').upper() != str(row.currency or 'PHP').upper():
+            raise ValueError('Financial account currency does not match the event currency.')
+
+        source_amount = round(float(row.amount or 0), 2)
+        actual_amount = round(float(decision.actual_amount_paid), 2) if decision.actual_amount_paid is not None else source_amount
+        if actual_amount < source_amount:
+            raise ValueError('Actual payroll payment cannot be below exact net pay. Record an underpayment as an outstanding payroll payable instead.')
+        rounding_difference = round(actual_amount - source_amount, 2)
+
+        approval = db.query(IntegrationReviewItem).filter(
+            IntegrationReviewItem.source_app == 'staff',
+            IntegrationReviewItem.source_entity_id == row.source_entity_id,
+            IntegrationReviewItem.source_event_id.endswith(':Approved'),
+        ).order_by(IntegrationReviewItem.source_revision.desc()).with_for_update().first()
+
+        payable = None
+        if approval and approval.status == 'accepted' and approval.accepted_payable_id:
+            payable = db.get(Payable, int(approval.accepted_payable_id))
+        elif approval and approval.status == 'ready_for_review':
+            approval_links = _loads(approval.proposed_links_json)
+            payable = Payable(
+                source_type=approval.source_entity_type,
+                source_id=int(approval.source_entity_id) if str(approval.source_entity_id or '').isdigit() else None,
+                supplier_name=approval_links.get('supplier_name') or approval_links.get('counterparty_name') or 'Employees',
+                payable_type=approval_links.get('payable_type') or 'payroll',
+                bill_date=transaction_date,
+                due_date=approval_links.get('due_date'),
+                gross_amount=source_amount,
+                amount_paid=0,
+                balance_due=source_amount,
+                status='open',
+                notes=f'Payroll liability from staff:{approval.source_event_id}',
+            )
+            db.add(payable)
+            db.flush()
+            approval.accepted_payable_id = payable.id
+            approval.status = 'accepted'
+            approval.reviewed_by = username
+            approval.reviewed_at = _now_iso()
+            approval.rejection_reason = None
+            db.add(approval)
+        elif approval:
+            raise ValueError(f'Matching payroll approval is not ready for settlement (status: {approval.status}).')
+        else:
+            raise ValueError('Matching payroll approval event was not found; payroll payment cannot be posted without its liability.')
+
+        if not payable or round(float(payable.balance_due or 0), 2) < source_amount:
+            raise ValueError('Matching payroll payable is missing or does not have the exact net pay outstanding.')
+
+        base_notes = decision.notes or f'Payroll settlement from {source}'
+        exact_tx = create_money_transaction(
+            db,
+            MoneyTransactionCreate(
+                transaction_date=transaction_date,
+                direction='out',
+                financial_account_id=account.id,
+                module='staff',
+                category='Payroll',
+                subcategory='Net Pay',
+                amount=source_amount,
+                payment_method=decision.payment_method or links.get('payment_method') or 'other',
+                reference_no=source,
+                counterparty_name=links.get('counterparty_name') or 'Employees',
+                notes=f'{base_notes} | Exact payroll liability: {source_amount:.2f}.',
+                linked_record_type=row.source_entity_type,
+                linked_record_id=int(row.source_entity_id) if str(row.source_entity_id or '').isdigit() else None,
+                payable_id=payable.id,
+                status='posted',
+            ),
+            username=username,
+            commit=False,
+        )
+        row.accepted_transaction_id = exact_tx['id']
+
+        rounding_tx_id = None
+        if rounding_difference > 0:
+            rounding_tx = create_money_transaction(
+                db,
+                MoneyTransactionCreate(
+                    transaction_date=transaction_date,
+                    direction='out',
+                    financial_account_id=account.id,
+                    module='staff',
+                    category='Payroll',
+                    subcategory='Rounding',
+                    level3_item='Payroll rounding expense',
+                    amount=rounding_difference,
+                    payment_method=decision.payment_method or links.get('payment_method') or 'other',
+                    reference_no=f'{source}:rounding',
+                    counterparty_name=links.get('counterparty_name') or 'Employees',
+                    notes=f'Payroll rounding expense: exact {source_amount:.2f}; actual paid {actual_amount:.2f}; difference +{rounding_difference:.2f}.',
+                    linked_record_type=row.source_entity_type,
+                    linked_record_id=int(row.source_entity_id) if str(row.source_entity_id or '').isdigit() else None,
+                    status='posted',
+                ),
+                username=username,
+                commit=False,
+            )
+            rounding_tx_id = rounding_tx['id']
+
+        row.validation_json = json.dumps({
+            **validation,
+            'payroll_payment_reconciliation': {
+                'exact_net_pay': source_amount,
+                'actual_amount_paid': actual_amount,
+                'rounding_difference': rounding_difference,
+                'payable_id': payable.id,
+                'rounding_transaction_id': rounding_tx_id,
+            },
+        })
+    elif effect in CASH_EFFECTS:
         account_id = decision.account_id or row.proposed_account_id
         account = db.query(FinancialAccount).filter(FinancialAccount.id == int(account_id)).first() if account_id else None
         if not account or not account.is_active:
