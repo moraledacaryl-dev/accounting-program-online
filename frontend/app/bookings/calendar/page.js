@@ -19,6 +19,12 @@ function isoDate(date) {
   return `${year}-${month}-${day}`;
 }
 
+function dateFromISO(value) {
+  const [year, month, day] = String(value || '').split('-').map(Number);
+  if (!year || !month || !day) return null;
+  return new Date(year, month - 1, day, 12, 0, 0);
+}
+
 function monthKey(date) {
   return `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, '0')}`;
 }
@@ -42,19 +48,30 @@ function buildCalendarDays(monthDate) {
   });
 }
 
+function normalizedStatus(status) {
+  return String(status || '').toLowerCase().replace(/[- ]/g, '_');
+}
+
+function isCancelled(status) {
+  return normalizedStatus(status) === 'cancelled' || normalizedStatus(status) === 'canceled';
+}
+
 function statusClass(status) {
-  const value = String(status || '').toLowerCase();
-  if (value === 'cancelled' || value === 'no_show') return 'status rejected';
+  const value = normalizedStatus(status);
+  if (value === 'cancelled' || value === 'canceled' || value === 'no_show') return 'status rejected';
   if (value === 'checked_in') return 'status approved';
   if (value === 'checked_out') return 'status draft';
   return 'status pending';
 }
 
 export default function BookingCalendarPage() {
+  const todayISO = businessDateISO();
   const [monthDate, setMonthDate] = useState(() => {
-    const [year, month, day] = businessDateISO().split('-').map(Number);
-    return startOfCalendarMonth(new Date(year, month - 1, day, 12, 0, 0));
+    const initial = dateFromISO(todayISO);
+    return startOfCalendarMonth(initial || new Date());
   });
+  const [jumpDate, setJumpDate] = useState(todayISO);
+  const [selectedDate, setSelectedDate] = useState(todayISO);
   const [rows, setRows] = useState([]);
   const [rooms, setRooms] = useState([]);
   const [channels, setChannels] = useState([]);
@@ -69,6 +86,18 @@ export default function BookingCalendarPage() {
     start_date: isoDate(days[0]),
     end_date: isoDate(days[days.length - 1]),
   }), [days]);
+
+  function goToDate(value) {
+    const target = dateFromISO(value);
+    if (!target) return;
+    setJumpDate(value);
+    setSelectedDate(value);
+    setMonthDate(startOfCalendarMonth(target));
+  }
+
+  function goToToday() {
+    goToDate(businessDateISO());
+  }
 
   async function load() {
     setLoading(true);
@@ -101,15 +130,24 @@ export default function BookingCalendarPage() {
   return (
     <div className="stack">
       <section className="section">
-        <div className="row" style={{ justifyContent: 'space-between', alignItems: 'flex-end' }}>
+        <div className="row wrap" style={{ justifyContent: 'space-between', alignItems: 'flex-end', gap: 16 }}>
           <div>
             <h1>Booking Calendar</h1>
-            <p className="muted">Browse past, current, and future stays by month.</p>
+            <p className="muted">Browse past, current, and future stays. Cancelled bookings stay visible in gray for context.</p>
           </div>
-          <div className="row wrap">
+          <div className="row wrap" style={{ alignItems: 'flex-end' }}>
+            <label style={{ minWidth: 170 }}>
+              Jump to date
+              <input
+                type="date"
+                value={jumpDate}
+                onChange={(e) => goToDate(e.target.value)}
+                aria-label="Jump booking calendar to date"
+              />
+            </label>
             <Link className="button-link secondary-link" href="/bookings">Booking List</Link>
             <button type="button" className="secondary" onClick={() => setMonthDate(addMonths(monthDate, -1))}>Previous</button>
-            <button type="button" className="secondary" onClick={() => setMonthDate(startOfCalendarMonth(new Date()))}>Today</button>
+            <button type="button" className="secondary" onClick={goToToday}>Today</button>
             <button type="button" className="secondary" onClick={() => setMonthDate(addMonths(monthDate, 1))}>Next</button>
           </div>
         </div>
@@ -154,19 +192,37 @@ export default function BookingCalendarPage() {
           {days.map((day) => {
             const dayISO = isoDate(day);
             const inMonth = monthKey(day) === monthKey(monthDate);
+            const isSelected = dayISO === selectedDate;
             const matchingRows = rows.filter((row) => stayIncludesDay(row, dayISO));
             const dayRows = matchingRows.slice(0, 5);
             return (
-              <div key={dayISO} className={`calendar-day${inMonth ? '' : ' muted-day'}`}>
+              <div
+                key={dayISO}
+                className={`calendar-day${inMonth ? '' : ' muted-day'}`}
+                style={isSelected ? { outline: '2px solid var(--brand)', outlineOffset: '-2px', background: 'var(--brand-soft)' } : undefined}
+              >
                 <div className="calendar-date">{day.getDate()}</div>
                 <div className="calendar-events">
-                  {dayRows.map((row) => (
-                    <Link key={`${dayISO}-${row.id}`} className="calendar-event" href={`/bookings/${row.id}`}>
-                      <span className={statusClass(row.status)}>{row.status || 'confirmed'}</span>
-                      <strong>{row.guest_full_name || row.guest_name || `BOOK-${row.id}`}</strong>
-                      <span>{row.room_display_name || row.room_name || 'Unassigned'} · {row.channel_display_name || row.channel || 'Channel'}</span>
-                    </Link>
-                  ))}
+                  {dayRows.map((row) => {
+                    const cancelled = isCancelled(row.status);
+                    return (
+                      <Link
+                        key={`${dayISO}-${row.id}`}
+                        className="calendar-event"
+                        href={`/bookings/${row.id}`}
+                        style={cancelled ? {
+                          background: '#f1f3f5',
+                          borderColor: '#d7dce1',
+                          color: '#707780',
+                          opacity: 0.78,
+                        } : undefined}
+                      >
+                        <span className={statusClass(row.status)}>{row.status || 'confirmed'}</span>
+                        <strong style={cancelled ? { color: '#707780' } : undefined}>{row.guest_full_name || row.guest_name || `BOOK-${row.id}`}</strong>
+                        <span>{row.room_display_name || row.room_name || 'Unassigned'} · {row.channel_display_name || row.channel || 'Channel'}</span>
+                      </Link>
+                    );
+                  })}
                   {matchingRows.length > 5 && (
                     <span className="small muted">+{matchingRows.length - 5} more</span>
                   )}
