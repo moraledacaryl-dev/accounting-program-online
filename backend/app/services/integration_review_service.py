@@ -232,6 +232,29 @@ def _staff_payroll_approval_has_paid_partner(db: Session, row: IntegrationReview
     ).first() is not None
 
 
+def _staff_payroll_revision_of(row: IntegrationReviewItem) -> int | None:
+    if row.source_app != 'staff' or not str(row.source_event_id or '').endswith(':Paid'):
+        return None
+    payload = _loads(row.payload_json)
+    run = payload.get('run') if isinstance(payload, dict) else None
+    if not isinstance(run, dict):
+        nested = payload.get('payload') if isinstance(payload, dict) else None
+        run = nested.get('run') if isinstance(nested, dict) else None
+    try:
+        revision_of = int((run or {}).get('revision_of_run_id') or 0)
+    except (TypeError, ValueError):
+        return None
+    return revision_of or None
+
+
+def _staff_payroll_superseded_paid_ids(rows: list[IntegrationReviewItem]) -> set[str]:
+    return {
+        str(revision_of)
+        for row in rows
+        if (revision_of := _staff_payroll_revision_of(row)) is not None
+    }
+
+
 def list_review_items(db: Session, *, status=None, source_app=None, financial_effect=None, q=None, limit=200):
     query = db.query(IntegrationReviewItem).options(selectinload(IntegrationReviewItem.proposed_account))
     if status:
@@ -248,16 +271,37 @@ def list_review_items(db: Session, *, status=None, source_app=None, financial_ef
             | IntegrationReviewItem.payload_json.ilike(like)
         )
     rows = query.order_by(IntegrationReviewItem.id.desc()).limit(limit).all()
+    superseded_paid_ids = _staff_payroll_superseded_paid_ids(rows)
     # Staff sends both Approved (liability) and Paid (settlement) lifecycle
     # events. Once Paid exists, present the run as one review workflow instead
-    # of two apparently duplicated rows. The Approved row is retained for audit
-    # and is consumed automatically when Paid is accepted.
-    return [_serialize(row) for row in rows if not _staff_payroll_approval_has_paid_partner(db, row)]
+    # of two apparently duplicated rows. Paid revisions also supersede their
+    # original Paid run; keep the original row for audit but hide it from the
+    # actionable queue so one payroll period cannot look like two cash-outs.
+    return [
+        _serialize(row)
+        for row in rows
+        if not _staff_payroll_approval_has_paid_partner(db, row)
+        and not (
+            row.source_app == 'staff'
+            and str(row.source_event_id or '').endswith(':Paid')
+            and str(row.source_entity_id or '') in superseded_paid_ids
+        )
+    ]
 
 
 def summary(db: Session):
     rows = db.query(IntegrationReviewItem).all()
-    visible = [row for row in rows if not _staff_payroll_approval_has_paid_partner(db, row)]
+    superseded_paid_ids = _staff_payroll_superseded_paid_ids(rows)
+    visible = [
+        row
+        for row in rows
+        if not _staff_payroll_approval_has_paid_partner(db, row)
+        and not (
+            row.source_app == 'staff'
+            and str(row.source_event_id or '').endswith(':Paid')
+            and str(row.source_entity_id or '') in superseded_paid_ids
+        )
+    ]
     by_status: dict[str, int] = {}
     for row in visible:
         by_status[row.status] = by_status.get(row.status, 0) + 1
@@ -337,6 +381,16 @@ def accept_item(db: Session, item_id: int, decision: IntegrationReviewDecision, 
     is_staff_payroll_paid = row.source_app == 'staff' and row.source_event_id.endswith(':Paid') and effect == 'cash_out'
 
     if is_staff_payroll_paid:
+        # A later Staff Paid revision replaces this run as the authoritative
+        # payroll for the period. Never let a hidden superseded row be posted
+        # directly by ID as an additional cash disbursement.
+        paid_rows = db.query(IntegrationReviewItem).filter(
+            IntegrationReviewItem.source_app == 'staff',
+            IntegrationReviewItem.source_event_id.endswith(':Paid'),
+        ).all()
+        if str(row.source_entity_id or '') in _staff_payroll_superseded_paid_ids(paid_rows):
+            raise ValueError('This payroll payment was superseded by a paid revision and cannot be accepted as a separate cash disbursement.')
+
         account_id = decision.account_id or row.proposed_account_id
         account = db.query(FinancialAccount).filter(FinancialAccount.id == int(account_id)).first() if account_id else None
         if not account or not account.is_active:
