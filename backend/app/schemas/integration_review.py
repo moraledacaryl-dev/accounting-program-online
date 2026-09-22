@@ -23,6 +23,7 @@ class IntegrationReviewCreate(BaseModel):
 
 class IntegrationReviewDecision(BaseModel):
     account_id: int | None = None
+    actual_amount_paid: float | None = Field(default=None, gt=0)
     transaction_date: str | None = None
     payment_method: str | None = None
     category: str | None = None

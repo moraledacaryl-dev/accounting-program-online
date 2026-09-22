@@ -313,6 +313,9 @@ def accept_item(db: Session, item_id: int, decision: IntegrationReviewDecision, 
     effect = row.financial_effect
     payable_adjustment_result = None
 
+    if decision.actual_amount_paid is not None and not (row.source_app == 'staff' and row.source_event_id.endswith(':Paid') and effect == 'cash_out'):
+        raise ValueError('actual_amount_paid is supported only for Staff & Payroll paid cash-out events.')
+
     if effect in CASH_EFFECTS:
         account_id = decision.account_id or row.proposed_account_id
         account = db.query(FinancialAccount).filter(FinancialAccount.id == int(account_id)).first() if account_id else None
@@ -320,6 +323,16 @@ def accept_item(db: Session, item_id: int, decision: IntegrationReviewDecision, 
             raise ValueError('An active financial account is required.')
         if str(account.currency or 'PHP').upper() != str(row.currency or 'PHP').upper():
             raise ValueError('Financial account currency does not match the event currency.')
+        source_amount = round(float(row.amount or 0), 2)
+        actual_amount = round(float(decision.actual_amount_paid), 2) if decision.actual_amount_paid is not None else source_amount
+        rounding_difference = round(actual_amount - source_amount, 2)
+        base_notes = decision.notes or f'Accepted from {source}'
+        if decision.actual_amount_paid is not None:
+            direction_label = 'up' if rounding_difference > 0 else ('down' if rounding_difference < 0 else 'exactly')
+            base_notes = (
+                f'{base_notes} | Payroll exact net pay: {source_amount:.2f}; '
+                f'actual amount paid: {actual_amount:.2f}; rounding difference: {rounding_difference:+.2f} ({direction_label}).'
+            )
         tx = create_money_transaction(
             db,
             MoneyTransactionCreate(
@@ -330,11 +343,11 @@ def accept_item(db: Session, item_id: int, decision: IntegrationReviewDecision, 
                 category=decision.category or links.get('category') or 'Connected App',
                 subcategory=links.get('subcategory'),
                 level3_item=links.get('level3_item'),
-                amount=row.amount,
+                amount=actual_amount,
                 payment_method=decision.payment_method or links.get('payment_method') or 'other',
                 reference_no=source,
                 counterparty_name=links.get('counterparty_name'),
-                notes=decision.notes or f'Accepted from {source}',
+                notes=base_notes,
                 linked_record_type=row.source_entity_type,
                 linked_record_id=int(row.source_entity_id) if str(row.source_entity_id or '').isdigit() else None,
                 status='posted',
@@ -342,6 +355,15 @@ def accept_item(db: Session, item_id: int, decision: IntegrationReviewDecision, 
             username=username,
         )
         row.accepted_transaction_id = tx['id']
+        if decision.actual_amount_paid is not None:
+            row.validation_json = json.dumps({
+                **validation,
+                'payroll_payment_reconciliation': {
+                    'exact_net_pay': source_amount,
+                    'actual_amount_paid': actual_amount,
+                    'rounding_difference': rounding_difference,
+                },
+            })
     elif effect == 'journal_only':
         journal = _loads(row.proposed_journal_json)
         lines = _journal_lines(journal)
@@ -425,6 +447,9 @@ def accept_item(db: Session, item_id: int, decision: IntegrationReviewDecision, 
             **validation,
             'result': 'payable_adjusted',
             'payable_adjustment': payable_adjustment_result,
+            'actual_amount_paid': float(decision.actual_amount_paid) if decision.actual_amount_paid is not None else None,
+            'source_amount': float(row.amount or 0),
+            'rounding_difference': round(float(decision.actual_amount_paid) - float(row.amount or 0), 2) if decision.actual_amount_paid is not None else None,
         })
     else:
         row.validation_json = json.dumps({

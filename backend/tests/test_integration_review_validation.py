@@ -1,6 +1,9 @@
 from unittest.mock import MagicMock
 
-from app.schemas.integration_review import IntegrationReviewCreate
+import pytest
+from pydantic import ValidationError
+
+from app.schemas.integration_review import IntegrationReviewCreate, IntegrationReviewDecision
 from app.services.integration_review_service import validate_review_payload
 
 
@@ -97,3 +100,13 @@ def test_cash_out_without_source_owned_account_is_reviewable():
     assert result['valid'] is True
     assert result['errors'] == []
     assert any('actual financial account' in warning for warning in result['warnings'])
+
+
+def test_integration_decision_accepts_positive_actual_amount_paid():
+    decision = IntegrationReviewDecision(actual_amount_paid=6891.00)
+    assert decision.actual_amount_paid == 6891.00
+
+
+def test_integration_decision_rejects_nonpositive_actual_amount_paid():
+    with pytest.raises(ValidationError):
+        IntegrationReviewDecision(actual_amount_paid=0)
