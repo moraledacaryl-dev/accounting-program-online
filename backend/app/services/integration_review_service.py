@@ -271,7 +271,11 @@ def list_review_items(db: Session, *, status=None, source_app=None, financial_ef
             | IntegrationReviewItem.payload_json.ilike(like)
         )
     rows = query.order_by(IntegrationReviewItem.id.desc()).limit(limit).all()
-    superseded_paid_ids = _staff_payroll_superseded_paid_ids(rows)
+    staff_paid_rows = db.query(IntegrationReviewItem).filter(
+        IntegrationReviewItem.source_app == 'staff',
+        IntegrationReviewItem.source_event_id.endswith(':Paid'),
+    ).all()
+    superseded_paid_ids = _staff_payroll_superseded_paid_ids(staff_paid_rows)
     # Staff sends both Approved (liability) and Paid (settlement) lifecycle
     # events. Once Paid exists, present the run as one review workflow instead
     # of two apparently duplicated rows. Paid revisions also supersede their
