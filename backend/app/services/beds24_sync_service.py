@@ -2258,6 +2258,30 @@ def extract_webhook_booking_ids(payload: Any) -> list[str]:
     return sorted(found)
 
 
+def _sanitize_webhook_diagnostic(node: Any, *, depth: int = 0) -> Any:
+    """Keep enough rejected-webhook structure to diagnose Beds24 without retaining credentials or guest PII."""
+    if depth > 5:
+        return '<max-depth>'
+    if isinstance(node, dict):
+        safe: dict[str, Any] = {}
+        for key, value in node.items():
+            normalized = str(key).replace('_', '').replace('-', '').lower()
+            if any(token in normalized for token in ('secret', 'token', 'password', 'authorization', 'email', 'phone', 'address', 'name')):
+                safe[str(key)] = '<redacted>'
+            elif normalized in {'bookingid', 'bookid', 'bookingids', 'bookids', 'id', 'event', 'action', 'type', 'status'}:
+                safe[str(key)] = _sanitize_webhook_diagnostic(value, depth=depth + 1)
+            elif isinstance(value, (dict, list)):
+                safe[str(key)] = _sanitize_webhook_diagnostic(value, depth=depth + 1)
+            else:
+                safe[str(key)] = f'<{type(value).__name__}>'
+        return safe
+    if isinstance(node, list):
+        return [_sanitize_webhook_diagnostic(value, depth=depth + 1) for value in node[:10]]
+    if isinstance(node, (str, int, float, bool)) or node is None:
+        return node
+    return f'<{type(node).__name__}>'
+
+
 def _validate_webhook_secret(settings: dict[str, Any], headers: dict[str, str], query_secret: str | None):
     if not settings.get('webhook_enabled'):
         raise ValueError('Beds24 webhook is disabled.')
@@ -2321,6 +2345,12 @@ def sync_from_webhook(
         }
 
     # An unidentified event must never resync unrelated reservations.
-    _upsert_sync_log(db, event_type='webhook_missing_booking_id', source_type='webhook',
-                    status='error', message='Webhook missing booking ID; no bookings changed.')
+    _upsert_sync_log(
+        db,
+        event_type='webhook_missing_booking_id',
+        source_type='webhook',
+        status='error',
+        message='Webhook missing booking ID; no bookings changed.',
+        payload={'diagnostic': _sanitize_webhook_diagnostic(payload)},
+    )
     raise ValueError('Webhook contains no booking ID. Send bookingId in JSON or form data.')
