@@ -2319,6 +2319,29 @@ def sync_from_webhook(
     _validate_webhook_secret(settings, {k.lower(): v for k, v in (headers or {}).items()}, query_secret)
 
     booking_ids = extract_webhook_booking_ids(payload)
+    action = _norm(payload.get('action')).upper() if isinstance(payload, dict) else ''
+    if not booking_ids and action == 'SYNC_ROOM':
+        log = _upsert_sync_log(
+            db,
+            event_type='webhook_room_sync',
+            source_type='webhook',
+            status='ignored',
+            message='Beds24 room synchronization notification received; no booking sync required.',
+            payload={'diagnostic': _sanitize_webhook_diagnostic(payload)},
+        )
+        return {
+            'ok': True,
+            'source': 'webhook',
+            'action': action,
+            'booking_ids': [],
+            'synced': 0,
+            'failed': 0,
+            'results': [],
+            'errors': [],
+            'ignored': True,
+            'log_id': log['id'],
+        }
+
     if booking_ids:
         results: list[dict[str, Any]] = []
         errors: list[dict[str, Any]] = []
