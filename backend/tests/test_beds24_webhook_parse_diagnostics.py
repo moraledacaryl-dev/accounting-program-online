@@ -2,7 +2,7 @@ from pathlib import Path
 
 
 def test_invalid_webhook_diagnostic_never_persists_body_or_guest_pii():
-    source = Path("app/api/integrations_beds24.py").read_text()
+    source = Path(__file__).resolve().parents[1] / "app/api/integrations_beds24.py".read_text()
     assert "event_type='webhook_invalid_payload'" in source
     assert "'content_type': content_type or '<missing>'" in source
     assert "'content_length': len(raw_body)" in source
