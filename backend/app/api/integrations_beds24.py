@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import json
 from urllib.parse import parse_qs
 
 from fastapi import APIRouter, Depends, HTTPException, Query, Request
@@ -31,6 +32,7 @@ from app.services.beds24_sync_service import (
     sync_booking_by_id,
     sync_from_webhook,
     sync_recent_bookings,
+    _upsert_sync_log,
 )
 
 router = APIRouter()
@@ -255,12 +257,32 @@ def beds24_reset_execute(payload: Beds24ResetExecutePayload, db: Session = Depen
 async def beds24_webhook(request: Request, db: Session = Depends(get_db)):
     if 'secret' in request.query_params:
         raise HTTPException(status_code=400, detail='Webhook credentials must be sent in a supported request header.')
+    raw_body = await request.body()
+    content_type = request.headers.get('content-type', '').split(';')[0].strip().lower()
     try:
-        if request.headers.get('content-type', '').split(';')[0] == 'application/x-www-form-urlencoded':
-            payload = {key: values[-1] for key, values in parse_qs((await request.body()).decode()).items()}
+        if content_type == 'application/x-www-form-urlencoded':
+            payload = {key: values[-1] for key, values in parse_qs(raw_body.decode()).items()}
         else:
-            payload = await request.json()
-    except (ValueError, UnicodeDecodeError):
+            payload = json.loads(raw_body.decode())
+    except (ValueError, UnicodeDecodeError, json.JSONDecodeError):
+        # Never persist the rejected body: Booking Webhook V2 can contain guest PII.
+        # Record only transport metadata and a structural first-byte hint so the
+        # live wire format can be diagnosed without retaining booking content.
+        stripped = raw_body.lstrip()
+        first_byte = stripped[:1].decode('ascii', errors='replace') if stripped else ''
+        _upsert_sync_log(
+            db,
+            event_type='webhook_invalid_payload',
+            source_type='webhook',
+            status='error',
+            message='Invalid Beds24 webhook payload; body not retained.',
+            payload={
+                'content_type': content_type or '<missing>',
+                'content_length': len(raw_body),
+                'first_byte': first_byte or '<empty>',
+                'has_query_params': bool(request.query_params),
+            },
+        )
         raise HTTPException(status_code=400, detail='Invalid Beds24 webhook payload.')
     try:
         result = sync_from_webhook(
