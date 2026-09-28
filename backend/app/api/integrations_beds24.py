@@ -306,6 +306,21 @@ async def beds24_webhook(request: Request, db: Session = Depends(get_db)):
     except Beds24ApiError as exc:
         raise HTTPException(status_code=400, detail=str(exc))
     except ValueError as exc:
-        raise HTTPException(status_code=400, detail=str(exc))
+        message = str(exc)
+        if message in {'Invalid webhook secret.', 'Beds24 webhook secret is required but not configured.'}:
+            lower_headers = {k.lower(): v for k, v in request.headers.items()}
+            _upsert_sync_log(
+                db,
+                event_type='webhook_auth_rejected',
+                source_type='webhook',
+                status='error',
+                message='Beds24 webhook authentication rejected; header values not retained.',
+                payload={
+                    'x_beds24_secret_present': bool(lower_headers.get('x-beds24-secret')),
+                    'x_webhook_secret_present': bool(lower_headers.get('x-webhook-secret')),
+                    'x_api_key_present': bool(lower_headers.get('x-api-key')),
+                },
+            )
+        raise HTTPException(status_code=400, detail=message)
     except Exception:
         raise HTTPException(status_code=500, detail='Beds24 webhook processing failed.')
