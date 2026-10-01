@@ -1066,6 +1066,16 @@ def _extract_invoice_item_entries(payload: dict[str, Any], beds24_booking_id: st
             if not kind:
                 kind = parent_kind
             line_type = _classify_folio_line_type(description, kind, signed_amount=signed_amount)
+            # A native charge is not collected cash just because its label says
+            # "deposit". Keep explicit refunds (Beds24 represents these as
+            # positive charges), but respect the native side for other charges.
+            explicit_kind = _norm_lower(row.get('type') or row.get('kind') or row.get('entryType'))
+            if explicit_kind == 'charge' and signed_amount > 0 and line_type in {'deposit', 'payment'}:
+                label = re.sub(r'[^a-z0-9]+', ' ', description.lower())
+                if 'non refundable' in label or 'nonrefundable' in label:
+                    line_type = 'nonrefundable_charge'
+                else:
+                    line_type = _classify_charge_line_type(description)
             if line_total is not None and abs(line_total) > 0.0001:
                 amount = abs(line_total)
             entries.append(
@@ -1160,7 +1170,11 @@ def _apply_prepaid_settlement_if_missing(
     charge_total = 0.0
     for row in entries:
         line_type = _norm_lower(row.get('line_type'))
-        if line_type in POSITIVE_FOLIO_TYPES:
+        # Include the stay and its explicit tax lines, not guest extras.
+        # Booking.com invoices commonly separate VAT and city tax.
+        label = re.sub(r'[^a-z0-9]+', ' ', _norm_lower(row.get('description'))).strip()
+        is_stay_tax = line_type == 'manual_charge' and label in {'tax', 'vat', 'city tax', 'tourist tax', 'occupancy tax'}
+        if line_type == 'room_charge' or is_stay_tax:
             charge_total += _as_float(row.get('amount'), 0)
     if charge_total <= 0.0001:
         return entries
