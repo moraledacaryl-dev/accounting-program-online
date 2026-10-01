@@ -52,3 +52,11 @@ def test_existing_payment_is_not_duplicated():
 def test_summary_room_prepaid_still_works():
     rows = _build_folio_entries({'price': 4000}, '42', force_prepaid_settlement=True)
     assert [r['amount'] for r in rows] == [4000, 4000]
+
+
+def test_ota_settlement_preserves_separate_stay_taxes():
+    rows = _build_folio_entries({'invoiceItems': [
+        entry('Room accommodation', 3200), entry('VAT', 384, id=2),
+        entry('City tax', 320, id=3), entry('Extra Breakfast', 200, id=4),
+    ]}, '42', force_prepaid_settlement=True)
+    assert rows[-1]['amount'] == 3904

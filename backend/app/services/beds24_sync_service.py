@@ -1170,8 +1170,11 @@ def _apply_prepaid_settlement_if_missing(
     charge_total = 0.0
     for row in entries:
         line_type = _norm_lower(row.get('line_type'))
-        # Channel prepayment covers the stay, not separately billed guest extras.
-        if line_type == 'room_charge':
+        # Include the stay and its explicit tax lines, not guest extras.
+        # Booking.com invoices commonly separate VAT and city tax.
+        label = re.sub(r'[^a-z0-9]+', ' ', _norm_lower(row.get('description'))).strip()
+        is_stay_tax = line_type == 'manual_charge' and label in {'tax', 'vat', 'city tax', 'tourist tax', 'occupancy tax'}
+        if line_type == 'room_charge' or is_stay_tax:
             charge_total += _as_float(row.get('amount'), 0)
     if charge_total <= 0.0001:
         return entries
