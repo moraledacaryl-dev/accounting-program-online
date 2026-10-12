@@ -1,0 +1,38 @@
+name: Refresh frontend security lockfile
+
+on:
+  pull_request:
+    paths:
+      - '.github/workflows/refresh-frontend-lock.yml'
+
+permissions:
+  contents: write
+
+jobs:
+  refresh-lock:
+    if: github.event.pull_request.head.repo.full_name == github.repository
+    runs-on: ubuntu-latest
+    steps:
+      - name: Check out pull request branch
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          git clone "https://x-access-token:${GH_TOKEN}@github.com/${GITHUB_REPOSITORY}.git" repo
+          cd repo
+          git checkout "${{ github.head_ref }}"
+      - name: Refresh audited frontend lockfile
+        working-directory: repo/frontend
+        run: |
+          npm ci
+          npm audit fix
+          npm audit --omit=dev
+      - name: Commit regenerated lockfile to pull request
+        working-directory: repo
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add frontend/package-lock.json
+          if ! git diff --cached --quiet; then
+            git commit -m "Fix audited frontend transitive dependencies"
+            git push origin "HEAD:${{ github.head_ref }}"
+          fi
