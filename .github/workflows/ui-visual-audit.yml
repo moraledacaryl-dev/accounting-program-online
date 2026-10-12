@@ -36,6 +36,7 @@ jobs:
       ALLOW_DEFAULT_ADMIN_BOOTSTRAP: "true"
       ALLOW_DEMO_SEED: "true"
       SECRET_KEY: visual-audit-only-secret
+      STARTUP_REQUIRE_MIGRATIONS: "false"
       NEXT_PUBLIC_API_BASE: http://127.0.0.1:8000/api
       NEXT_TELEMETRY_DISABLED: "1"
 
@@ -51,6 +52,15 @@ jobs:
 
       - name: Install backend dependencies
         run: pip install -r backend/requirements.txt
+
+      - name: Initialize disposable visual-audit schema
+        working-directory: backend
+        run: |
+          python - <<'PY'
+          import app.models  # noqa: F401
+          from app.db.database import Base, engine
+          Base.metadata.create_all(bind=engine)
+          PY
 
       - name: Start backend
         working-directory: backend
