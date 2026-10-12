@@ -557,3 +557,35 @@
     -webkit-overflow-scrolling: touch;
   }
 }
+
+@media (max-width: 760px) {
+  .cash-workspace:has(.cash-account-strip) > .section:has(.unified-tabs) {
+    padding: 6px;
+  }
+  .cash-workspace:has(.cash-account-strip) .unified-tabs {
+    display: grid;
+    grid-template-columns: repeat(5, max-content);
+    justify-content: start;
+    width: 100%;
+    overflow-x: auto;
+    padding: 3px;
+  }
+  .cash-workspace:has(.cash-account-strip) .unified-tabs .tab {
+    display: block;
+    width: auto;
+    min-width: 0;
+    padding: 8px 10px;
+  }
+  .cash-workspace:has(.cash-account-strip) .section:has(.cash-account-strip) {
+    padding: 12px;
+  }
+  .cash-workspace:has(.cash-account-strip) .section:has(.cash-account-strip) .section-title-row {
+    margin-top: 4px;
+  }
+  .cash-workspace:has(.cash-account-strip) .section:has(.cash-account-strip) .metric-grid.compact {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+  .cash-workspace:has(.cash-account-strip) .section:has(.cash-account-strip) .metric-grid.compact .metric-card {
+    padding: 10px 11px;
+  }
+}
