@@ -114,6 +114,18 @@ jobs:
           cat /tmp/accounting-web.log
           exit 1
 
+      - name: Inject disposable audit login
+        working-directory: frontend
+        run: |
+          python - <<'PY'
+          import json, os
+          from pathlib import Path
+          script = Path("scripts/visual-audit.mjs")
+          text = script.read_text()
+          text = text.replace(".fill('admin123')", f".fill({json.dumps(os.environ['VISUAL_AUDIT_PASSWORD'])})")
+          script.write_text(text)
+          PY
+
       - name: Capture visual audit
         working-directory: frontend
         run: node scripts/visual-audit.mjs
