@@ -98,7 +98,7 @@ async function captureState(name, route, buttonName) {
   if (buttonName) await page.getByRole('button', { name: buttonName, exact: true }).first().click();
   await page.waitForTimeout(200);
   const file = name + '--desktop.png';
-  await page.screenshot({ path: path.join(OUT, file), fullPage: true });
+  await page.screenshot({ path: path.join(OUT, file) });
   manifest.push({ name, route, viewport: '1440x1000', file, status: 'ok', state: true, title: await page.title() });
 }
 
