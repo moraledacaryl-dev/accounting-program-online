@@ -95,6 +95,7 @@ for (const [name, route] of [
   ['dashboard', '/dashboard'],
   ['cashflow-overview', '/cashflow'],
   ['cashflow-accounts', '/cashflow/accounts'],
+  ['cashflow-ledger', '/cashflow/ledger'],
   ...(firstAccountId ? [['cashflow-account-history', `/cashflow/${firstAccountId}`]] : []),
 ]) {
   let status = 'ok';
