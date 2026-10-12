@@ -32,7 +32,7 @@ async function api(pathname, options = {}) {
     const text = await res.text();
     let data = null;
     try { data = text ? JSON.parse(text) : null; } catch { data = text; }
-    if (!res.ok) throw new Error(`${res.status} ${pathname}: ${text}`);
+    if (!res.ok) throw new Error(`${res.status} ${url}: ${text}`);
     return data;
   }, { url: `${API}${pathname}`, options });
 }
