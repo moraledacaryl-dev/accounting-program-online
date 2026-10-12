@@ -864,6 +864,19 @@ def _is_posting_status(status: str | None) -> bool:
     return (status or '').strip().lower() in {'approved', 'posted'}
 
 
+def _ensure_cash_day_open(db: Session, account_id: int, business_date: str | None, *, action: str) -> None:
+    date_value = _safe_date(business_date)
+    closed = db.query(CashReconciliation).filter(
+        CashReconciliation.financial_account_id == int(account_id),
+        CashReconciliation.reconciliation_date == date_value,
+        CashReconciliation.status == 'closed',
+    ).first()
+    if closed:
+        account = db.get(FinancialAccount, int(account_id))
+        name = account.name if account else f'account {account_id}'
+        raise ValueError(f'{date_value} is closed for {name}. Reverse the reconciliation before you {action}.')
+
+
 def _create_linked_record(
     db: Session,
     *,
@@ -964,6 +977,7 @@ def create_money_transaction(db: Session, payload: MoneyTransactionCreate, usern
             raise ValueError('Linked payable not found.')
 
     tx_date = _safe_date(payload.transaction_date)
+    _ensure_cash_day_open(db, row_account.id, tx_date, action='add or change ledger movements')
     ensure_date_unlocked(db, tx_date, scope='bir', action='create cashflow transaction in locked period')
 
     if direction == 'out' and not bool(payload.allow_overdraw) and _normalize(row_account.account_type) in STRICT_CASH_TYPES:
@@ -1402,6 +1416,8 @@ def create_transfer(db: Session, payload: AccountTransferCreate, username: str |
         raise ValueError('from_account_id and to_account_id cannot be the same.')
 
     transfer_date = _safe_date(payload.transfer_date)
+    _ensure_cash_day_open(db, from_account.id, transfer_date, action='add or change transfers')
+    _ensure_cash_day_open(db, to_account.id, transfer_date, action='add or change transfers')
     ensure_date_unlocked(db, transfer_date, scope='bir', action='create account transfer in locked period')
 
     if not bool(payload.allow_overdraw) and _normalize(from_account.account_type) in STRICT_CASH_TYPES:
