@@ -24,7 +24,7 @@ page.on('pageerror', (err) => consoleErrors.push({ url: page.url(), text: err.me
 
 async function api(pathname, options = {}) {
   return page.evaluate(async ({ url, options }) => {
-    const token = localStorage.getItem('erp_token') || '';
+    const token = '';
     const headers = { ...(options.headers || {}) };
     if (token) headers.Authorization = `Bearer ${token}`;
     if (options.body && !headers['Content-Type']) headers['Content-Type'] = 'application/json';
