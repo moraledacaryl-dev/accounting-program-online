@@ -1524,6 +1524,8 @@ def update_transfer(db: Session, transfer_id: int, payload: AccountTransferUpdat
     if _normalize(row.status) == 'cancelled':
         raise ValueError('Cancelled transfer cannot be edited.')
 
+    _ensure_cash_day_open(db, row.from_account_id, row.transfer_date, action='edit this transfer')
+    _ensure_cash_day_open(db, row.to_account_id, row.transfer_date, action='edit this transfer')
     old_posting = _is_posting_status(row.status)
     old_amount = float(row.amount or 0)
     old_from = db.get(FinancialAccount, int(row.from_account_id))
@@ -1560,6 +1562,8 @@ def update_transfer(db: Session, transfer_id: int, payload: AccountTransferUpdat
     if not row.transfer_date:
         row.transfer_date = _today()
 
+    _ensure_cash_day_open(db, row.from_account_id, row.transfer_date, action='move or edit this transfer')
+    _ensure_cash_day_open(db, row.to_account_id, row.transfer_date, action='move or edit this transfer')
     ensure_date_unlocked(db, row.transfer_date, scope='bir', action='update transfer in locked period')
     for key in ('reference_no', 'notes'):
         if key in data:
@@ -1640,6 +1644,8 @@ def cancel_transfer(db: Session, transfer_id: int, payload: CashflowActionPayloa
     if _normalize(row.status) == 'cancelled':
         raise ValueError('Transfer is already cancelled.')
 
+    _ensure_cash_day_open(db, row.from_account_id, row.transfer_date, action='cancel this transfer')
+    _ensure_cash_day_open(db, row.to_account_id, row.transfer_date, action='cancel this transfer')
     if _is_posting_status(row.status):
         from_account = db.get(FinancialAccount, int(row.from_account_id))
         to_account = db.get(FinancialAccount, int(row.to_account_id))
@@ -1681,6 +1687,10 @@ def reverse_transfer(db: Session, transfer_id: int, payload: CashflowActionPaylo
         raise ValueError('Cancelled transfer cannot be reversed.')
 
     reverse_date = _safe_date(payload.action_date or row.transfer_date)
+    _ensure_cash_day_open(db, row.from_account_id, row.transfer_date, action='reverse this transfer')
+    _ensure_cash_day_open(db, row.to_account_id, row.transfer_date, action='reverse this transfer')
+    _ensure_cash_day_open(db, row.from_account_id, reverse_date, action='post its reversal')
+    _ensure_cash_day_open(db, row.to_account_id, reverse_date, action='post its reversal')
     ensure_date_unlocked(db, reverse_date, scope='bir', action='reverse transfer in locked period')
 
     reversal = None
