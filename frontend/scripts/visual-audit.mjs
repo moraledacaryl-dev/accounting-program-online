@@ -40,7 +40,7 @@ async function api(pathname, options = {}) {
 await page.goto(`${BASE}/login`, { waitUntil: 'networkidle' });
 await page.getByLabel('Username').fill('admin');
 await page.locator('input[type="password"]').fill('admin123');
-await page.getByRole('button', { name: 'Login' }).click();
+await page.getByRole('button', { name: 'Sign in' }).click();
 await page.waitForURL((url) => !url.pathname.includes('/login'), { timeout: 15000 });
 await page.waitForLoadState('networkidle');
 
