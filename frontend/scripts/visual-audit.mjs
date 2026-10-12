@@ -28,7 +28,7 @@ async function api(pathname, options = {}) {
     const headers = { ...(options.headers || {}) };
     if (token) headers.Authorization = `Bearer ${token}`;
     if (options.body && !headers['Content-Type']) headers['Content-Type'] = 'application/json';
-    const res = await fetch(url, { ...options, headers });
+    const res = await fetch(url, { credentials: 'include', ...options, headers });
     const text = await res.text();
     let data = null;
     try { data = text ? JSON.parse(text) : null; } catch { data = text; }
