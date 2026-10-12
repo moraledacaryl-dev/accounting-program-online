@@ -110,7 +110,7 @@ await captureState('cashflow-transfers-new-transfer-drawer', '/cashflow?tab=tran
 
 await page.setViewportSize({ width: 1440, height: 1000 });
 await page.goto(BASE + '/cashflow?tab=ledger', { waitUntil: 'networkidle', timeout: 30000 });
-await page.getByPlaceholder('Search reference or description').fill('visual audit long reference sample');
+await page.locator('input[aria-label="Search ledger"]').fill('visual audit long reference sample');
 await page.locator('.filter-bar select').first().selectOption('in');
 await page.locator('.filter-bar select').nth(1).selectOption('posted');
 await page.screenshot({ path: path.join(OUT, 'cashflow-ledger-filters-populated--desktop.png'), fullPage: true });
