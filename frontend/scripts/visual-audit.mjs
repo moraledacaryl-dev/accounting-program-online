@@ -53,6 +53,7 @@ const routes = [
   ['finance-workspace', '/workspace/finance'],
   ['cashflow-overview', '/cashflow'],
   ['cashflow-accounts', '/cashflow/accounts'],
+  ['cashflow-ledger', '/cashflow/ledger'],
   ...(firstAccountId ? [['cashflow-account-history', `/cashflow/${firstAccountId}`]] : []),
   ['cashflow-money-in', '/cashflow/money-in'],
   ['cashflow-money-out', '/cashflow/money-out'],
