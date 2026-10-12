@@ -107,6 +107,21 @@ await captureState('cashflow-overview-money-out-drawer', '/cashflow?tab=overview
 await captureState('cashflow-overview-transfer-drawer', '/cashflow?tab=overview', 'Transfer');
 await captureState('cashflow-transfers-new-transfer-drawer', '/cashflow?tab=transfers', 'New Transfer');
 
+
+await page.setViewportSize({ width: 1440, height: 1000 });
+await page.goto(BASE + '/cashflow?tab=ledger', { waitUntil: 'networkidle', timeout: 30000 });
+await page.getByPlaceholder('Search reference or description').fill('visual audit long reference sample');
+await page.locator('.filter-bar select').first().selectOption('in');
+await page.locator('.filter-bar select').nth(1).selectOption('posted');
+await page.screenshot({ path: path.join(OUT, 'cashflow-ledger-filters-populated--desktop.png'), fullPage: true });
+manifest.push({ name: 'cashflow-ledger-filters-populated', route: '/cashflow?tab=ledger', viewport: '1440x1000', file: 'cashflow-ledger-filters-populated--desktop.png', status: 'ok', state: true, title: await page.title() });
+
+await page.goto(BASE + '/cashflow?tab=settings', { waitUntil: 'networkidle', timeout: 30000 });
+await page.evaluate(() => window.scrollTo(0, document.body.scrollHeight));
+await page.waitForTimeout(150);
+await page.screenshot({ path: path.join(OUT, 'cashflow-settings-bottom--desktop.png') });
+manifest.push({ name: 'cashflow-settings-bottom', route: '/cashflow?tab=settings', viewport: '1440x1000', file: 'cashflow-settings-bottom--desktop.png', status: 'ok', state: true, title: await page.title() });
+
 await page.setViewportSize({ width: 390, height: 844 });
 for (const [name, route] of [
   ['dashboard', '/dashboard'],
