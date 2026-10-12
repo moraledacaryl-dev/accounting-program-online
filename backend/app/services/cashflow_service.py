@@ -2640,6 +2640,95 @@ def cashflow_summary(db: Session, target_date: str | None = None):
     }
 
 
+def combined_cash_ledger(
+    db: Session,
+    *,
+    account_id: int | None = None,
+    start_date: str | None = None,
+    end_date: str | None = None,
+    sort: str = 'desc',
+    include_reconciliations: bool = True,
+    direction: str | None = None,
+    module: str | None = None,
+    status: str | None = None,
+    payment_method: str | None = None,
+    category: str | None = None,
+    q: str | None = None,
+    limit: int = 500,
+):
+    ensure_default_financial_accounts(db)
+    accounts = db.query(FinancialAccount).filter(FinancialAccount.is_active.is_(True)).order_by(FinancialAccount.name.asc()).all()
+    if account_id:
+        accounts = [row for row in accounts if int(row.id) == int(account_id)]
+        if not accounts:
+            raise ValueError('Financial account not found.')
+
+    combined = []
+    account_summaries = []
+    for account in accounts:
+        ledger = account_ledger(
+            db, account.id, start_date=start_date, end_date=end_date,
+            include_reconciliations=include_reconciliations, direction=direction,
+            module=module, status=status, q=q, limit=limit,
+        )
+        account_summaries.append({
+            'account': ledger['account'],
+            'opening_balance': ledger['opening_balance'],
+            'closing_balance': ledger['closing_balance'],
+        })
+        for row in ledger['rows']:
+            if row.get('entry_type') == 'opening_balance':
+                continue
+            meta = row.get('meta') or {}
+            if payment_method and row.get('entry_type') == 'money_transaction' and str(meta.get('payment_method') or '') != str(payment_method):
+                continue
+            if category and row.get('entry_type') == 'money_transaction' and str(meta.get('category') or '') != str(category):
+                continue
+            out = dict(row)
+            out['account_id'] = account.id
+            out['account_name'] = account.name
+            out['account_code'] = account.code
+            if row.get('entry_type') == 'money_transaction':
+                out['movement_at'] = meta.get('transaction_at') or meta.get('created_at') or row.get('date')
+            elif row.get('entry_type') == 'account_transfer':
+                out['movement_at'] = meta.get('transfer_at') or meta.get('created_at') or row.get('date')
+            else:
+                out['movement_at'] = meta.get('closed_at') or meta.get('posted_at') or row.get('date')
+                recon_date = str(meta.get('reconciliation_date') or row.get('date') or '')
+                tx_count = db.query(MoneyTransaction).filter(
+                    MoneyTransaction.financial_account_id == account.id,
+                    MoneyTransaction.transaction_date == recon_date,
+                ).count()
+                transfer_count = db.query(AccountTransfer).filter(
+                    AccountTransfer.transfer_date == recon_date,
+                    or_(AccountTransfer.from_account_id == account.id, AccountTransfer.to_account_id == account.id),
+                ).count()
+                out['included_movement_count'] = tx_count + transfer_count
+            combined.append(out)
+
+    reverse = str(sort or 'desc').lower() != 'asc'
+    combined.sort(
+        key=lambda row: (
+            str(row.get('movement_at') or row.get('date') or ''),
+            str(row.get('date') or ''),
+            int(row.get('entry_id') or 0),
+            int(row.get('account_id') or 0),
+        ),
+        reverse=reverse,
+    )
+    combined = combined[:max(1, min(int(limit or 500), 2000))]
+    return {
+        'scope': 'account' if account_id else 'all_accounts',
+        'sort': 'desc' if reverse else 'asc',
+        'account_summaries': account_summaries,
+        'rows': combined,
+        'transaction_count': len([row for row in combined if row.get('entry_type') != 'cash_reconciliation']),
+        'reconciliation_count': len([row for row in combined if row.get('entry_type') == 'cash_reconciliation']),
+        'money_in_total': round(sum(float(row.get('debit') or 0) for row in combined if row.get('entry_type') != 'cash_reconciliation'), 4),
+        'money_out_total': round(sum(float(row.get('credit') or 0) for row in combined if row.get('entry_type') != 'cash_reconciliation'), 4),
+    }
+
+
 def account_ledger(
     db: Session,
     account_id: int,
