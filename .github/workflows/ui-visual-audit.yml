@@ -57,7 +57,11 @@ jobs:
         working-directory: backend
         run: |
           python - <<'PY'
-          import app.models  # noqa: F401
+          import importlib
+          import pkgutil
+          import app.models
+          for module in pkgutil.iter_modules(app.models.__path__):
+              importlib.import_module(f"app.models.{module.name}")
           from app.db.database import Base, engine
           Base.metadata.create_all(bind=engine)
           PY
