@@ -1130,6 +1130,7 @@ def update_money_transaction(db: Session, tx_id: int, payload: MoneyTransactionU
         raise ValueError('Cancelled money transaction cannot be edited.')
 
     data = payload.model_dump(exclude_unset=True)
+    _ensure_cash_day_open(db, row.financial_account_id, row.transaction_date, action='edit this transaction')
     old_status = _normalize_transaction_status(row.status)
     old_posting = _is_posting_status(old_status)
     if old_posting:
@@ -1176,6 +1177,7 @@ def update_money_transaction(db: Session, tx_id: int, payload: MoneyTransactionU
     if not row.transaction_date:
         row.transaction_date = _today()
 
+    _ensure_cash_day_open(db, row.financial_account_id, row.transaction_date, action='move or edit this transaction')
     ensure_date_unlocked(db, row.transaction_date, scope='bir', action='update cashflow transaction in locked period')
 
     next_status = _normalize_transaction_status(data.get('status') or row.status)
@@ -1233,6 +1235,7 @@ def cancel_money_transaction(db: Session, tx_id: int, payload: CashflowActionPay
     if _normalize(row.status) == 'cancelled':
         raise ValueError('Money transaction is already cancelled.')
 
+    _ensure_cash_day_open(db, row.financial_account_id, row.transaction_date, action='cancel this transaction')
     if _is_posting_status(row.status):
         _reverse_money_effect(db, row)
     row.status = 'cancelled'
@@ -1294,6 +1297,8 @@ def reverse_money_transaction(db: Session, tx_id: int, payload: CashflowActionPa
         raise ValueError('Cancelled transaction cannot be reversed.')
 
     reverse_date = _safe_date(payload.action_date or row.transaction_date)
+    _ensure_cash_day_open(db, row.financial_account_id, row.transaction_date, action='reverse this transaction')
+    _ensure_cash_day_open(db, row.financial_account_id, reverse_date, action='post its reversal')
     ensure_date_unlocked(db, reverse_date, scope='bir', action='reverse cashflow transaction in locked period')
 
     reversal_row = None
