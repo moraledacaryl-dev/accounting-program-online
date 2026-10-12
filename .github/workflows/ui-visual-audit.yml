@@ -15,12 +15,28 @@ jobs:
   capture:
     runs-on: ubuntu-latest
     timeout-minutes: 25
+    services:
+      postgres:
+        image: postgres:16
+        env:
+          POSTGRES_USER: accounting
+          POSTGRES_PASSWORD: accounting
+          POSTGRES_DB: accounting_visual_audit
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd "pg_isready -U accounting -d accounting_visual_audit"
+          --health-interval 10s
+          --health-timeout 5s
+          --health-retries 5
+
     env:
       ENVIRONMENT: test
-      DATABASE_URL: sqlite:////tmp/accounting-visual-audit.db
+      DATABASE_URL: postgresql+psycopg://accounting:accounting@127.0.0.1:5432/accounting_visual_audit
       ALLOW_DEFAULT_ADMIN_BOOTSTRAP: "true"
       ALLOW_DEMO_SEED: "true"
       SECRET_KEY: visual-audit-only-secret
+      STARTUP_REQUIRE_MIGRATIONS: "false"
       NEXT_PUBLIC_API_BASE: http://127.0.0.1:8000/api
       NEXT_TELEMETRY_DISABLED: "1"
 
@@ -37,13 +53,26 @@ jobs:
       - name: Install backend dependencies
         run: pip install -r backend/requirements.txt
 
+      - name: Initialize disposable visual-audit schema
+        working-directory: backend
+        run: |
+          python - <<'PY'
+          import importlib
+          import pkgutil
+          import app.models
+          for module in pkgutil.iter_modules(app.models.__path__):
+              importlib.import_module(f"app.models.{module.name}")
+          from app.db.database import Base, engine
+          Base.metadata.create_all(bind=engine)
+          PY
+
       - name: Start backend
         working-directory: backend
         run: |
           python -m uvicorn app.main:app --host 127.0.0.1 --port 8000 > /tmp/accounting-api.log 2>&1 &
           echo $! > /tmp/accounting-api.pid
           for i in {1..60}; do
-            if curl -fsS http://127.0.0.1:8000/api/integration/status >/dev/null; then exit 0; fi
+            if curl -sS -o /dev/null http://127.0.0.1:8000/openapi.json; then exit 0; fi
             sleep 1
           done
           cat /tmp/accounting-api.log
@@ -51,9 +80,12 @@ jobs:
 
       - name: Seed visual-audit data
         run: |
-          curl -fsS -X POST http://127.0.0.1:8000/api/auth/bootstrap
+          BOOTSTRAP="$(curl -fsS -X POST http://127.0.0.1:8000/api/auth/bootstrap)"
+          ADMIN_PASSWORD="$(printf '%s' "$BOOTSTRAP" | python -c 'import json,sys; print(json.load(sys.stdin).get("temporary_password") or "admin123")')"
+          echo "VISUAL_AUDIT_PASSWORD=$ADMIN_PASSWORD" >> "$GITHUB_ENV"
           curl -fsS -X POST http://127.0.0.1:8000/api/seed/demo
-          TOKEN="$(curl -fsS -X POST http://127.0.0.1:8000/api/auth/login -H 'Content-Type: application/json' -d '{"username":"admin","password":"admin123"}' | python -c 'import json,sys; print(json.load(sys.stdin)["access_token"])')"
+          LOGIN_BODY="$(python -c 'import json,sys; print(json.dumps({"username":"admin","password":sys.argv[1]}))' "$ADMIN_PASSWORD")"
+          TOKEN="$(curl -fsS -X POST http://127.0.0.1:8000/api/auth/login -H 'Content-Type: application/json' -d "$LOGIN_BODY" | python -c 'import json,sys; print(json.load(sys.stdin)["access_token"])')"
           curl -fsS -X POST http://127.0.0.1:8000/api/financial-accounts/bootstrap-defaults -H "Authorization: Bearer $TOKEN"
 
       - name: Set up Node
@@ -85,6 +117,18 @@ jobs:
           done
           cat /tmp/accounting-web.log
           exit 1
+
+      - name: Inject disposable audit login
+        working-directory: frontend
+        run: |
+          python - <<'PY'
+          import json, os
+          from pathlib import Path
+          script = Path("scripts/visual-audit.mjs")
+          text = script.read_text()
+          text = text.replace(".fill('admin123')", f".fill({json.dumps(os.environ['VISUAL_AUDIT_PASSWORD'])})")
+          script.write_text(text)
+          PY
 
       - name: Capture visual audit
         working-directory: frontend

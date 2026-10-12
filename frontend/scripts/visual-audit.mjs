@@ -24,23 +24,23 @@ page.on('pageerror', (err) => consoleErrors.push({ url: page.url(), text: err.me
 
 async function api(pathname, options = {}) {
   return page.evaluate(async ({ url, options }) => {
-    const token = localStorage.getItem('erp_token') || '';
+    const token = '';
     const headers = { ...(options.headers || {}) };
     if (token) headers.Authorization = `Bearer ${token}`;
     if (options.body && !headers['Content-Type']) headers['Content-Type'] = 'application/json';
-    const res = await fetch(url, { ...options, headers });
+    const res = await fetch(url, { credentials: 'include', ...options, headers });
     const text = await res.text();
     let data = null;
     try { data = text ? JSON.parse(text) : null; } catch { data = text; }
-    if (!res.ok) throw new Error(`${res.status} ${pathname}: ${text}`);
+    if (!res.ok) throw new Error(`${res.status} ${url}: ${text}`);
     return data;
   }, { url: `${API}${pathname}`, options });
 }
 
 await page.goto(`${BASE}/login`, { waitUntil: 'networkidle' });
 await page.getByLabel('Username').fill('admin');
-await page.getByLabel('Password').fill('admin123');
-await page.getByRole('button', { name: 'Login' }).click();
+await page.locator('input[type="password"]').fill('admin123');
+await page.getByRole('button', { name: 'Sign in' }).click();
 await page.waitForURL((url) => !url.pathname.includes('/login'), { timeout: 15000 });
 await page.waitForLoadState('networkidle');
 
@@ -53,6 +53,7 @@ const routes = [
   ['finance-workspace', '/workspace/finance'],
   ['cashflow-overview', '/cashflow'],
   ['cashflow-accounts', '/cashflow/accounts'],
+  ['cashflow-ledger', '/cashflow/ledger'],
   ...(firstAccountId ? [['cashflow-account-history', `/cashflow/${firstAccountId}`]] : []),
   ['cashflow-money-in', '/cashflow/money-in'],
   ['cashflow-money-out', '/cashflow/money-out'],
@@ -89,11 +90,44 @@ for (const [name, route] of routes) {
   manifest.push({ name, route, viewport: '1440x1000', file, status, error, duration_ms: Date.now() - started, title: await page.title() });
 }
 
+
+async function captureState(name, route, buttonName) {
+  await page.setViewportSize({ width: 1440, height: 1000 });
+  await page.goto(BASE + route, { waitUntil: 'networkidle', timeout: 30000 });
+  await page.waitForTimeout(300);
+  if (buttonName) await page.getByRole('button', { name: buttonName, exact: true }).first().click();
+  await page.waitForTimeout(200);
+  const file = name + '--desktop.png';
+  await page.screenshot({ path: path.join(OUT, file), fullPage: true });
+  manifest.push({ name, route, viewport: '1440x1000', file, status: 'ok', state: true, title: await page.title() });
+}
+
+await captureState('cashflow-overview-money-in-drawer', '/cashflow?tab=overview', 'Money In');
+await captureState('cashflow-overview-money-out-drawer', '/cashflow?tab=overview', 'Money Out');
+await captureState('cashflow-overview-transfer-drawer', '/cashflow?tab=overview', 'Transfer');
+await captureState('cashflow-transfers-new-transfer-drawer', '/cashflow?tab=transfers', 'New Transfer');
+
+
+await page.setViewportSize({ width: 1440, height: 1000 });
+await page.goto(BASE + '/cashflow?tab=ledger', { waitUntil: 'networkidle', timeout: 30000 });
+await page.getByPlaceholder('Search reference or description').fill('visual audit long reference sample');
+await page.locator('.filter-bar select').first().selectOption('in');
+await page.locator('.filter-bar select').nth(1).selectOption('posted');
+await page.screenshot({ path: path.join(OUT, 'cashflow-ledger-filters-populated--desktop.png'), fullPage: true });
+manifest.push({ name: 'cashflow-ledger-filters-populated', route: '/cashflow?tab=ledger', viewport: '1440x1000', file: 'cashflow-ledger-filters-populated--desktop.png', status: 'ok', state: true, title: await page.title() });
+
+await page.goto(BASE + '/cashflow?tab=settings', { waitUntil: 'networkidle', timeout: 30000 });
+await page.evaluate(() => window.scrollTo(0, document.body.scrollHeight));
+await page.waitForTimeout(150);
+await page.screenshot({ path: path.join(OUT, 'cashflow-settings-bottom--desktop.png') });
+manifest.push({ name: 'cashflow-settings-bottom', route: '/cashflow?tab=settings', viewport: '1440x1000', file: 'cashflow-settings-bottom--desktop.png', status: 'ok', state: true, title: await page.title() });
+
 await page.setViewportSize({ width: 390, height: 844 });
 for (const [name, route] of [
   ['dashboard', '/dashboard'],
   ['cashflow-overview', '/cashflow'],
   ['cashflow-accounts', '/cashflow/accounts'],
+  ['cashflow-ledger', '/cashflow/ledger'],
   ...(firstAccountId ? [['cashflow-account-history', `/cashflow/${firstAccountId}`]] : []),
 ]) {
   let status = 'ok';
