@@ -8,6 +8,7 @@ from app.models.entities import MoneyTransaction
 from app.schemas.cashflow import CashflowActionPayload, MoneyTransactionCreate, MoneyTransactionUpdate
 from app.services.cashflow_service import (
     account_ledger,
+    combined_cash_ledger,
     cashflow_summary,
     create_money_transaction,
     delete_money_transaction,
@@ -194,6 +195,34 @@ def transaction_detail(transaction_id: int, db: Session = Depends(get_db), user=
         return get_money_transaction(db, transaction_id)
     except ValueError as e:
         raise HTTPException(status_code=404, detail=str(e))
+
+
+@router.get('/ledger')
+def get_combined_ledger(
+    db: Session = Depends(get_db),
+    user=Depends(require_permissions('cashflow.view')),
+    account_id: int | None = None,
+    start_date: str | None = None,
+    end_date: str | None = None,
+    sort: str = Query('desc', pattern='^(asc|desc)$'),
+    include_reconciliations: bool = True,
+    direction: str | None = None,
+    module: str | None = None,
+    status: str | None = None,
+    payment_method: str | None = None,
+    category: str | None = None,
+    q: str | None = None,
+    limit: int = Query(500, ge=1, le=2000),
+):
+    try:
+        return combined_cash_ledger(
+            db, account_id=account_id, start_date=start_date, end_date=end_date,
+            sort=sort, include_reconciliations=include_reconciliations,
+            direction=direction, module=module, status=status,
+            payment_method=payment_method, category=category, q=q, limit=limit,
+        )
+    except ValueError as e:
+        raise HTTPException(status_code=400, detail=str(e))
 
 
 @router.get('/accounts/{account_id}/ledger')

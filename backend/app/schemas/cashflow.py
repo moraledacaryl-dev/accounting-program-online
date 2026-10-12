@@ -62,6 +62,7 @@ class FinancialAccountUpdate(BaseModel):
 class MoneyTransactionCreate(BusinessDateDefaults):
     business_date_fields = ('transaction_date',)
     transaction_date: str | None = None
+    transaction_at: str | None = None
     direction: str
     financial_account_id: int
     module: str = 'finance'
@@ -87,6 +88,7 @@ class MoneyTransactionCreate(BusinessDateDefaults):
 
 class MoneyTransactionUpdate(BaseModel):
     transaction_date: str | None = None
+    transaction_at: str | None = None
     direction: str | None = None
     financial_account_id: int | None = None
     module: str | None = None
@@ -111,6 +113,7 @@ class MoneyTransactionUpdate(BaseModel):
 class AccountTransferCreate(BusinessDateDefaults):
     business_date_fields = ('transfer_date',)
     transfer_date: str | None = None
+    transfer_at: str | None = None
     from_account_id: int
     to_account_id: int
     amount: float
@@ -125,6 +128,7 @@ class AccountTransferCreate(BusinessDateDefaults):
 
 class AccountTransferUpdate(BaseModel):
     transfer_date: str | None = None
+    transfer_at: str | None = None
     from_account_id: int | None = None
     to_account_id: int | None = None
     amount: float | None = None

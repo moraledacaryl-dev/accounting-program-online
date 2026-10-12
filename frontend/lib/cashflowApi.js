@@ -143,5 +143,6 @@ export const updateCashflowTemplate = (id, payload) => request(`/cashflow-templa
 export const deleteCashflowTemplate = (id) => request(`/cashflow-templates/${id}`, { method: 'DELETE' });
 export const launchCashflowTemplate = (payload) => request('/cashflow-templates/launch', { method: 'POST', body: JSON.stringify(payload) });
 
+export const fetchCashLedger = (params = {}) => request(`/cashflow/ledger${queryString(params)}`);
 export const fetchAccountLedger = (accountId, params = {}) => request(`/cashflow/accounts/${accountId}/ledger${queryString(params)}`);
 export const fetchNextCodePreview = (entity, draft = '') => request(`/system-settings/next-code?entity=${encodeURIComponent(entity)}${draft ? `&draft=${encodeURIComponent(draft)}` : ''}`);

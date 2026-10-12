@@ -198,6 +198,7 @@ def _serialize_money_transaction(row: MoneyTransaction) -> dict:
     return {
         'id': row.id,
         'transaction_date': row.transaction_date,
+        'transaction_at': row.transaction_at,
         'direction': row.direction,
         'financial_account_id': row.financial_account_id,
         'financial_account_name': account.name if account else None,
@@ -234,6 +235,7 @@ def _serialize_transfer(row: AccountTransfer) -> dict:
     return {
         'id': row.id,
         'transfer_date': row.transfer_date,
+        'transfer_at': row.transfer_at,
         'from_account_id': row.from_account_id,
         'from_account_name': row.from_account.name if row.from_account else None,
         'from_account_code': row.from_account.code if row.from_account else None,
@@ -862,6 +864,19 @@ def _is_posting_status(status: str | None) -> bool:
     return (status or '').strip().lower() in {'approved', 'posted'}
 
 
+def _ensure_cash_day_open(db: Session, account_id: int, business_date: str | None, *, action: str) -> None:
+    date_value = _safe_date(business_date)
+    closed = db.query(CashReconciliation).filter(
+        CashReconciliation.financial_account_id == int(account_id),
+        CashReconciliation.reconciliation_date == date_value,
+        CashReconciliation.status == 'closed',
+    ).first()
+    if closed:
+        account = db.get(FinancialAccount, int(account_id))
+        name = account.name if account else f'account {account_id}'
+        raise ValueError(f'{date_value} is closed for {name}. Reverse the reconciliation before you {action}.')
+
+
 def _create_linked_record(
     db: Session,
     *,
@@ -962,6 +977,7 @@ def create_money_transaction(db: Session, payload: MoneyTransactionCreate, usern
             raise ValueError('Linked payable not found.')
 
     tx_date = _safe_date(payload.transaction_date)
+    _ensure_cash_day_open(db, row_account.id, tx_date, action='add or change ledger movements')
     ensure_date_unlocked(db, tx_date, scope='bir', action='create cashflow transaction in locked period')
 
     if direction == 'out' and not bool(payload.allow_overdraw) and _normalize(row_account.account_type) in STRICT_CASH_TYPES:
@@ -977,6 +993,7 @@ def create_money_transaction(db: Session, payload: MoneyTransactionCreate, usern
 
     tx = MoneyTransaction(
         transaction_date=tx_date,
+        transaction_at=(payload.transaction_at or '').strip() or None,
         direction=direction,
         financial_account_id=row_account.id,
         module=(payload.module or 'finance').strip() or 'finance',
@@ -1113,6 +1130,7 @@ def update_money_transaction(db: Session, tx_id: int, payload: MoneyTransactionU
         raise ValueError('Cancelled money transaction cannot be edited.')
 
     data = payload.model_dump(exclude_unset=True)
+    _ensure_cash_day_open(db, row.financial_account_id, row.transaction_date, action='edit this transaction')
     old_status = _normalize_transaction_status(row.status)
     old_posting = _is_posting_status(old_status)
     if old_posting:
@@ -1156,9 +1174,12 @@ def update_money_transaction(db: Session, tx_id: int, payload: MoneyTransactionU
 
     if 'transaction_date' in data:
         row.transaction_date = _safe_date(data.get('transaction_date'))
+    if 'transaction_at' in data:
+        row.transaction_at = _safe_datetime(data.get('transaction_at')) if data.get('transaction_at') else None
     if not row.transaction_date:
         row.transaction_date = _today()
 
+    _ensure_cash_day_open(db, row.financial_account_id, row.transaction_date, action='move or edit this transaction')
     ensure_date_unlocked(db, row.transaction_date, scope='bir', action='update cashflow transaction in locked period')
 
     next_status = _normalize_transaction_status(data.get('status') or row.status)
@@ -1216,6 +1237,7 @@ def cancel_money_transaction(db: Session, tx_id: int, payload: CashflowActionPay
     if _normalize(row.status) == 'cancelled':
         raise ValueError('Money transaction is already cancelled.')
 
+    _ensure_cash_day_open(db, row.financial_account_id, row.transaction_date, action='cancel this transaction')
     if _is_posting_status(row.status):
         _reverse_money_effect(db, row)
     row.status = 'cancelled'
@@ -1240,6 +1262,7 @@ def approve_money_transaction(db: Session, tx_id: int, payload: CashflowActionPa
     if bool(row.is_reversed) or _normalize(row.status) in {'reversed', 'cancelled'}:
         raise ValueError('Only active transactions can be approved.')
 
+    _ensure_cash_day_open(db, row.financial_account_id, row.transaction_date, action='approve this transaction')
     if not _is_posting_status(row.status):
         _apply_money_effect(db, row, allow_overdraw=True)
     row.status = 'approved'
@@ -1277,6 +1300,8 @@ def reverse_money_transaction(db: Session, tx_id: int, payload: CashflowActionPa
         raise ValueError('Cancelled transaction cannot be reversed.')
 
     reverse_date = _safe_date(payload.action_date or row.transaction_date)
+    _ensure_cash_day_open(db, row.financial_account_id, row.transaction_date, action='reverse this transaction')
+    _ensure_cash_day_open(db, row.financial_account_id, reverse_date, action='post its reversal')
     ensure_date_unlocked(db, reverse_date, scope='bir', action='reverse cashflow transaction in locked period')
 
     reversal_row = None
@@ -1357,6 +1382,7 @@ def delete_money_transaction(db: Session, tx_id: int):
         raise ValueError('Posted/approved transactions cannot be deleted. Cancel or reverse instead.')
     if bool(row.is_reversed) or _normalize(row.status) == 'reversed':
         raise ValueError('Reversed transaction cannot be deleted.')
+    _ensure_cash_day_open(db, row.financial_account_id, row.transaction_date, action='delete this transaction')
     db.delete(row)
     db.commit()
     return {'ok': True}
@@ -1399,6 +1425,8 @@ def create_transfer(db: Session, payload: AccountTransferCreate, username: str |
         raise ValueError('from_account_id and to_account_id cannot be the same.')
 
     transfer_date = _safe_date(payload.transfer_date)
+    _ensure_cash_day_open(db, from_account.id, transfer_date, action='add or change transfers')
+    _ensure_cash_day_open(db, to_account.id, transfer_date, action='add or change transfers')
     ensure_date_unlocked(db, transfer_date, scope='bir', action='create account transfer in locked period')
 
     if not bool(payload.allow_overdraw) and _normalize(from_account.account_type) in STRICT_CASH_TYPES:
@@ -1409,6 +1437,7 @@ def create_transfer(db: Session, payload: AccountTransferCreate, username: str |
 
     row = AccountTransfer(
         transfer_date=transfer_date,
+        transfer_at=(payload.transfer_at or '').strip() or None,
         from_account_id=from_account.id,
         to_account_id=to_account.id,
         amount=amount,
@@ -1499,6 +1528,8 @@ def update_transfer(db: Session, transfer_id: int, payload: AccountTransferUpdat
     if _normalize(row.status) == 'cancelled':
         raise ValueError('Cancelled transfer cannot be edited.')
 
+    _ensure_cash_day_open(db, row.from_account_id, row.transfer_date, action='edit this transfer')
+    _ensure_cash_day_open(db, row.to_account_id, row.transfer_date, action='edit this transfer')
     old_posting = _is_posting_status(row.status)
     old_amount = float(row.amount or 0)
     old_from = db.get(FinancialAccount, int(row.from_account_id))
@@ -1530,9 +1561,13 @@ def update_transfer(db: Session, transfer_id: int, payload: AccountTransferUpdat
         row.amount = amount
     if 'transfer_date' in data:
         row.transfer_date = _safe_date(data.get('transfer_date'))
+    if 'transfer_at' in data:
+        row.transfer_at = (data.get('transfer_at') or '').strip() or None
     if not row.transfer_date:
         row.transfer_date = _today()
 
+    _ensure_cash_day_open(db, row.from_account_id, row.transfer_date, action='move or edit this transfer')
+    _ensure_cash_day_open(db, row.to_account_id, row.transfer_date, action='move or edit this transfer')
     ensure_date_unlocked(db, row.transfer_date, scope='bir', action='update transfer in locked period')
     for key in ('reference_no', 'notes'):
         if key in data:
@@ -1575,6 +1610,8 @@ def approve_transfer(db: Session, transfer_id: int, payload: CashflowActionPaylo
     if bool(row.is_reversed) or _normalize(row.status) in {'reversed', 'cancelled'}:
         raise ValueError('Only active transfers can be approved.')
 
+    _ensure_cash_day_open(db, row.from_account_id, row.transfer_date, action='approve this transfer')
+    _ensure_cash_day_open(db, row.to_account_id, row.transfer_date, action='approve this transfer')
     if not _is_posting_status(row.status):
         from_account = db.get(FinancialAccount, int(row.from_account_id))
         to_account = db.get(FinancialAccount, int(row.to_account_id))
@@ -1613,6 +1650,8 @@ def cancel_transfer(db: Session, transfer_id: int, payload: CashflowActionPayloa
     if _normalize(row.status) == 'cancelled':
         raise ValueError('Transfer is already cancelled.')
 
+    _ensure_cash_day_open(db, row.from_account_id, row.transfer_date, action='cancel this transfer')
+    _ensure_cash_day_open(db, row.to_account_id, row.transfer_date, action='cancel this transfer')
     if _is_posting_status(row.status):
         from_account = db.get(FinancialAccount, int(row.from_account_id))
         to_account = db.get(FinancialAccount, int(row.to_account_id))
@@ -1654,6 +1693,10 @@ def reverse_transfer(db: Session, transfer_id: int, payload: CashflowActionPaylo
         raise ValueError('Cancelled transfer cannot be reversed.')
 
     reverse_date = _safe_date(payload.action_date or row.transfer_date)
+    _ensure_cash_day_open(db, row.from_account_id, row.transfer_date, action='reverse this transfer')
+    _ensure_cash_day_open(db, row.to_account_id, row.transfer_date, action='reverse this transfer')
+    _ensure_cash_day_open(db, row.from_account_id, reverse_date, action='post its reversal')
+    _ensure_cash_day_open(db, row.to_account_id, reverse_date, action='post its reversal')
     ensure_date_unlocked(db, reverse_date, scope='bir', action='reverse transfer in locked period')
 
     reversal = None
@@ -1722,6 +1765,8 @@ def delete_transfer(db: Session, transfer_id: int):
         raise ValueError('Posted/approved transfers cannot be deleted. Cancel or reverse instead.')
     if bool(row.is_reversed) or _normalize(row.status) == 'reversed':
         raise ValueError('Reversed transfer cannot be deleted.')
+    _ensure_cash_day_open(db, row.from_account_id, row.transfer_date, action='delete this transfer')
+    _ensure_cash_day_open(db, row.to_account_id, row.transfer_date, action='delete this transfer')
     db.delete(row)
     db.commit()
     return {'ok': True}
@@ -2634,6 +2679,118 @@ def cashflow_summary(db: Session, target_date: str | None = None):
     }
 
 
+def combined_cash_ledger(
+    db: Session,
+    *,
+    account_id: int | None = None,
+    start_date: str | None = None,
+    end_date: str | None = None,
+    sort: str = 'desc',
+    include_reconciliations: bool = True,
+    direction: str | None = None,
+    module: str | None = None,
+    status: str | None = None,
+    payment_method: str | None = None,
+    category: str | None = None,
+    q: str | None = None,
+    limit: int = 500,
+):
+    ensure_default_financial_accounts(db)
+    accounts = db.query(FinancialAccount).filter(FinancialAccount.is_active.is_(True)).order_by(FinancialAccount.name.asc()).all()
+    if account_id:
+        accounts = [row for row in accounts if int(row.id) == int(account_id)]
+        if not accounts:
+            raise ValueError('Financial account not found.')
+
+    combined = []
+    account_summaries = []
+    for account in accounts:
+        ledger = account_ledger(
+            db, account.id, start_date=start_date, end_date=end_date,
+            include_reconciliations=include_reconciliations, direction=direction,
+            module=module, status=status, q=q, limit=limit,
+        )
+        account_summaries.append({
+            'account': ledger['account'],
+            'opening_balance': ledger['opening_balance'],
+            'closing_balance': ledger['closing_balance'],
+        })
+        for row in ledger['rows']:
+            if row.get('entry_type') == 'opening_balance':
+                continue
+            meta = row.get('meta') or {}
+            if payment_method and row.get('entry_type') == 'money_transaction' and str(meta.get('payment_method') or '') != str(payment_method):
+                continue
+            if category and row.get('entry_type') == 'money_transaction' and str(meta.get('category') or '') != str(category):
+                continue
+            out = dict(row)
+            out['account_id'] = account.id
+            out['account_name'] = account.name
+            out['account_code'] = account.code
+            if row.get('entry_type') == 'money_transaction':
+                out['movement_at'] = meta.get('transaction_at') or row.get('date')
+            elif row.get('entry_type') == 'account_transfer':
+                out['movement_at'] = meta.get('transfer_at') or row.get('date')
+            else:
+                out['movement_at'] = row.get('date')
+                recon_date = str(meta.get('reconciliation_date') or row.get('date') or '')
+                tx_count = db.query(MoneyTransaction).filter(
+                    MoneyTransaction.financial_account_id == account.id,
+                    MoneyTransaction.transaction_date == recon_date,
+                ).count()
+                transfer_count = db.query(AccountTransfer).filter(
+                    AccountTransfer.transfer_date == recon_date,
+                    or_(AccountTransfer.from_account_id == account.id, AccountTransfer.to_account_id == account.id),
+                ).count()
+                out['included_movement_count'] = tx_count + transfer_count
+            combined.append(out)
+
+    if not account_id:
+        transfer_rows = {}
+        deduped = []
+        for row in combined:
+            if row.get('entry_type') != 'account_transfer':
+                deduped.append(row)
+                continue
+            entry_id = int(row.get('entry_id') or 0)
+            existing = transfer_rows.get(entry_id)
+            if existing is None:
+                transfer_rows[entry_id] = row
+                deduped.append(row)
+            else:
+                meta = row.get('meta') or existing.get('meta') or {}
+                existing['account_name'] = f"{meta.get('from_account_name') or existing.get('account_name')} → {meta.get('to_account_name') or row.get('account_name')}"
+                existing['account_id'] = None
+                existing['account_code'] = None
+                existing['debit'] = 0.0
+                existing['credit'] = 0.0
+                existing['signed_amount'] = 0.0
+                existing['running_balance'] = None
+        combined = deduped
+
+    reverse = str(sort or 'desc').lower() != 'asc'
+    combined.sort(
+        key=lambda row: (
+            str(row.get('movement_at') or row.get('date') or ''),
+            str(row.get('date') or ''),
+            int(row.get('entry_id') or 0),
+            int(row.get('account_id') or 0),
+        ),
+        reverse=reverse,
+    )
+    combined = combined[:max(1, min(int(limit or 500), 2000))]
+    return {
+        'scope': 'account' if account_id else 'all_accounts',
+        'sort': 'desc' if reverse else 'asc',
+        'account_summaries': account_summaries,
+        'rows': combined,
+        'transaction_count': len([row for row in combined if row.get('entry_type') != 'cash_reconciliation']),
+        'reconciliation_count': len([row for row in combined if row.get('entry_type') == 'cash_reconciliation']),
+        'money_in_total': round(sum(float(row.get('debit') or 0) for row in combined if row.get('entry_type') == 'money_transaction'), 4),
+        'money_out_total': round(sum(float(row.get('credit') or 0) for row in combined if row.get('entry_type') == 'money_transaction'), 4),
+    }
+
+
 def account_ledger(
     db: Session,
     account_id: int,
@@ -2689,7 +2846,7 @@ def account_ledger(
     ]
 
     for row in tx_rows:
-        signed = float(row.amount or 0) if _normalize(row.direction) == 'in' else -float(row.amount or 0)
+        signed = (float(row.amount or 0) if _normalize(row.direction) == 'in' else -float(row.amount or 0)) if _is_posting_status(row.status) else 0.0
         rows.append(
             {
                 'entry_type': 'money_transaction',
@@ -2707,7 +2864,7 @@ def account_ledger(
         )
 
     for row in tr_rows:
-        signed = float(row.amount or 0)
+        signed = float(row.amount or 0) if _is_posting_status(row.status) else 0.0
         if int(row.from_account_id) == int(account.id):
             signed = -signed
         rows.append(

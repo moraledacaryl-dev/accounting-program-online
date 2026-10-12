@@ -57,7 +57,7 @@ for (const [module, group] of [['rooms', 'sales'], ['events', 'sales'], ['restau
 test('cash view tabs follow sidebar navigation and browser history', async ({ page }) => {
   await fixture(page); await page.goto('/cashflow');
   const views = page.getByRole('group', { name: 'Cash workspace views' });
-  for (const [label, heading] of [['Cash Ledger', 'Account Ledger'], ['Transfers', 'Transfers'], ['Daily Close & Reconciliation', 'Daily Close'], ['Cash Settings', 'Money account settings'], ['Cash Overview', 'Account position']]) {
+  for (const [label, heading] of [['Cash Ledger', 'Cash Ledger'], ['Transfers', 'Transfers'], ['Daily Close & Reconciliation', 'Daily Close'], ['Cash Settings', 'Money account settings'], ['Cash Overview', 'Account position']]) {
     await views.getByRole('button', { name: label, exact: true }).click();
     await expect(page.locator('.sidebar a[aria-current="page"]')).toHaveText(label);
     await expect(page.getByRole('heading', { name: heading, exact: true })).toBeVisible();

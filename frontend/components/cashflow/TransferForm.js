@@ -23,6 +23,7 @@ export default function TransferForm({ accounts = [], form, setForm, onSubmit })
           Date
           <input type="date" value={form.transfer_date} onChange={(e) => setForm((f) => ({ ...f, transfer_date: e.target.value }))} />
         </label>
+        <label>Movement time<input type="datetime-local" value={form.transfer_at || ''} onChange={(e) => setForm((f) => ({ ...f, transfer_at: e.target.value }))} /></label>
         <AccountSelector
           label="From"
           required

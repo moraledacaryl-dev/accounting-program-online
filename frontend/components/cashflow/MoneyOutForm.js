@@ -31,6 +31,7 @@ export default function MoneyOutForm({
               Date
               <input required type="date" value={form.transaction_date} onChange={(e) => setForm((f) => ({ ...f, transaction_date: e.target.value }))} />
             </label>
+            <label>Movement time<input type="datetime-local" value={form.transaction_at || ''} onChange={(e) => setForm((f) => ({ ...f, transaction_at: e.target.value }))} /></label>
             <AccountSelector
               required
               accounts={accounts}
