@@ -198,6 +198,7 @@ def _serialize_money_transaction(row: MoneyTransaction) -> dict:
     return {
         'id': row.id,
         'transaction_date': row.transaction_date,
+        'transaction_at': row.transaction_at,
         'direction': row.direction,
         'financial_account_id': row.financial_account_id,
         'financial_account_name': account.name if account else None,
@@ -234,6 +235,7 @@ def _serialize_transfer(row: AccountTransfer) -> dict:
     return {
         'id': row.id,
         'transfer_date': row.transfer_date,
+        'transfer_at': row.transfer_at,
         'from_account_id': row.from_account_id,
         'from_account_name': row.from_account.name if row.from_account else None,
         'from_account_code': row.from_account.code if row.from_account else None,
@@ -977,6 +979,7 @@ def create_money_transaction(db: Session, payload: MoneyTransactionCreate, usern
 
     tx = MoneyTransaction(
         transaction_date=tx_date,
+        transaction_at=(payload.transaction_at or '').strip() or None,
         direction=direction,
         financial_account_id=row_account.id,
         module=(payload.module or 'finance').strip() or 'finance',
@@ -1409,6 +1412,7 @@ def create_transfer(db: Session, payload: AccountTransferCreate, username: str |
 
     row = AccountTransfer(
         transfer_date=transfer_date,
+        transfer_at=(payload.transfer_at or '').strip() or None,
         from_account_id=from_account.id,
         to_account_id=to_account.id,
         amount=amount,
@@ -1530,6 +1534,8 @@ def update_transfer(db: Session, transfer_id: int, payload: AccountTransferUpdat
         row.amount = amount
     if 'transfer_date' in data:
         row.transfer_date = _safe_date(data.get('transfer_date'))
+    if 'transfer_at' in data:
+        row.transfer_at = (data.get('transfer_at') or '').strip() or None
     if not row.transfer_date:
         row.transfer_date = _today()
 
