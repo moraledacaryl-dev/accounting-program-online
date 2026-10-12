@@ -90,6 +90,23 @@ for (const [name, route] of routes) {
   manifest.push({ name, route, viewport: '1440x1000', file, status, error, duration_ms: Date.now() - started, title: await page.title() });
 }
 
+
+async function captureState(name, route, buttonName) {
+  await page.setViewportSize({ width: 1440, height: 1000 });
+  await page.goto(BASE + route, { waitUntil: 'networkidle', timeout: 30000 });
+  await page.waitForTimeout(300);
+  if (buttonName) await page.getByRole('button', { name: buttonName, exact: true }).first().click();
+  await page.waitForTimeout(200);
+  const file = name + '--desktop.png';
+  await page.screenshot({ path: path.join(OUT, file), fullPage: true });
+  manifest.push({ name, route, viewport: '1440x1000', file, status: 'ok', state: true, title: await page.title() });
+}
+
+await captureState('cashflow-overview-money-in-drawer', '/cashflow?tab=overview', 'Money In');
+await captureState('cashflow-overview-money-out-drawer', '/cashflow?tab=overview', 'Money Out');
+await captureState('cashflow-overview-transfer-drawer', '/cashflow?tab=overview', 'Transfer');
+await captureState('cashflow-transfers-new-transfer-drawer', '/cashflow?tab=transfers', 'New Transfer');
+
 await page.setViewportSize({ width: 390, height: 844 });
 for (const [name, route] of [
   ['dashboard', '/dashboard'],
