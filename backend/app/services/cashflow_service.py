@@ -2720,11 +2720,11 @@ def combined_cash_ledger(
             out['account_name'] = account.name
             out['account_code'] = account.code
             if row.get('entry_type') == 'money_transaction':
-                out['movement_at'] = meta.get('transaction_at') or meta.get('created_at') or row.get('date')
+                out['movement_at'] = meta.get('transaction_at') or row.get('date')
             elif row.get('entry_type') == 'account_transfer':
-                out['movement_at'] = meta.get('transfer_at') or meta.get('created_at') or row.get('date')
+                out['movement_at'] = meta.get('transfer_at') or row.get('date')
             else:
-                out['movement_at'] = meta.get('closed_at') or meta.get('posted_at') or row.get('date')
+                out['movement_at'] = row.get('date')
                 recon_date = str(meta.get('reconciliation_date') or row.get('date') or '')
                 tx_count = db.query(MoneyTransaction).filter(
                     MoneyTransaction.financial_account_id == account.id,
@@ -2755,8 +2755,8 @@ def combined_cash_ledger(
         'rows': combined,
         'transaction_count': len([row for row in combined if row.get('entry_type') != 'cash_reconciliation']),
         'reconciliation_count': len([row for row in combined if row.get('entry_type') == 'cash_reconciliation']),
-        'money_in_total': round(sum(float(row.get('debit') or 0) for row in combined if row.get('entry_type') != 'cash_reconciliation'), 4),
-        'money_out_total': round(sum(float(row.get('credit') or 0) for row in combined if row.get('entry_type') != 'cash_reconciliation'), 4),
+        'money_in_total': round(sum(float(row.get('debit') or 0) for row in combined if row.get('entry_type') == 'money_transaction'), 4),
+        'money_out_total': round(sum(float(row.get('credit') or 0) for row in combined if row.get('entry_type') == 'money_transaction'), 4),
     }
 
 
@@ -2815,7 +2815,7 @@ def account_ledger(
     ]
 
     for row in tx_rows:
-        signed = float(row.amount or 0) if _normalize(row.direction) == 'in' else -float(row.amount or 0)
+        signed = (float(row.amount or 0) if _normalize(row.direction) == 'in' else -float(row.amount or 0)) if _is_posting_status(row.status) else 0.0
         rows.append(
             {
                 'entry_type': 'money_transaction',
@@ -2833,7 +2833,7 @@ def account_ledger(
         )
 
     for row in tr_rows:
-        signed = float(row.amount or 0)
+        signed = float(row.amount or 0) if _is_posting_status(row.status) else 0.0
         if int(row.from_account_id) == int(account.id):
             signed = -signed
         rows.append(
