@@ -24,7 +24,7 @@ pytestmark = pytest.mark.skipif(engine.dialect.name != 'postgresql', reason='Pos
 def test_postgresql_migration_head_and_auth_security_tables_exist():
     with engine.connect() as connection:
         head = connection.execute(text('SELECT version_num FROM alembic_version')).scalar_one()
-        assert head == '0015_channel_stay_snapshots'
+        assert head == '0016_money_movement_timestamps'
         tables = set(connection.execute(text("SELECT tablename FROM pg_catalog.pg_tables WHERE schemaname = 'public'")).scalars())
     for table in ('auth_login_failures','revoked_access_tokens','mutation_idempotency','operations_outbox_events','money_transactions','sale_orders','payable_adjustments','supplier_credits','supplier_credit_applications','supplier_credit_application_reversals','channel_payout_booking_links','channel_booking_stay_snapshots'):
         assert table in tables
