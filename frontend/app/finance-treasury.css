@@ -589,3 +589,34 @@
     padding: 10px 11px;
   }
 }
+
+/* Cash Ledger: operational statement hierarchy */
+.ledger-workspace { display: grid; gap: 16px; }
+.ledger-scope-bar { display: grid; grid-template-columns: minmax(260px, 1fr) minmax(180px, 240px); gap: 12px; padding: 14px; border: 1px solid var(--border); border-radius: 14px; background: var(--surface-subtle, #f8faf9); }
+.ledger-scope-bar label { display: grid; gap: 6px; }
+.ledger-scope-bar label > span { font-size: 13px; font-weight: 700; color: var(--text-muted); }
+.ledger-scope-bar select { width: 100%; }
+.ledger-filter-bar { align-items: end; }
+.ledger-summary-strip { display: flex; gap: 18px; flex-wrap: wrap; align-items: center; padding: 11px 14px; border-radius: 12px; background: var(--surface-subtle, #f8faf9); font-size: 14px; }
+.ledger-table-wrap { width: 100%; overflow-x: auto; }
+.ledger-table { min-width: 880px; }
+.ledger-row-meta { display: block; margin-top: 3px; color: var(--text-muted); font-size: 12px; font-weight: 500; }
+.ledger-reconciliation-row td { background: var(--surface-subtle, #f8faf9); border-top: 2px solid var(--border); border-bottom: 2px solid var(--border); }
+.ledger-reconciliation-row td:first-child { font-weight: 700; }
+
+@media (max-width: 760px) {
+  .ledger-scope-bar { grid-template-columns: 1fr; padding: 11px; }
+  .ledger-filter-bar { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+  .ledger-filter-bar input[aria-label="Search ledger"], .ledger-filter-bar button { grid-column: 1 / -1; }
+  .ledger-summary-strip { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 8px 12px; }
+  .ledger-table-wrap { overflow: visible; }
+  .ledger-table { min-width: 0 !important; display: block; }
+  .ledger-table thead { display: none; }
+  .ledger-table tbody { display: grid; gap: 9px; }
+  .ledger-table tr { display: grid; grid-template-columns: 1fr auto; gap: 7px 12px; padding: 12px; border: 1px solid var(--border); border-radius: 12px; background: var(--surface); }
+  .ledger-table td { display: block; padding: 0; border: 0; min-width: 0; }
+  .ledger-table td:nth-last-child(-n+3) { text-align: right; }
+  .ledger-table td[data-label="Details"], .ledger-table td[data-label="Reference"] { grid-column: 1 / -1; }
+  .ledger-table td::before { content: attr(data-label); display: block; margin-bottom: 2px; font-size: 11px; font-weight: 700; color: var(--text-muted); text-transform: uppercase; letter-spacing: .04em; }
+  .ledger-reconciliation-row { border-width: 2px !important; }
+}
