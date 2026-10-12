@@ -620,3 +620,17 @@
   .ledger-table td::before { content: attr(data-label); display: block; margin-bottom: 2px; font-size: 11px; font-weight: 700; color: var(--text-muted); text-transform: uppercase; letter-spacing: .04em; }
   .ledger-reconciliation-row { border-width: 2px !important; }
 }
+
+@media (max-width: 760px) {
+  .cash-workspace > .metric-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+  .cash-workspace > .metric-grid .metric-card { min-height: 86px; }
+  .cash-workspace > .section:has(.unified-tabs) { padding: 8px; }
+  .cash-workspace .unified-tabs { display: flex; flex-wrap: nowrap; overflow-x: auto; gap: 6px; padding: 4px; scrollbar-width: none; }
+  .cash-workspace .unified-tabs::-webkit-scrollbar { display: none; }
+  .cash-workspace .unified-tabs .tab { flex: 0 0 auto; white-space: nowrap; padding: 9px 12px; }
+  .ledger-workspace .section-title-row { gap: 10px; }
+  .ledger-workspace .section-title-row > .row { width: 100%; display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); }
+  .ledger-workspace .section-title-row > .row button { width: 100%; padding-inline: 8px; }
+  .ledger-filter-bar { grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 8px; }
+  .ledger-filter-bar select[aria-label="Flow"], .ledger-filter-bar select[aria-label="Status"], .ledger-filter-bar select[aria-label="Payment method"], .ledger-filter-bar input[aria-label="Category"], .ledger-filter-bar input[aria-label="Search ledger"], .ledger-filter-bar button { grid-column: 1 / -1; }
+}
