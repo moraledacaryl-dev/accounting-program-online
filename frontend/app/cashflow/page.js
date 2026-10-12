@@ -44,7 +44,7 @@ export default function CashTreasuryPage() {
 
     } catch(e){ setError(e.message || 'Failed to load Cash & Treasury.'); }
   }
-  async function loadLedger(account=selectedAccount) { try { setLedger(await fetchCashLedger({...filters,account_id:account?.id||'',include_reconciliations:true,limit:1000})); } catch(e){setError(e.message||'Failed to load ledger.');} }
+  async function loadLedger(account=selectedAccount, filterOverride=null) { try { const activeFilters=filterOverride||filters; setLedger(await fetchCashLedger({...activeFilters,account_id:account?.id||'',include_reconciliations:true,limit:1000})); } catch(e){setError(e.message||'Failed to load ledger.');} }
   useEffect(()=>{loadBase();},[]);
   useEffect(()=>{ if(action==='money-in'){setTxForm({...EMPTY_TX,direction:'in'});setDrawer('money-in');} if(action==='money-out'){setTxForm({...EMPTY_TX,direction:'out'});setDrawer('money-out');} if(action==='transfer')setDrawer('transfer'); },[action]);
   useEffect(()=>{ if(tab==='ledger') loadLedger(selectedAccount); },[tab, selectedAccount]);
