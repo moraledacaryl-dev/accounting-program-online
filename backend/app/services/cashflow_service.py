@@ -1174,6 +1174,8 @@ def update_money_transaction(db: Session, tx_id: int, payload: MoneyTransactionU
 
     if 'transaction_date' in data:
         row.transaction_date = _safe_date(data.get('transaction_date'))
+    if 'transaction_at' in data:
+        row.transaction_at = _safe_datetime(data.get('transaction_at')) if data.get('transaction_at') else None
     if not row.transaction_date:
         row.transaction_date = _today()
 
@@ -1260,6 +1262,7 @@ def approve_money_transaction(db: Session, tx_id: int, payload: CashflowActionPa
     if bool(row.is_reversed) or _normalize(row.status) in {'reversed', 'cancelled'}:
         raise ValueError('Only active transactions can be approved.')
 
+    _ensure_cash_day_open(db, row.financial_account_id, row.transaction_date, action='approve this transaction')
     if not _is_posting_status(row.status):
         _apply_money_effect(db, row, allow_overdraw=True)
     row.status = 'approved'
@@ -1379,6 +1382,7 @@ def delete_money_transaction(db: Session, tx_id: int):
         raise ValueError('Posted/approved transactions cannot be deleted. Cancel or reverse instead.')
     if bool(row.is_reversed) or _normalize(row.status) == 'reversed':
         raise ValueError('Reversed transaction cannot be deleted.')
+    _ensure_cash_day_open(db, row.financial_account_id, row.transaction_date, action='delete this transaction')
     db.delete(row)
     db.commit()
     return {'ok': True}
@@ -1606,6 +1610,8 @@ def approve_transfer(db: Session, transfer_id: int, payload: CashflowActionPaylo
     if bool(row.is_reversed) or _normalize(row.status) in {'reversed', 'cancelled'}:
         raise ValueError('Only active transfers can be approved.')
 
+    _ensure_cash_day_open(db, row.from_account_id, row.transfer_date, action='approve this transfer')
+    _ensure_cash_day_open(db, row.to_account_id, row.transfer_date, action='approve this transfer')
     if not _is_posting_status(row.status):
         from_account = db.get(FinancialAccount, int(row.from_account_id))
         to_account = db.get(FinancialAccount, int(row.to_account_id))
@@ -1759,6 +1765,8 @@ def delete_transfer(db: Session, transfer_id: int):
         raise ValueError('Posted/approved transfers cannot be deleted. Cancel or reverse instead.')
     if bool(row.is_reversed) or _normalize(row.status) == 'reversed':
         raise ValueError('Reversed transfer cannot be deleted.')
+    _ensure_cash_day_open(db, row.from_account_id, row.transfer_date, action='delete this transfer')
+    _ensure_cash_day_open(db, row.to_account_id, row.transfer_date, action='delete this transfer')
     db.delete(row)
     db.commit()
     return {'ok': True}
