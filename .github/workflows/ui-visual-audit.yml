@@ -1,0 +1,103 @@
+name: UI Visual Audit
+
+on:
+  workflow_dispatch:
+  pull_request:
+    paths:
+      - 'frontend/**'
+      - 'backend/app/**'
+      - '.github/workflows/ui-visual-audit.yml'
+
+permissions:
+  contents: read
+
+jobs:
+  capture:
+    runs-on: ubuntu-latest
+    timeout-minutes: 25
+    env:
+      ENVIRONMENT: test
+      DATABASE_URL: sqlite:////tmp/accounting-visual-audit.db
+      ALLOW_DEFAULT_ADMIN_BOOTSTRAP: "true"
+      ALLOW_DEMO_SEED: "true"
+      SECRET_KEY: visual-audit-only-secret
+      NEXT_PUBLIC_API_BASE: http://127.0.0.1:8000/api
+      NEXT_TELEMETRY_DISABLED: "1"
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+          cache: pip
+          cache-dependency-path: backend/requirements.txt
+
+      - name: Install backend dependencies
+        run: pip install -r backend/requirements.txt
+
+      - name: Start backend
+        working-directory: backend
+        run: |
+          python -m uvicorn app.main:app --host 127.0.0.1 --port 8000 > /tmp/accounting-api.log 2>&1 &
+          echo $! > /tmp/accounting-api.pid
+          for i in {1..60}; do
+            if curl -fsS http://127.0.0.1:8000/api/integration/status >/dev/null; then exit 0; fi
+            sleep 1
+          done
+          cat /tmp/accounting-api.log
+          exit 1
+
+      - name: Seed visual-audit data
+        run: |
+          curl -fsS -X POST http://127.0.0.1:8000/api/auth/bootstrap
+          curl -fsS -X POST http://127.0.0.1:8000/api/seed/demo
+          TOKEN="$(curl -fsS -X POST http://127.0.0.1:8000/api/auth/login -H 'Content-Type: application/json' -d '{"username":"admin","password":"admin123"}' | python -c 'import json,sys; print(json.load(sys.stdin)["access_token"])')"
+          curl -fsS -X POST http://127.0.0.1:8000/api/financial-accounts/bootstrap-defaults -H "Authorization: Bearer $TOKEN"
+
+      - name: Set up Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+          cache: npm
+          cache-dependency-path: frontend/package-lock.json
+
+      - name: Install frontend and browser
+        working-directory: frontend
+        run: |
+          npm ci
+          npm install --no-save --package-lock=false playwright@1.55.0
+          npx playwright install --with-deps chromium
+
+      - name: Build frontend
+        working-directory: frontend
+        run: npm run build
+
+      - name: Start frontend
+        working-directory: frontend
+        run: |
+          npm run start -- --hostname 127.0.0.1 --port 3000 > /tmp/accounting-web.log 2>&1 &
+          echo $! > /tmp/accounting-web.pid
+          for i in {1..60}; do
+            if curl -fsS http://127.0.0.1:3000/login >/dev/null; then exit 0; fi
+            sleep 1
+          done
+          cat /tmp/accounting-web.log
+          exit 1
+
+      - name: Capture visual audit
+        working-directory: frontend
+        run: node scripts/visual-audit.mjs
+
+      - name: Upload screenshots
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: accounting-ui-visual-audit
+          path: |
+            frontend/visual-audit/**
+            /tmp/accounting-api.log
+            /tmp/accounting-web.log
+          if-no-files-found: warn
+          retention-days: 30
