@@ -15,9 +15,24 @@ jobs:
   capture:
     runs-on: ubuntu-latest
     timeout-minutes: 25
+    services:
+      postgres:
+        image: postgres:16
+        env:
+          POSTGRES_USER: accounting
+          POSTGRES_PASSWORD: accounting
+          POSTGRES_DB: accounting_visual_audit
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd "pg_isready -U accounting -d accounting_visual_audit"
+          --health-interval 10s
+          --health-timeout 5s
+          --health-retries 5
+
     env:
       ENVIRONMENT: test
-      DATABASE_URL: sqlite:////tmp/accounting-visual-audit.db
+      DATABASE_URL: postgresql+psycopg://accounting:accounting@127.0.0.1:5432/accounting_visual_audit
       ALLOW_DEFAULT_ADMIN_BOOTSTRAP: "true"
       ALLOW_DEMO_SEED: "true"
       SECRET_KEY: visual-audit-only-secret
