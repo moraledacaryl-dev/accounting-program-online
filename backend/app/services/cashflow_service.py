@@ -2737,6 +2737,29 @@ def combined_cash_ledger(
                 out['included_movement_count'] = tx_count + transfer_count
             combined.append(out)
 
+    if not account_id:
+        transfer_rows = {}
+        deduped = []
+        for row in combined:
+            if row.get('entry_type') != 'account_transfer':
+                deduped.append(row)
+                continue
+            entry_id = int(row.get('entry_id') or 0)
+            existing = transfer_rows.get(entry_id)
+            if existing is None:
+                transfer_rows[entry_id] = row
+                deduped.append(row)
+            else:
+                meta = row.get('meta') or existing.get('meta') or {}
+                existing['account_name'] = f"{meta.get('from_account_name') or existing.get('account_name')} → {meta.get('to_account_name') or row.get('account_name')}"
+                existing['account_id'] = None
+                existing['account_code'] = None
+                existing['debit'] = 0.0
+                existing['credit'] = 0.0
+                existing['signed_amount'] = 0.0
+                existing['running_balance'] = None
+        combined = deduped
+
     reverse = str(sort or 'desc').lower() != 'asc'
     combined.sort(
         key=lambda row: (
