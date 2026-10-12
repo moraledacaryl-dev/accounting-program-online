@@ -68,7 +68,7 @@ jobs:
           python -m uvicorn app.main:app --host 127.0.0.1 --port 8000 > /tmp/accounting-api.log 2>&1 &
           echo $! > /tmp/accounting-api.pid
           for i in {1..60}; do
-            if curl -fsS http://127.0.0.1:8000/api/integration/status >/dev/null; then exit 0; fi
+            if curl -sS -o /dev/null http://127.0.0.1:8000/openapi.json; then exit 0; fi
             sleep 1
           done
           cat /tmp/accounting-api.log
