@@ -76,9 +76,12 @@ jobs:
 
       - name: Seed visual-audit data
         run: |
-          curl -fsS -X POST http://127.0.0.1:8000/api/auth/bootstrap
+          BOOTSTRAP="$(curl -fsS -X POST http://127.0.0.1:8000/api/auth/bootstrap)"
+          ADMIN_PASSWORD="$(printf '%s' "$BOOTSTRAP" | python -c 'import json,sys; print(json.load(sys.stdin).get("temporary_password") or "admin123")')"
+          echo "VISUAL_AUDIT_PASSWORD=$ADMIN_PASSWORD" >> "$GITHUB_ENV"
           curl -fsS -X POST http://127.0.0.1:8000/api/seed/demo
-          TOKEN="$(curl -fsS -X POST http://127.0.0.1:8000/api/auth/login -H 'Content-Type: application/json' -d '{"username":"admin","password":"admin123"}' | python -c 'import json,sys; print(json.load(sys.stdin)["access_token"])')"
+          LOGIN_BODY="$(python -c 'import json,os; print(json.dumps({"username":"admin","password":os.environ["ADMIN_PASSWORD"]}))' ADMIN_PASSWORD="$ADMIN_PASSWORD")"
+          TOKEN="$(curl -fsS -X POST http://127.0.0.1:8000/api/auth/login -H 'Content-Type: application/json' -d "$LOGIN_BODY" | python -c 'import json,sys; print(json.load(sys.stdin)["access_token"])')"
           curl -fsS -X POST http://127.0.0.1:8000/api/financial-accounts/bootstrap-defaults -H "Authorization: Bearer $TOKEN"
 
       - name: Set up Node
