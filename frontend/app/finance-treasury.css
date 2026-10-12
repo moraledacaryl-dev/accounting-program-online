@@ -506,3 +506,54 @@
     border-bottom: 1px solid var(--finance-line);
   }
 }
+
+
+/* Cash ledger mobile closure: prioritize the working ledger over repeated chrome. */
+@media (max-width: 760px) {
+  .cash-workspace:has(.cash-account-strip) > .workspace-hero {
+    padding: 14px 15px;
+  }
+  .cash-workspace:has(.cash-account-strip) > .workspace-hero p {
+    display: none;
+  }
+  .cash-workspace:has(.cash-account-strip) > .metric-grid {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+  .cash-workspace:has(.cash-account-strip) > .metric-grid .metric-card {
+    padding: 11px 12px;
+  }
+  .cash-workspace:has(.cash-account-strip) > .metric-grid .metric-card strong {
+    font-size: 18px;
+  }
+  .cash-workspace:has(.cash-account-strip) .unified-tabs {
+    display: flex;
+    flex-wrap: nowrap;
+    overflow-x: auto;
+    scrollbar-width: thin;
+  }
+  .cash-workspace:has(.cash-account-strip) .unified-tabs .tab {
+    flex: 0 0 auto;
+    padding: 8px 10px;
+    white-space: nowrap;
+  }
+  .cash-workspace .cash-account-strip {
+    margin-inline: -2px;
+    padding: 2px 2px 10px;
+    scroll-snap-type: x proximity;
+  }
+  .cash-workspace .cash-account-pill {
+    min-width: min(72vw, 220px);
+    scroll-snap-align: start;
+  }
+  .cash-workspace .section:has(.cash-account-strip) {
+    overflow: hidden;
+  }
+  .cash-workspace .section:has(.cash-account-strip) .table {
+    min-width: 760px;
+  }
+  .cash-workspace .section:has(.cash-account-strip) > div:has(> .table) {
+    max-width: 100%;
+    overflow-x: auto;
+    -webkit-overflow-scrolling: touch;
+  }
+}
