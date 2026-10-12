@@ -389,6 +389,7 @@ class MoneyTransaction(Base, TimestampMixin):
     __tablename__ = 'money_transactions'
     id: Mapped[int] = mapped_column(Integer, primary_key=True)
     transaction_date: Mapped[str | None] = mapped_column(String(50), nullable=True, index=True)
+    transaction_at: Mapped[str | None] = mapped_column(String(50), nullable=True, index=True)
     direction: Mapped[str] = mapped_column(String(10), index=True)  # in | out
     financial_account_id: Mapped[int] = mapped_column(ForeignKey('financial_accounts.id'), index=True)
     module: Mapped[str | None] = mapped_column(String(100), nullable=True, index=True)
@@ -424,6 +425,7 @@ class AccountTransfer(Base, TimestampMixin):
     __tablename__ = 'account_transfers'
     id: Mapped[int] = mapped_column(Integer, primary_key=True)
     transfer_date: Mapped[str | None] = mapped_column(String(50), nullable=True, index=True)
+    transfer_at: Mapped[str | None] = mapped_column(String(50), nullable=True, index=True)
     from_account_id: Mapped[int] = mapped_column(ForeignKey('financial_accounts.id'), index=True)
     to_account_id: Mapped[int] = mapped_column(ForeignKey('financial_accounts.id'), index=True)
     amount: Mapped[float] = mapped_column(Float, default=0)
