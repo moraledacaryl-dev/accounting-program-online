@@ -76,10 +76,14 @@ def _journal(amount: Decimal, debit_account, credit_account, description: str, m
 
 def _normalize_stock_adjustment(db: Session, payload: IntegrationReviewCreate, data: dict) -> IntegrationReviewCreate:
     document_type = str(data.get('document_type') or '').strip().lower()
-    if document_type not in {'waste', 'damage', 'count_adjustment'}:
+    if document_type not in {'waste', 'damage', 'count_adjustment', 'adjustment', 'transfer_receipt'}:
         return payload
 
     lines = data.get('lines') if isinstance(data.get('lines'), list) else []
+    if document_type == 'transfer_receipt':
+        lines = [line for line in lines if isinstance(line, dict) and str(line.get('reason') or '').startswith('transfer variance:')]
+        if not lines:
+            return payload
     losses = sum(
         (abs(_money(line.get('quantity')) * _money(line.get('unit_cost'))) for line in lines
          if isinstance(line, dict) and _money(line.get('quantity')) < 0),
@@ -97,7 +101,7 @@ def _normalize_stock_adjustment(db: Session, payload: IntegrationReviewCreate, d
     label = document_number or str(payload.source_entity_id or '')
     journal_lines = []
     if losses > 0:
-        category = INVENTORY_WRITE_OFF_CATEGORY if document_type in {'waste', 'damage'} else INVENTORY_ADJUSTMENT_LOSS_CATEGORY
+        category = INVENTORY_WRITE_OFF_CATEGORY if document_type in {'waste', 'damage', 'transfer_receipt'} else INVENTORY_ADJUSTMENT_LOSS_CATEGORY
         debit_account, credit_account = _posting_accounts(db, category, 'out')
         journal_lines.extend([
             {'account_code': debit_account[0], 'account_name': debit_account[1], 'debit': float(losses), 'credit': 0, 'memo': f'{category} {label}'},
