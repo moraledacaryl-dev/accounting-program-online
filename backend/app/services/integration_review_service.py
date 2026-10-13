@@ -8,11 +8,11 @@ from sqlalchemy import func
 from sqlalchemy.orm import Session, selectinload
 
 from app.models.entities import FinancialAccount, IntegrationReviewItem, JournalEntry, JournalLine, Payable, Receivable
-from app.schemas.cashflow import MoneyTransactionCreate
+from app.schemas.cashflow import MoneyTransactionCreate, ReceivableCreate
 from app.schemas.integration_review import IntegrationReviewCreate, IntegrationReviewDecision
 from app.services.audit_service import record_audit
 from app.services.bir_service import ensure_date_unlocked
-from app.services.cashflow_service import create_money_transaction
+from app.services.cashflow_service import create_money_transaction, create_receivable
 from app.services.payable_adjustment_service import apply_purchase_return_adjustment
 
 ALLOWED_EFFECTS = {
@@ -595,22 +595,32 @@ def accept_item(db: Session, item_id: int, decision: IntegrationReviewDecision, 
         )
         row.accepted_journal_entry_id = entry.id
     elif effect == 'receivable':
-        rec = Receivable(
-            source_type=row.source_entity_type,
-            source_id=int(row.source_entity_id) if str(row.source_entity_id or '').isdigit() else None,
-            counterparty_name=links['counterparty_name'],
-            receivable_type=links.get('receivable_type') or 'connected_app',
-            transaction_date=transaction_date,
-            due_date=links.get('due_date'),
-            gross_amount=row.amount,
-            amount_collected=0,
-            balance_due=row.amount,
-            status='open',
-            notes=decision.notes or source,
+        payload = _loads(row.payload_json)
+        is_pos_room_charge = row.source_app == 'pos' and row.source_entity_type == 'room_charge'
+        gross_amount = float(payload.get('gross_amount') or row.amount or 0) if is_pos_room_charge else float(row.amount or 0)
+        source_type = str(payload.get('source_type') or row.source_entity_type)
+        source_id = payload.get('source_id') if is_pos_room_charge else row.source_entity_id
+        rec_result = create_receivable(
+            db,
+            ReceivableCreate(
+                source_type=source_type,
+                source_id=int(source_id) if str(source_id or '').isdigit() else None,
+                counterparty_name=links['counterparty_name'],
+                receivable_type=links.get('receivable_type') or 'connected_app',
+                transaction_date=transaction_date,
+                due_date=links.get('due_date'),
+                gross_amount=gross_amount,
+                amount_collected=0,
+                status='open',
+                notes=decision.notes or source,
+                external_source=str(payload.get('external_source') or row.source_app) if is_pos_room_charge else None,
+                external_id=str(payload.get('external_id') or row.source_event_id) if is_pos_room_charge else None,
+                reverses_source_type=links.get('reverses_source_type'),
+                reverses_source_id=int(links['reverses_source_id']) if str(links.get('reverses_source_id') or '').isdigit() else None,
+            ),
+            commit=False,
         )
-        db.add(rec)
-        db.flush()
-        row.accepted_receivable_id = rec.id
+        row.accepted_receivable_id = int(rec_result['id'])
     elif effect == 'payable':
         pay = Payable(
             source_type=row.source_entity_type,
