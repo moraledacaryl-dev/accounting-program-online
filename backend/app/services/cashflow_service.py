@@ -486,6 +486,7 @@ def _account_opening_balance_at(db: Session, account_id: int, on_date: str) -> f
             MoneyTransaction.financial_account_id == account.id,
             MoneyTransaction.transaction_date < on_date,
             MoneyTransaction.direction == 'in',
+            _cash_ledger_effect_filter(MoneyTransaction),
         )
         .scalar()
         or 0
@@ -496,19 +497,20 @@ def _account_opening_balance_at(db: Session, account_id: int, on_date: str) -> f
             MoneyTransaction.financial_account_id == account.id,
             MoneyTransaction.transaction_date < on_date,
             MoneyTransaction.direction == 'out',
+            _cash_ledger_effect_filter(MoneyTransaction),
         )
         .scalar()
         or 0
     )
     transfer_in = (
         db.query(func.sum(AccountTransfer.amount))
-        .filter(AccountTransfer.to_account_id == account.id, AccountTransfer.transfer_date < on_date)
+        .filter(AccountTransfer.to_account_id == account.id, AccountTransfer.transfer_date < on_date, _cash_ledger_effect_filter(AccountTransfer))
         .scalar()
         or 0
     )
     transfer_out = (
         db.query(func.sum(AccountTransfer.amount))
-        .filter(AccountTransfer.from_account_id == account.id, AccountTransfer.transfer_date < on_date)
+        .filter(AccountTransfer.from_account_id == account.id, AccountTransfer.transfer_date < on_date, _cash_ledger_effect_filter(AccountTransfer))
         .scalar()
         or 0
     )
@@ -862,6 +864,20 @@ def _normalize_reconciliation_status(status: str | None) -> str:
 
 def _is_posting_status(status: str | None) -> bool:
     return (status or '').strip().lower() in {'approved', 'posted'}
+
+
+def _has_cash_ledger_effect(row) -> bool:
+    """A reversed posted original remains in history; its reversal offsets it."""
+    return _is_posting_status(row.status) or (
+        _normalize(row.status) == 'reversed' and bool(row.is_reversed) and bool(row.posted_at)
+    )
+
+
+def _cash_ledger_effect_filter(model):
+    return or_(
+        model.status.in_(['approved', 'posted']),
+        and_(model.status == 'reversed', model.is_reversed.is_(True), model.posted_at.isnot(None)),
+    )
 
 
 def _ensure_cash_day_open(db: Session, account_id: int, business_date: str | None, *, action: str) -> None:
@@ -1781,6 +1797,7 @@ def _account_day_expected_values(db: Session, account_id: int, target_date: str)
             MoneyTransaction.financial_account_id == int(account_id),
             MoneyTransaction.transaction_date == target_date,
             MoneyTransaction.direction == 'in',
+            _cash_ledger_effect_filter(MoneyTransaction),
         )
         .scalar()
         or 0
@@ -1791,19 +1808,20 @@ def _account_day_expected_values(db: Session, account_id: int, target_date: str)
             MoneyTransaction.financial_account_id == int(account_id),
             MoneyTransaction.transaction_date == target_date,
             MoneyTransaction.direction == 'out',
+            _cash_ledger_effect_filter(MoneyTransaction),
         )
         .scalar()
         or 0
     )
     transfer_in = (
         db.query(func.sum(AccountTransfer.amount))
-        .filter(AccountTransfer.to_account_id == int(account_id), AccountTransfer.transfer_date == target_date)
+        .filter(AccountTransfer.to_account_id == int(account_id), AccountTransfer.transfer_date == target_date, _cash_ledger_effect_filter(AccountTransfer))
         .scalar()
         or 0
     )
     transfer_out = (
         db.query(func.sum(AccountTransfer.amount))
-        .filter(AccountTransfer.from_account_id == int(account_id), AccountTransfer.transfer_date == target_date)
+        .filter(AccountTransfer.from_account_id == int(account_id), AccountTransfer.transfer_date == target_date, _cash_ledger_effect_filter(AccountTransfer))
         .scalar()
         or 0
     )
@@ -2846,7 +2864,7 @@ def account_ledger(
     ]
 
     for row in tx_rows:
-        signed = (float(row.amount or 0) if _normalize(row.direction) == 'in' else -float(row.amount or 0)) if _is_posting_status(row.status) else 0.0
+        signed = (float(row.amount or 0) if _normalize(row.direction) == 'in' else -float(row.amount or 0)) if _has_cash_ledger_effect(row) else 0.0
         rows.append(
             {
                 'entry_type': 'money_transaction',
@@ -2864,7 +2882,7 @@ def account_ledger(
         )
 
     for row in tr_rows:
-        signed = float(row.amount or 0) if _is_posting_status(row.status) else 0.0
+        signed = float(row.amount or 0) if _has_cash_ledger_effect(row) else 0.0
         if int(row.from_account_id) == int(account.id):
             signed = -signed
         rows.append(
