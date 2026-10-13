@@ -141,7 +141,7 @@ def room_charge(
     _user: User = Depends(require_pos_integration_user),
 ):
     gross = float(payload.get('gross_amount') or 0)
-    effect = 'receivable' if gross >= 0 else 'reference_only'
+    effect = 'receivable'
     links = {
         'counterparty_name': payload.get('counterparty_name'),
         'receivable_type': payload.get('receivable_type') or 'guest_balance',
