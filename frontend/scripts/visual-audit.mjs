@@ -38,6 +38,14 @@ async function api(pathname, options = {}) {
 }
 
 await page.goto(`${BASE}/login`, { waitUntil: 'networkidle' });
+await page.screenshot({ path: path.join(OUT, 'login--desktop.png'), fullPage: true });
+
+await page.setViewportSize({ width: 390, height: 844 });
+await page.goto(`${BASE}/login`, { waitUntil: 'networkidle' });
+await page.screenshot({ path: path.join(OUT, 'login--mobile.png'), fullPage: true });
+
+await page.setViewportSize({ width: 1440, height: 1000 });
+await page.goto(`${BASE}/login`, { waitUntil: 'networkidle' });
 await page.getByLabel('Username').fill('admin');
 await page.locator('input[type="password"]').fill('admin123');
 await page.getByRole('button', { name: 'Sign in' }).click();
@@ -73,7 +81,10 @@ const routes = [
   ['payroll', '/payroll'],
 ];
 
-const manifest = [];
+const manifest = [
+  { name: 'login', route: '/login', viewport: '1440x1000', file: 'login--desktop.png', status: 'ok', title: 'Hidden Oasis Accounting' },
+  { name: 'login', route: '/login', viewport: '390x844', file: 'login--mobile.png', status: 'ok', title: 'Hidden Oasis Accounting' },
+];
 for (const [name, route] of routes) {
   const started = Date.now();
   let status = 'ok';
