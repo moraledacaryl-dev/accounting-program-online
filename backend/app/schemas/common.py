@@ -539,6 +539,7 @@ class SaleOrderCreate(BaseModel):
     folio_id: int | None = None
     notes: str | None = None
     strict_inventory: bool = True
+    mutate_inventory: bool = True
     auto_post_accounting: bool = False
     external_source: str | None = None
     external_id: str | None = None
