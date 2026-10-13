@@ -77,7 +77,13 @@ export default function LoginPage() {
                 aria-label={showPassword ? 'Hide password' : 'Show password'}
                 disabled={busy}
               >
-                {showPassword ? 'Hide' : 'Show'}
+                <svg viewBox="0 0 24 24" aria-hidden="true" focusable="false">
+                  {showPassword ? (
+                    <path d="M3 3l18 18M10.6 10.7a2 2 0 0 0 2.7 2.7M9.9 4.3A10.8 10.8 0 0 1 12 4c5.3 0 9 4.5 9 8a8.6 8.6 0 0 1-2 4.3M6.2 6.2C4.2 7.6 3 9.8 3 12c0 3.5 3.7 8 9 8a10.4 10.4 0 0 0 4.1-.8" />
+                  ) : (
+                    <><path d="M3 12s3.7-8 9-8 9 8 9 8-3.7 8-9 8-9-8-9-8Z" /><circle cx="12" cy="12" r="2.5" /></>
+                  )}
+                </svg>
               </button>
             </span>
             {passwordError ? <span id="login-password-error" className="field-error" role="alert">{passwordError}</span> : null}
