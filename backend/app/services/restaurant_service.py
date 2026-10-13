@@ -518,22 +518,23 @@ def create_sale_order(db: Session, payload, username: str | None = None) -> Sale
             line_total=round(net_line_amount, 4),
         ))
 
-        requirements = expand_menu_or_sku_to_inventory_requirements(
-            db,
-            menu_item=menu_item,
-            sku=sku,
-            quantity=qty,
-            strict_inventory=payload.strict_inventory,
-        )
-        cogs_amount += consume_inventory_requirements(
-            db,
-            requirements,
-            reason='Orders',
-            module_slug='inventory',
-            reference_no=order_no,
-            movement_date=order_date,
-            notes_prefix=f'Auto deduction from sale order {order_no} line {idx + 1}',
-        )
+        if bool(getattr(payload, 'mutate_inventory', True)):
+            requirements = expand_menu_or_sku_to_inventory_requirements(
+                db,
+                menu_item=menu_item,
+                sku=sku,
+                quantity=qty,
+                strict_inventory=payload.strict_inventory,
+            )
+            cogs_amount += consume_inventory_requirements(
+                db,
+                requirements,
+                reason='Orders',
+                module_slug='inventory',
+                reference_no=order_no,
+                movement_date=order_date,
+                notes_prefix=f'Auto deduction from sale order {order_no} line {idx + 1}',
+            )
 
         gross_amount += gross_line_amount
         total_discount += line_discount
