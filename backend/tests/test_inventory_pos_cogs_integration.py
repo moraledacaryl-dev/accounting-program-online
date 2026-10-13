@@ -154,3 +154,36 @@ def test_pos_cogs_review_acceptance_posts_one_balanced_journal_and_replay_is_ide
     assert len(lines) == 2
     assert float(lines[0].debit) == 20.0
     assert float(lines[1].credit) == 20.0
+
+
+def test_pos_revenue_and_inventory_cogs_are_separate_accounting_consequences():
+    """Contract: POS owns sale value; Inventory owns stock value/COGS.
+
+    A POS order reference must never manufacture COGS. Only the costed Inventory
+    consumption event is normalized into the balanced COGS journal.
+    """
+    db = make_session()
+    seed_cogs_mapping(db)
+
+    inventory_event = normalize_inventory_review_payload(db, pos_event(total_cost='20.00'))
+    assert inventory_event.financial_effect == 'journal_only'
+    assert inventory_event.amount == 20.0
+    assert inventory_event.proposed_links['category'] == 'Cost of goods sold'
+    assert sum(float(line.get('debit') or 0) for line in inventory_event.proposed_journal['lines']) == 20.0
+    assert sum(float(line.get('credit') or 0) for line in inventory_event.proposed_journal['lines']) == 20.0
+
+    # Replaying the same Inventory consequence must resolve to one review item
+    # and therefore one eventual COGS journal.
+    first = create_review_item(db, inventory_event)
+    replay = create_review_item(db, inventory_event)
+    assert replay['id'] == first['id']
+    assert db.query(JournalEntry).count() == 0
+
+    accepted = accept_item(
+        db,
+        first['id'],
+        IntegrationReviewDecision(transaction_date='2026-09-09'),
+        'integration-reviewer',
+    )
+    assert accepted['accepted_journal_entry_id'] is not None
+    assert db.query(JournalEntry).count() == 1
