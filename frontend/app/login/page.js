@@ -72,7 +72,7 @@ export default function LoginPage() {
               />
               <button
                 type="button"
-                className="auth-password-toggle secondary"
+                className="auth-password-toggle"
                 onClick={() => setShowPassword((value) => !value)}
                 aria-label={showPassword ? 'Hide password' : 'Show password'}
                 disabled={busy}
