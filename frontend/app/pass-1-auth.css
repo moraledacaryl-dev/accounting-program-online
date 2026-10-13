@@ -73,14 +73,15 @@
   display: grid;
   place-items: center;
   padding: 0;
-  border: 0;
-  border-radius: 8px;
-  background: transparent;
+  border: 0 !important;
+  border-radius: 50%;
+  background: transparent !important;
   color: var(--ho-muted);
-  box-shadow: none;
+  box-shadow: none !important;
+  appearance: none;
 }
 
-.auth-password-toggle:hover { background: rgba(24, 59, 50, .06); color: var(--ho-text); }
+.auth-password-toggle:hover { background: transparent !important; color: var(--ho-text); }
 .auth-password-toggle:focus-visible { outline: 2px solid #183b32; outline-offset: 1px; }
 .auth-password-toggle svg {
   width: 18px;
