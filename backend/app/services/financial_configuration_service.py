@@ -18,6 +18,24 @@ REQUIRED_INVENTORY_POSTING_RULES = (
         'category': 'Cost of Goods Sold',
         'direction': 'out',
     },
+    {
+        'key': 'inventory_write_offs',
+        'module_slug': 'inventory',
+        'category': 'Inventory write-offs',
+        'direction': 'out',
+    },
+    {
+        'key': 'inventory_adjustment_loss',
+        'module_slug': 'inventory',
+        'category': 'Inventory adjustment loss',
+        'direction': 'out',
+    },
+    {
+        'key': 'inventory_adjustment_gain',
+        'module_slug': 'inventory',
+        'category': 'Inventory adjustment gain',
+        'direction': 'in',
+    },
 )
 
 
