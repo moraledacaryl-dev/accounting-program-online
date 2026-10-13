@@ -17,6 +17,9 @@ def add_accounts(db):
         ChartAccount(code='INV', name='Inventory', account_type='asset', is_active=True),
         ChartAccount(code='COGS', name='Cost of Goods Sold', account_type='expense', is_active=True),
         ChartAccount(code='MEALS', name='Staff Meals Expense', account_type='expense', is_active=True),
+        ChartAccount(code='WRITEOFF', name='Inventory Write-offs', account_type='expense', is_active=True),
+        ChartAccount(code='ADJLOSS', name='Inventory Adjustment Loss', account_type='expense', is_active=True),
+        ChartAccount(code='ADJGAIN', name='Inventory Adjustment Gain', account_type='income', is_active=True),
     ])
     db.commit()
 
@@ -41,7 +44,7 @@ def test_empty_chart_is_not_financially_ready():
 
     assert status['ready'] is False
     assert status['active_chart_account_count'] == 0
-    assert status['missing_required_rules'] == ['staff_meals', 'pos_cogs']
+    assert status['missing_required_rules'] == ['staff_meals', 'pos_cogs', 'inventory_write_offs', 'inventory_adjustment_loss', 'inventory_adjustment_gain']
 
 
 def test_required_inventory_rules_with_active_accounts_are_ready():
@@ -49,6 +52,9 @@ def test_required_inventory_rules_with_active_accounts_are_ready():
     add_accounts(db)
     add_rule(db, category='Staff Meals', debit='MEALS', credit='INV')
     add_rule(db, category='Cost of Goods Sold', debit='COGS', credit='INV')
+    add_rule(db, category='Inventory write-offs', debit='WRITEOFF', credit='INV')
+    add_rule(db, category='Inventory adjustment loss', debit='ADJLOSS', credit='INV')
+    db.add(AccountMappingRule(module_slug='inventory', category='Inventory adjustment gain', direction='in', debit_account_code='INV', credit_account_code='ADJGAIN', priority=10, is_active=True)); db.commit()
 
     status = financial_configuration_status(db)
 
