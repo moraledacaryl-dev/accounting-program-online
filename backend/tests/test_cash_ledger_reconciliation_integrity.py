@@ -24,7 +24,7 @@ def test_closed_cash_day_guard_covers_both_transfer_accounts():
 
 def test_ledger_uses_posting_status_and_business_date_fallbacks():
     source = (ROOT / 'backend/app/services/cashflow_service.py').read_text()
-    assert "if _is_posting_status(row.status) else 0.0" in source
+    assert "if _has_cash_ledger_effect(row) else 0.0" in source
     assert "meta.get('transaction_at') or row.get('date')" in source
     assert "meta.get('transfer_at') or row.get('date')" in source
     assert "row.get('entry_type') == 'money_transaction'" in source
