@@ -89,3 +89,21 @@ def test_order_void_payload_maps_to_linked_reference():
     assert result['proposed_links']['target_type'] == 'pos_order_void'
     assert result['proposed_links']['order_no'] == 'POS-100'
     assert result['proposed_links']['reason'] == 'Guest cancellation'
+
+
+def test_negative_room_charge_maps_to_receivable_reversal():
+    result = _capture(room_charge, {
+        'source_type': 'pos_room_charge_reversal',
+        'source_id': 56,
+        'gross_amount': -780,
+        'counterparty_name': 'Guest One',
+        'transaction_date': '2026-07-17',
+        'reverses_source_type': 'pos_room_charge',
+        'reverses_source_id': 55,
+        'external_id': 'posting-reversal-56',
+    })
+    assert result['financial_effect'] == 'receivable'
+    assert result['amount'] == 780
+    assert result['proposed_links']['reverses_source_type'] == 'pos_room_charge'
+    assert result['proposed_links']['reverses_source_id'] == 55
+    assert result['idempotency_key'] == 'pos:room_charge:posting-reversal-56'
