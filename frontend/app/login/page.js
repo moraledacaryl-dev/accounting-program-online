@@ -34,25 +34,14 @@ export default function LoginPage() {
 
   return (
     <div className="auth-login-shell">
-      <section className="auth-login-brand" aria-label="Hidden Oasis Accounting">
-        <div className="auth-login-mark" aria-hidden="true">HO</div>
-        <div>
-          <div className="ho-eyebrow">Hidden Oasis</div>
-          <h1>Accounting & Hotel Operations</h1>
-          <p>Secure access to finance, treasury, bookings, folios, compliance, and connected-app review.</p>
-        </div>
-        <div className="auth-login-features" aria-hidden="true">
-          <span>Hotel operations</span>
-          <span>Cash & treasury</span>
-          <span>Accounting controls</span>
-        </div>
-      </section>
-
-      <section className="auth-login-card">
-        <div>
-          <div className="ho-eyebrow">Welcome back</div>
-          <h2>Sign in</h2>
-          <p className="muted">Use your Hidden Oasis account to continue.</p>
+      <main className="auth-login-card">
+        <div className="auth-login-identity">
+          <div className="auth-login-mark" aria-hidden="true">HO</div>
+          <div>
+            <div className="ho-eyebrow">Hidden Oasis</div>
+            <h1>Accounting</h1>
+            <p className="muted">Sign in to continue.</p>
+          </div>
         </div>
 
         <form onSubmit={submit} className="auth-login-form" noValidate>
@@ -99,8 +88,8 @@ export default function LoginPage() {
           </button>
         </form>
 
-        <p className="auth-login-help">Cannot access your account? Contact your system administrator.</p>
-      </section>
+        <p className="auth-login-help">Contact your system administrator if you cannot access your account.</p>
+      </main>
     </div>
   );
 }
