@@ -67,18 +67,23 @@
   position: absolute;
   top: 4px;
   right: 4px;
-  width: auto;
+  width: 48px !important;
   height: 36px;
+  min-width: 48px;
   min-height: 36px;
-  display: grid;
-  place-items: center;
+  display: flex !important;
+  align-items: center;
+  justify-content: center;
   padding: 0;
   border: 0 !important;
   border-radius: 50%;
   background: transparent !important;
-  color: var(--ho-muted);
+  color: #52645e !important;
   box-shadow: none !important;
   appearance: none;
+  visibility: visible !important;
+  opacity: 1 !important;
+  z-index: 2;
 }
 
 .auth-password-toggle:hover { background: transparent !important; color: var(--ho-text); }
