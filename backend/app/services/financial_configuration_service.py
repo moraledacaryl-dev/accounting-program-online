@@ -36,6 +36,12 @@ REQUIRED_INVENTORY_POSTING_RULES = (
         'category': 'Inventory adjustment gain',
         'direction': 'in',
     },
+    {
+        'key': 'inventory_opening_balance',
+        'module_slug': 'inventory',
+        'category': 'Inventory opening balance',
+        'direction': 'in',
+    },
 )
 
 
