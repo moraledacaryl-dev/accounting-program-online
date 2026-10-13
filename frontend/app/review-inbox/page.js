@@ -127,7 +127,7 @@ export default function ReviewInboxPage() {
     <div className="stack review-inbox-page">
       <section className="section page-header review-inbox-hero">
         <div>
-          <div className="eyebrow">Connected-app financial intake</div>
+          <div className="eyebrow">Integration review</div>
           <h1>Review Inbox</h1>
           <p className="muted">
             Review each external financial event once. Cash items enter Cash & Treasury; non-cash items become journals,
