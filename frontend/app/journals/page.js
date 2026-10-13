@@ -78,7 +78,7 @@ export default function JournalsPage() {
 
   return <div className="stack journal-workspace">
     <section className="section">
-      <div className="row wrap" style={{ justifyContent: 'space-between' }}><div><h1>Journals</h1><p className="muted">Review the ledger, create balanced entries, and trace every correction.</p></div>
+      <div className="row wrap" style={{ justifyContent: 'space-between' }}><div><h1>Journals</h1><p className="muted">Create, review, post, and reverse journal entries.</p></div>
         {can('journals.post') && <button onClick={() => setShowForm(true)} disabled={showForm}>Create Entry</button>}
       </div>
       {error && <p role="alert" className="error-text">{error}</p>}
