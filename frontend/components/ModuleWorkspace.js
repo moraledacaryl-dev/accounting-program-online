@@ -37,7 +37,7 @@ const FINANCE_ACTIONS = [
 const CONFIG = {
   rooms: {
     title: 'Rooms & Guests',
-    description: 'Front desk operations in one place: guests, bookings, folios, setup, and room records.',
+    description: 'Guest, booking, folio, room, and front desk records.',
     tabs: [
       {
         key: 'overview',
@@ -78,7 +78,7 @@ const CONFIG = {
 
   events: {
     title: 'Events',
-    description: 'Dedicated event workflow for quotes, confirmation, deposits, AR balances, and completion.',
+    description: 'Event quotations, confirmations, deposits, receivables, and completion records.',
     tabs: [
       {
         key: 'overview',
@@ -106,7 +106,7 @@ const CONFIG = {
 
   restaurant: {
     title: 'Restaurant & F&B',
-    description: 'Restaurant operations, menu/recipe management, and F&B linked records.',
+    description: 'Restaurant operations, menu and recipe records, and F&B transactions.',
     tabs: [
       {
         key: 'overview',
@@ -140,7 +140,7 @@ const CONFIG = {
 
   inventory: {
     title: 'Inventory & Purchasing',
-    description: 'Inventory control and procurement workflow in one workspace.',
+    description: 'Inventory control, purchasing, receiving, and procurement records.',
     tabs: [
       {
         key: 'overview',
@@ -174,7 +174,7 @@ const CONFIG = {
 
   payroll: {
     title: 'People & Payroll',
-    description: 'Employee and payroll period workflow with attendance and approvals.',
+    description: 'Employee, attendance, payroll period, and approval records.',
     tabs: [
       {
         key: 'overview',
@@ -203,7 +203,7 @@ const CONFIG = {
 
   finance: {
     title: 'Finance & Accounting',
-    description: 'Cashflow operations plus accounting, reporting, assets, and BIR.',
+    description: 'Cash management, accounting, financial reporting, assets, and BIR records.',
     tabs: [
       {
         key: 'overview',
@@ -237,7 +237,7 @@ const CONFIG = {
 
   settings: {
     title: 'Settings',
-    description: 'Admin tools only: setup, users, permissions, and accounting configuration.',
+    description: 'System setup, users, permissions, and accounting configuration.',
     tabs: [
       {
         key: 'overview',

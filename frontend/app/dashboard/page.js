@@ -152,7 +152,7 @@ export default function DashboardPage() {
       name: 'Inventory & Procurement',
       status: 'Not verified',
       tone: 'info',
-      text: `${plain(summary?.low_stock_count || 0)} low-stock alert${Number(summary?.low_stock_count || 0) === 1 ? '' : 's'}. Inventory remains the source of truth for stock.`,
+      text: `${plain(summary?.low_stock_count || 0)} low-stock alert${Number(summary?.low_stock_count || 0) === 1 ? '' : 's'}. Stock quantities are maintained in Inventory & Procurement.`,
       href: '/inventory-items',
     },
     {
@@ -182,9 +182,9 @@ export default function DashboardPage() {
     <div className="dashboard-page dashboard-page--operational">
       <section className="dashboard-hero dashboard-hero--compact">
         <div>
-          <div className="dashboard-eyebrow">Today at Hidden Oasis</div>
+          <div className="dashboard-eyebrow">Operations summary</div>
           <h1>{timeGreeting()}, {firstName(user)}</h1>
-          <p>{financeView ? 'Review cash, outstanding balances, approvals, and period-close work.' : 'Review guest movements, folio balances, and daily cash close.'}</p>
+          <p>{financeView ? 'Cash balances, receivables, payables, approvals, and period-close status.' : 'Guest movements, folio balances, and daily cash-close status.'}</p>
           {!!error && <div className="notice danger" style={{ marginTop: 12 }}>{error}</div>}
         </div>
         <div className="dashboard-actions">
@@ -213,7 +213,7 @@ export default function DashboardPage() {
               <div className="dashboard-panel-head">
                 <div>
                   <h2>Today’s guest movement</h2>
-                  <p>Hospitality context for collections and settlement.</p>
+                  <p>Arrivals, departures, and in-house stays affecting collections and settlement.</p>
                 </div>
                 <Link href="/bookings/calendar" className="button-link secondary-link">Calendar</Link>
               </div>
