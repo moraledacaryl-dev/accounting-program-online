@@ -268,3 +268,27 @@ def test_posted_receiving_reversal_restores_stock_po_and_unpaid_bill():
     assert payable.status == 'cancelled'
     assert payable.balance_due == 0
     assert db.query(StockMovement).filter(StockMovement.reason == 'receiving_reversal').count() == 1
+
+
+def test_dedicated_pos_sale_can_record_financial_fact_without_mutating_accounting_inventory():
+    db = make_session()
+    item = MenuItem(name='External Stock Item', module_slug='restaurant', category='Meals', price=100, is_active=True)
+    db.add(item)
+    db.commit()
+    db.refresh(item)
+
+    sale = create_sale_order(db, SaleOrderCreate(
+        order_no='POS-NO-STOCK-001',
+        order_date='2026-10-13',
+        strict_inventory=False,
+        mutate_inventory=False,
+        auto_post_accounting=False,
+        external_source='dedicated_pos_cloud',
+        external_id='order-uuid-no-stock-001',
+        lines=[{'menu_item_id': item.id, 'quantity': 2, 'unit_price': 100, 'discount_amount': 0}],
+    ))
+
+    assert sale.net_amount == 200
+    assert sale.cogs_amount == 0
+    assert db.query(SaleOrder).count() == 1
+    assert db.query(StockMovement).count() == 0
