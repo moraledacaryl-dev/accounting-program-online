@@ -61,13 +61,13 @@
   display: block;
 }
 
-.auth-password-field input { padding-right: 52px; }
+.auth-password-field input { padding-right: 64px; }
 
 .auth-password-toggle {
   position: absolute;
   top: 4px;
   right: 4px;
-  width: 36px;
+  width: auto;
   height: 36px;
   min-height: 36px;
   display: grid;
@@ -83,14 +83,12 @@
 
 .auth-password-toggle:hover { background: transparent !important; color: var(--ho-text); }
 .auth-password-toggle:focus-visible { outline: 2px solid #183b32; outline-offset: 1px; }
-.auth-password-toggle svg {
-  width: 18px;
-  height: 18px;
-  fill: none;
-  stroke: currentColor;
-  stroke-width: 1.8;
-  stroke-linecap: round;
-  stroke-linejoin: round;
+.auth-password-toggle-label {
+  display: block;
+  padding: 0 8px;
+  font-size: 12px;
+  font-weight: 700;
+  line-height: 1;
 }
 
 .auth-submit {
