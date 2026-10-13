@@ -584,7 +584,7 @@ def list_financial_accounts(
     )
     tr_out = (
         db.query(AccountTransfer.from_account_id, func.sum(AccountTransfer.amount))
-        .filter(AccountTransfer.transfer_date == target_date)
+        .filter(AccountTransfer.transfer_date == target_date, _cash_ledger_effect_filter(AccountTransfer))
         .group_by(AccountTransfer.from_account_id)
         .all()
     )
