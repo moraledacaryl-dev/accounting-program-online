@@ -421,6 +421,8 @@ def recompute_all_financial_balances(db: Session):
 
     tx_rows = db.query(MoneyTransaction).order_by(MoneyTransaction.id.asc()).all()
     for row in tx_rows:
+        if not _has_cash_ledger_effect(row):
+            continue
         account_id = int(row.financial_account_id)
         if account_id not in balances:
             continue
@@ -431,6 +433,8 @@ def recompute_all_financial_balances(db: Session):
 
     transfer_rows = db.query(AccountTransfer).order_by(AccountTransfer.id.asc()).all()
     for row in transfer_rows:
+        if not _has_cash_ledger_effect(row):
+            continue
         amount = float(row.amount or 0)
         if row.from_account_id in balances:
             balances[row.from_account_id] -= amount
@@ -453,6 +457,8 @@ def _account_balances_as_of(db: Session, as_of_date: str | None = None) -> dict[
     if as_of_date:
         tx_q = tx_q.filter(MoneyTransaction.transaction_date <= as_of_date)
     for row in tx_q.all():
+        if not _has_cash_ledger_effect(row):
+            continue
         account_id = int(row.financial_account_id)
         if account_id not in balances:
             continue
@@ -465,6 +471,8 @@ def _account_balances_as_of(db: Session, as_of_date: str | None = None) -> dict[
     if as_of_date:
         tr_q = tr_q.filter(AccountTransfer.transfer_date <= as_of_date)
     for row in tr_q.all():
+        if not _has_cash_ledger_effect(row):
+            continue
         amount = float(row.amount or 0)
         if row.from_account_id in balances:
             balances[row.from_account_id] -= amount
@@ -558,19 +566,19 @@ def list_financial_accounts(
 
     tx_in = (
         db.query(MoneyTransaction.financial_account_id, func.sum(MoneyTransaction.amount))
-        .filter(MoneyTransaction.transaction_date == target_date, MoneyTransaction.direction == 'in')
+        .filter(MoneyTransaction.transaction_date == target_date, MoneyTransaction.direction == 'in', _cash_ledger_effect_filter(MoneyTransaction))
         .group_by(MoneyTransaction.financial_account_id)
         .all()
     )
     tx_out = (
         db.query(MoneyTransaction.financial_account_id, func.sum(MoneyTransaction.amount))
-        .filter(MoneyTransaction.transaction_date == target_date, MoneyTransaction.direction == 'out')
+        .filter(MoneyTransaction.transaction_date == target_date, MoneyTransaction.direction == 'out', _cash_ledger_effect_filter(MoneyTransaction))
         .group_by(MoneyTransaction.financial_account_id)
         .all()
     )
     tr_in = (
         db.query(AccountTransfer.to_account_id, func.sum(AccountTransfer.amount))
-        .filter(AccountTransfer.transfer_date == target_date)
+        .filter(AccountTransfer.transfer_date == target_date, _cash_ledger_effect_filter(AccountTransfer))
         .group_by(AccountTransfer.to_account_id)
         .all()
     )
