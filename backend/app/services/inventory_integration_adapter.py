@@ -16,6 +16,7 @@ POS_COGS_CATEGORY = 'Cost of goods sold'
 INVENTORY_WRITE_OFF_CATEGORY = 'Inventory write-offs'
 INVENTORY_ADJUSTMENT_LOSS_CATEGORY = 'Inventory adjustment loss'
 INVENTORY_ADJUSTMENT_GAIN_CATEGORY = 'Inventory adjustment gain'
+INVENTORY_OPENING_BALANCE_CATEGORY = 'Inventory opening balance'
 
 
 def _money(value) -> Decimal:
@@ -84,22 +85,46 @@ def _normalize_stock_adjustment(db: Session, payload: IntegrationReviewCreate, d
         lines = [line for line in lines if isinstance(line, dict) and str(line.get('reason') or '').startswith('transfer variance:')]
         if not lines:
             return payload
+    if document_type == 'adjustment':
+        ambiguous = [line for line in lines if isinstance(line, dict) and str(line.get('reason') or '').strip().lower() == 'other']
+        if ambiguous:
+            raise ValueError('Inventory adjustment reason "other" requires explicit accounting disposition before posting.')
+        opening_lines = [line for line in lines if isinstance(line, dict) and str(line.get('reason') or '').strip().lower() == 'opening_balance']
+        operating_lines = [line for line in lines if not (isinstance(line, dict) and str(line.get('reason') or '').strip().lower() == 'opening_balance')]
+    else:
+        opening_lines = []
+        operating_lines = lines
+
+    opening_value = sum(
+        ((_money(line.get('quantity')) * _money(line.get('unit_cost'))) for line in opening_lines
+         if _money(line.get('quantity')) > 0),
+        Decimal('0'),
+    ).quantize(Decimal('0.01'))
+    if any(_money(line.get('quantity')) < 0 for line in opening_lines):
+        raise ValueError('Inventory opening balance cannot reduce stock; use a correction or count variance reason.')
+
     losses = sum(
-        (abs(_money(line.get('quantity')) * _money(line.get('unit_cost'))) for line in lines
+        (abs(_money(line.get('quantity')) * _money(line.get('unit_cost'))) for line in operating_lines
          if isinstance(line, dict) and _money(line.get('quantity')) < 0),
         Decimal('0'),
     ).quantize(Decimal('0.01'))
     gains = sum(
-        ((_money(line.get('quantity')) * _money(line.get('unit_cost'))) for line in lines
+        ((_money(line.get('quantity')) * _money(line.get('unit_cost'))) for line in operating_lines
          if isinstance(line, dict) and _money(line.get('quantity')) > 0),
         Decimal('0'),
     ).quantize(Decimal('0.01'))
-    if losses <= 0 and gains <= 0:
+    if losses <= 0 and gains <= 0 and opening_value <= 0:
         raise ValueError('Inventory adjustment event must contain a non-zero costed stock value.')
 
     document_number = str(data.get('document_number') or '').strip()
     label = document_number or str(payload.source_entity_id or '')
     journal_lines = []
+    if opening_value > 0:
+        debit_account, credit_account = _posting_accounts(db, INVENTORY_OPENING_BALANCE_CATEGORY, 'in')
+        journal_lines.extend([
+            {'account_code': debit_account[0], 'account_name': debit_account[1], 'debit': float(opening_value), 'credit': 0, 'memo': f'{INVENTORY_OPENING_BALANCE_CATEGORY} {label}'},
+            {'account_code': credit_account[0], 'account_name': credit_account[1], 'debit': 0, 'credit': float(opening_value), 'memo': f'{INVENTORY_OPENING_BALANCE_CATEGORY} {label}'},
+        ])
     if losses > 0:
         category = INVENTORY_WRITE_OFF_CATEGORY if document_type in {'waste', 'damage', 'transfer_receipt'} else INVENTORY_ADJUSTMENT_LOSS_CATEGORY
         debit_account, credit_account = _posting_accounts(db, category, 'out')
@@ -116,7 +141,7 @@ def _normalize_stock_adjustment(db: Session, payload: IntegrationReviewCreate, d
 
     return payload.model_copy(update={
         'financial_effect': 'journal_only',
-        'amount': float((losses + gains).quantize(Decimal('0.01'))),
+        'amount': float((losses + gains + opening_value).quantize(Decimal('0.01'))),
         'proposed_journal': {'description': f'Inventory adjustment {label}', 'lines': journal_lines},
         'proposed_links': {
             **(payload.proposed_links or {}),
@@ -126,6 +151,7 @@ def _normalize_stock_adjustment(db: Session, payload: IntegrationReviewCreate, d
             'document_number': data.get('document_number'),
             'loss_value': float(losses),
             'gain_value': float(gains),
+            'opening_balance_value': float(opening_value),
         },
     })
 
