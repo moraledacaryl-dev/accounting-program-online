@@ -5,7 +5,9 @@ from sqlalchemy.orm import Session
 from app.models.entities import AccountMappingRule, ChartAccount
 
 
-REQUIRED_INVENTORY_POSTING_RULES = (
+REQUIRED_POSTING_RULES = (
+    {'key': 'pos_settlement', 'module_slug': 'pos', 'category': 'POS Settlement', 'direction': 'in'},
+    {'key': 'pos_refund', 'module_slug': 'pos', 'category': 'POS Refund', 'direction': 'out'},
     {
         'key': 'staff_meals',
         'module_slug': 'inventory',
@@ -75,7 +77,7 @@ def financial_configuration_status(db: Session) -> dict:
     accounts_by_code = {str(row.code or '').strip().upper(): row for row in active_accounts if row.code}
 
     rules: list[dict] = []
-    for requirement in REQUIRED_INVENTORY_POSTING_RULES:
+    for requirement in REQUIRED_POSTING_RULES:
         rule = _matching_rule(db, requirement)
         debit_code = str(rule.debit_account_code or '').strip().upper() if rule else ''
         credit_code = str(rule.credit_account_code or '').strip().upper() if rule else ''
@@ -96,6 +98,7 @@ def financial_configuration_status(db: Session) -> dict:
     return {
         'ready': bool(active_accounts) and not missing,
         'active_chart_account_count': len(active_accounts),
-        'required_inventory_posting_rules': rules,
+        'required_inventory_posting_rules': [row for row in rules if row['module_slug'] == 'inventory'],
+        'required_pos_posting_rules': [row for row in rules if row['module_slug'] == 'pos'],
         'missing_required_rules': missing,
     }

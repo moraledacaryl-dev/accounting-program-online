@@ -21,16 +21,19 @@ def add_accounts(db):
         ChartAccount(code='ADJLOSS', name='Inventory Adjustment Loss', account_type='expense', is_active=True),
         ChartAccount(code='ADJGAIN', name='Inventory Adjustment Gain', account_type='income', is_active=True),
         ChartAccount(code='OPEN', name='Opening Balance Equity', account_type='equity', is_active=True),
+        ChartAccount(code='CASH', name='Cash', account_type='asset', is_active=True),
+        ChartAccount(code='REV', name='Restaurant Revenue', account_type='income', is_active=True),
+        ChartAccount(code='REFUND', name='Restaurant Refunds', account_type='expense', is_active=True),
     ])
     db.commit()
 
 
-def add_rule(db, *, category, debit, credit, bucket=None):
+def add_rule(db, *, category, debit, credit, bucket=None, module_slug='inventory', direction='out'):
     db.add(AccountMappingRule(
-        module_slug='inventory',
+        module_slug=module_slug,
         category=category,
         bucket=bucket,
-        direction='out',
+        direction=direction,
         debit_account_code=debit,
         credit_account_code=credit,
         priority=10,
@@ -45,7 +48,7 @@ def test_empty_chart_is_not_financially_ready():
 
     assert status['ready'] is False
     assert status['active_chart_account_count'] == 0
-    assert status['missing_required_rules'] == ['staff_meals', 'pos_cogs', 'inventory_write_offs', 'inventory_adjustment_loss', 'inventory_adjustment_gain', 'inventory_opening_balance']
+    assert status['missing_required_rules'] == ['pos_settlement', 'pos_refund', 'staff_meals', 'pos_cogs', 'inventory_write_offs', 'inventory_adjustment_loss', 'inventory_adjustment_gain', 'inventory_opening_balance']
 
 
 def test_required_inventory_rules_with_active_accounts_are_ready():
@@ -55,14 +58,15 @@ def test_required_inventory_rules_with_active_accounts_are_ready():
     add_rule(db, category='Cost of Goods Sold', debit='COGS', credit='INV')
     add_rule(db, category='Inventory write-offs', debit='WRITEOFF', credit='INV')
     add_rule(db, category='Inventory adjustment loss', debit='ADJLOSS', credit='INV')
-    db.add(AccountMappingRule(module_slug='inventory', category='Inventory adjustment gain', direction='in', debit_account_code='INV', credit_account_code='ADJGAIN', priority=10, is_active=True)); db.add(AccountMappingRule(module_slug='inventory', category='Inventory opening balance', direction='in', debit_account_code='INV', credit_account_code='OPEN', priority=10, is_active=True)); db.commit()
+    add_rule(db, module_slug='pos', category='POS Settlement', direction='in', debit='CASH', credit='REV'); add_rule(db, module_slug='pos', category='POS Refund', direction='out', debit='REFUND', credit='CASH'); db.add(AccountMappingRule(module_slug='inventory', category='Inventory adjustment gain', direction='in', debit_account_code='INV', credit_account_code='ADJGAIN', priority=10, is_active=True)); db.add(AccountMappingRule(module_slug='inventory', category='Inventory opening balance', direction='in', debit_account_code='INV', credit_account_code='OPEN', priority=10, is_active=True)); db.commit()
 
     status = financial_configuration_status(db)
 
     assert status['ready'] is True
-    assert status['active_chart_account_count'] == 7
+    assert status['active_chart_account_count'] == 10
     assert status['missing_required_rules'] == []
     assert all(row['configured'] for row in status['required_inventory_posting_rules'])
+    assert all(row['configured'] for row in status['required_pos_posting_rules'])
 
 
 def test_rule_referencing_inactive_account_is_not_ready():
@@ -77,7 +81,7 @@ def test_rule_referencing_inactive_account_is_not_ready():
     status = financial_configuration_status(db)
 
     assert status['ready'] is False
-    assert status['missing_required_rules'] == ['staff_meals', 'pos_cogs', 'inventory_write_offs', 'inventory_adjustment_loss', 'inventory_adjustment_gain', 'inventory_opening_balance']
+    assert status['missing_required_rules'] == ['pos_settlement', 'pos_refund', 'staff_meals', 'pos_cogs', 'inventory_write_offs', 'inventory_adjustment_loss', 'inventory_adjustment_gain', 'inventory_opening_balance']
     assert all(row['credit_account_active'] is False for row in status['required_inventory_posting_rules'])
 
 
@@ -90,6 +94,6 @@ def test_more_specific_rule_does_not_mask_missing_integration_rule():
     status = financial_configuration_status(db)
 
     assert status['ready'] is False
-    assert status['missing_required_rules'] == ['staff_meals', 'inventory_write_offs', 'inventory_adjustment_loss', 'inventory_adjustment_gain', 'inventory_opening_balance']
+    assert status['missing_required_rules'] == ['pos_settlement', 'pos_refund', 'staff_meals', 'inventory_write_offs', 'inventory_adjustment_loss', 'inventory_adjustment_gain', 'inventory_opening_balance']
     meals = next(row for row in status['required_inventory_posting_rules'] if row['key'] == 'staff_meals')
     assert meals['mapping_id'] is None
