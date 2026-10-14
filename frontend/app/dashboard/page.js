@@ -63,7 +63,7 @@ function RevenueBars({ rows = [] }) {
   const recent = rows.slice(-6);
   const max = Math.max(...recent.map((row) => Number(row.room_revenue || 0)), 1);
   return (
-    <div className="revenue-bars" aria-label="Room revenue for the last six months">
+    <div className="revenue-bars" role="img" aria-label="Room revenue for the last six months">
       {recent.map((row) => (
         <div className="revenue-bar-column" key={row.key}>
           <div className="revenue-bar-value">{currency(row.room_revenue)}</div>
