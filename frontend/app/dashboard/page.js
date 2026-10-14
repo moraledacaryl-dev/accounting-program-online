@@ -17,6 +17,64 @@ function plain(value) {
   return String(value);
 }
 
+function percent(value) {
+  return `${Number(value || 0).toLocaleString('en-PH', { maximumFractionDigits: 1 })}%`;
+}
+
+function delta(current, previous, kind = 'number') {
+  const change = Number(current || 0) - Number(previous || 0);
+  if (!Number.isFinite(change) || Math.abs(change) < 0.05) return 'No change vs last month';
+  const sign = change > 0 ? '+' : '';
+  if (kind === 'percent') return `${sign}${change.toFixed(1)} pp vs last month`;
+  if (kind === 'currency') return `${sign}${currency(change)} vs last month`;
+  return `${sign}${change.toFixed(1)} vs last month`;
+}
+
+function TrendChart({ rows = [] }) {
+  const width = 720;
+  const height = 220;
+  const pad = 24;
+  const values = rows.map((row) => Number(row.occupancy_rate || 0));
+  const max = Math.max(100, ...values, 1);
+  const points = values.map((value, index) => {
+    const x = pad + (index * (width - pad * 2)) / Math.max(1, values.length - 1);
+    const y = height - pad - (value / max) * (height - pad * 2);
+    return `${x},${y}`;
+  }).join(' ');
+  return (
+    <div className="hotel-trend-chart">
+      <svg viewBox={`0 0 ${width} ${height}`} role="img" aria-label="Monthly occupancy trend">
+        {[0, 25, 50, 75, 100].map((tick) => {
+          const y = height - pad - (tick / max) * (height - pad * 2);
+          return <g key={tick}><line x1={pad} x2={width - pad} y1={y} y2={y} className="chart-grid" /><text x="2" y={y + 4} className="chart-axis">{tick}%</text></g>;
+        })}
+        <polyline points={points} className="chart-line" />
+        {values.map((value, index) => {
+          const [x, y] = points.split(' ')[index].split(',');
+          return <circle key={rows[index]?.key || index} cx={x} cy={y} r="4" className="chart-dot"><title>{rows[index]?.label}: {percent(value)}</title></circle>;
+        })}
+      </svg>
+      <div className="hotel-trend-labels">{rows.map((row, index) => <span key={row.key}>{index % 2 === 0 || index === rows.length - 1 ? String(row.label || '').split(' ')[0] : ''}</span>)}</div>
+    </div>
+  );
+}
+
+function RevenueBars({ rows = [] }) {
+  const recent = rows.slice(-6);
+  const max = Math.max(...recent.map((row) => Number(row.room_revenue || 0)), 1);
+  return (
+    <div className="revenue-bars" aria-label="Room revenue for the last six months">
+      {recent.map((row) => (
+        <div className="revenue-bar-column" key={row.key}>
+          <div className="revenue-bar-value">{currency(row.room_revenue)}</div>
+          <div className="revenue-bar-track"><div className="revenue-bar-fill" style={{ height: `${Math.max(4, Number(row.room_revenue || 0) / max * 100)}%` }} /></div>
+          <span>{String(row.label || '').split(' ')[0]}</span>
+        </div>
+      ))}
+    </div>
+  );
+}
+
 function firstName(user) {
   const raw = String(user?.full_name || user?.username || 'User').trim();
   return raw.split(/\s+/)[0] || 'User';
@@ -82,6 +140,11 @@ export default function DashboardPage() {
   const beds24 = commandCenter.beds24_sync || {};
   const pendingReview = Number(summary?.pending_by_workflow?.integration_review ?? summary?.pending_review ?? 0);
   const openFolioAlerts = commandCenter.open_folio_alerts || [];
+  const hotel = summary?.hotel_performance || {};
+  const hotelMonth = hotel.current_month || {};
+  const previousHotelMonth = hotel.previous_month || {};
+  const hotelTrend = hotel.monthly_trend || [];
+  const roomUtilization = hotel.room_utilization || [];
 
   const primaryMetrics = financeView ? [
     { label: 'Cash and bank', value: currency(Number(summary?.cash_on_hand || 0) + Number(summary?.bank_balance || 0), 2), note: 'Current cash and bank balances', href: '/cashflow' },
@@ -206,6 +269,42 @@ export default function DashboardPage() {
                 <div className="dashboard-metric-note">{metric.note}</div>
               </Link>
             ))}
+          </section>
+
+          <section className="hotel-performance-section">
+            <div className="dashboard-section-heading">
+              <div><div className="dashboard-eyebrow">Hotel performance</div><h2>{hotel.period_label || 'Current month'}</h2></div>
+              <Link href="/bookings/calendar" className="button-link secondary-link">Booking calendar</Link>
+            </div>
+            <div className="hotel-kpis">
+              <article><span>Occupancy MTD</span><strong>{percent(hotelMonth.occupancy_rate)}</strong><small>{delta(hotelMonth.occupancy_rate, previousHotelMonth.occupancy_rate, 'percent')}</small></article>
+              <article><span>Room revenue</span><strong>{currency(hotelMonth.room_revenue)}</strong><small>{delta(hotelMonth.room_revenue, previousHotelMonth.room_revenue, 'currency')}</small></article>
+              <article><span>ADR</span><strong>{currency(hotelMonth.adr)}</strong><small>Average daily rate</small></article>
+              <article><span>RevPAR</span><strong>{currency(hotelMonth.revpar)}</strong><small>Revenue per available room</small></article>
+              <article><span>Room nights</span><strong>{plain(hotelMonth.room_nights)} <em>/ {plain(hotelMonth.available_room_nights)}</em></strong><small>Occupied / available</small></article>
+            </div>
+            <div className="hotel-visual-grid">
+              <article className="dashboard-panel hotel-chart-panel">
+                <div className="dashboard-panel-head"><div><h2>Occupancy trend</h2><p>Monthly occupied room nights as a share of available room nights.</p></div><span className="chart-current">{percent(hotelMonth.occupancy_rate)}</span></div>
+                <TrendChart rows={hotelTrend} />
+              </article>
+              <article className="dashboard-panel hotel-chart-panel">
+                <div className="dashboard-panel-head"><div><h2>Room revenue</h2><p>Allocated across occupied stay nights.</p></div></div>
+                <RevenueBars rows={hotelTrend} />
+              </article>
+            </div>
+            {!!roomUtilization.length && <article className="dashboard-panel room-performance-panel">
+              <div className="dashboard-panel-head"><div><h2>Room utilization</h2><p>Current-month occupied nights and allocated booking value by room.</p></div></div>
+              <div className="room-utilization-list">
+                {roomUtilization.slice(0, 10).map((row) => <div className="room-utilization-row" key={row.room}>
+                  <strong>{row.room}</strong>
+                  <div className="utilization-track"><span style={{ width: `${Math.min(100, Number(row.utilization_rate || 0))}%` }} /></div>
+                  <b>{percent(row.utilization_rate)}</b>
+                  <span>{plain(row.room_nights)} nights</span>
+                  <span>{currency(row.room_revenue)}</span>
+                </div>)}
+              </div>
+            </article>}
           </section>
 
           <section className={financeView ? "dashboard-main-grid dashboard-main-grid--finance" : "dashboard-main-grid"}>
