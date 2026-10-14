@@ -13,6 +13,7 @@ from app.schemas.integration_review import IntegrationReviewCreate, IntegrationR
 from app.services.audit_service import record_audit
 from app.services.bir_service import ensure_date_unlocked
 from app.services.cashflow_service import create_money_transaction, create_receivable
+from app.services.account_mapping_service import resolve_record_accounts
 from app.services.payable_adjustment_service import apply_purchase_return_adjustment
 
 ALLOWED_EFFECTS = {
@@ -548,6 +549,48 @@ def accept_item(db: Session, item_id: int, decision: IntegrationReviewDecision, 
             username=username,
         )
         row.accepted_transaction_id = tx['id']
+        if row.source_app == 'pos' and (links.get('category') in {'POS Settlement', 'POS Refund'}):
+            mapping_record = SimpleNamespace(
+                module_slug='pos',
+                category=links.get('category'),
+                bucket=None,
+                item=None,
+                direction='in' if effect in {'cash_in', 'settlement'} else 'out',
+                payment_method=None,
+            )
+            debit_account, credit_account = resolve_record_accounts(db, mapping_record, None, None)
+            if not debit_account or not credit_account:
+                raise ValueError(
+                    f"Accounting posting rule required for module pos, category {links.get('category')}, "
+                    f"direction {mapping_record.direction}."
+                )
+            entry = JournalEntry(
+                entry_date=transaction_date,
+                reference_no=f"POS-CASH-{row.id}",
+                description=decision.notes or f"Accepted {links.get('category')} from {source}",
+                source_module='pos',
+                status='posted',
+                posted_by=username,
+            )
+            db.add(entry)
+            db.flush()
+            db.add(JournalLine(
+                journal_entry_id=entry.id,
+                account_code=debit_account[0],
+                account_name=debit_account[1],
+                debit=actual_amount,
+                credit=0,
+                memo=links.get('category'),
+            ))
+            db.add(JournalLine(
+                journal_entry_id=entry.id,
+                account_code=credit_account[0],
+                account_name=credit_account[1],
+                debit=0,
+                credit=actual_amount,
+                memo=links.get('category'),
+            ))
+            row.accepted_journal_entry_id = entry.id
         if decision.actual_amount_paid is not None:
             row.validation_json = json.dumps({
                 **validation,
