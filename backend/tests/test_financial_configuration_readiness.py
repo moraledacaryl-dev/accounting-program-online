@@ -81,7 +81,7 @@ def test_rule_referencing_inactive_account_is_not_ready():
     status = financial_configuration_status(db)
 
     assert status['ready'] is False
-    assert status['missing_required_rules'] == ['staff_meals', 'pos_cogs', 'inventory_write_offs', 'inventory_adjustment_loss', 'inventory_adjustment_gain', 'inventory_opening_balance']
+    assert status['missing_required_rules'] == ['pos_settlement', 'pos_refund', 'staff_meals', 'pos_cogs', 'inventory_write_offs', 'inventory_adjustment_loss', 'inventory_adjustment_gain', 'inventory_opening_balance']
     assert all(row['credit_account_active'] is False for row in status['required_inventory_posting_rules'])
 
 
@@ -94,6 +94,6 @@ def test_more_specific_rule_does_not_mask_missing_integration_rule():
     status = financial_configuration_status(db)
 
     assert status['ready'] is False
-    assert status['missing_required_rules'] == ['staff_meals', 'inventory_write_offs', 'inventory_adjustment_loss', 'inventory_adjustment_gain', 'inventory_opening_balance']
+    assert status['missing_required_rules'] == ['pos_settlement', 'pos_refund', 'staff_meals', 'inventory_write_offs', 'inventory_adjustment_loss', 'inventory_adjustment_gain', 'inventory_opening_balance']
     meals = next(row for row in status['required_inventory_posting_rules'] if row['key'] == 'staff_meals')
     assert meals['mapping_id'] is None
