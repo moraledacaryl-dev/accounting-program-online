@@ -547,6 +547,7 @@ def accept_item(db: Session, item_id: int, decision: IntegrationReviewDecision, 
                 status='posted',
             ),
             username=username,
+            commit=False,
         )
         row.accepted_transaction_id = tx['id']
         if row.source_app == 'pos' and (links.get('category') in {'POS Settlement', 'POS Refund'}):
