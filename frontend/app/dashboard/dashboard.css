@@ -416,3 +416,60 @@
 @media (min-width: 1000px) {
   .dashboard-main-grid--finance { grid-template-columns: minmax(320px, 1fr) minmax(0, 1.5fr); }
 }
+
+
+/* Hotel performance intelligence */
+.hotel-performance-section { display: grid; gap: 14px; }
+.dashboard-section-heading { display: flex; align-items: flex-end; justify-content: space-between; gap: 16px; padding: 5px 2px 0; }
+.dashboard-section-heading h2 { margin: 4px 0 0; font-size: 22px; letter-spacing: -.025em; }
+.hotel-kpis { display: grid; grid-template-columns: 1.05fr 1.35fr 1fr 1fr 1.2fr; border: 1px solid var(--line); border-radius: 15px; overflow: hidden; background: var(--surface); box-shadow: 0 8px 22px rgba(20,42,34,.035); }
+.hotel-kpis article { min-width: 0; padding: 16px 17px; border-right: 1px solid var(--line); }
+.hotel-kpis article:last-child { border-right: 0; }
+.hotel-kpis span, .hotel-kpis small { display: block; color: var(--muted); }
+.hotel-kpis span { font-size: 11px; font-weight: 650; }
+.hotel-kpis strong { display: block; margin: 5px 0 3px; color: #17251e; font-size: clamp(22px,2vw,29px); letter-spacing: -.035em; font-variant-numeric: tabular-nums; }
+.hotel-kpis strong em { color: #89928d; font-size: .58em; font-style: normal; font-weight: 600; }
+.hotel-kpis small { font-size: 10.5px; line-height: 1.35; }
+.hotel-visual-grid { display: grid; grid-template-columns: minmax(0,1.55fr) minmax(330px,.8fr); gap: 14px; }
+.hotel-chart-panel { min-height: 310px; }
+.chart-current { font-size: 23px; font-weight: 780; color: #1d5d40; font-variant-numeric: tabular-nums; }
+.hotel-trend-chart svg { display: block; width: 100%; height: 210px; overflow: visible; }
+.chart-grid { stroke: #e9ede9; stroke-width: 1; }
+.chart-axis { fill: #8b938e; font-size: 10px; }
+.chart-line { fill: none; stroke: #246747; stroke-width: 3; stroke-linecap: round; stroke-linejoin: round; }
+.chart-dot { fill: #fff; stroke: #246747; stroke-width: 3; }
+.hotel-trend-labels { display: grid; grid-template-columns: repeat(13,1fr); padding: 0 7px 0 25px; color: #8b938e; font-size: 9px; text-align: center; }
+.revenue-bars { height: 224px; display: grid; grid-template-columns: repeat(6,minmax(0,1fr)); gap: 9px; align-items: end; padding-top: 10px; }
+.revenue-bar-column { min-width: 0; height: 100%; display: grid; grid-template-rows: 22px 1fr 18px; gap: 5px; text-align: center; }
+.revenue-bar-value { overflow: hidden; color: #68736c; font-size: 9px; text-overflow: ellipsis; white-space: nowrap; }
+.revenue-bar-track { position: relative; height: 100%; border-radius: 6px 6px 2px 2px; background: #f0f3f0; overflow: hidden; }
+.revenue-bar-fill { position: absolute; inset: auto 0 0; border-radius: 6px 6px 2px 2px; background: linear-gradient(180deg,#4c8b69,#246747); }
+.revenue-bar-column > span { color: #7c857f; font-size: 9px; }
+.room-performance-panel { padding-bottom: 12px; }
+.room-utilization-list { display: grid; gap: 2px; }
+.room-utilization-row { display: grid; grid-template-columns: minmax(110px,1fr) minmax(180px,3fr) 55px 70px 100px; gap: 12px; align-items: center; min-height: 34px; padding: 5px 0; border-top: 1px solid #f0f2f0; font-size: 11px; }
+.room-utilization-row strong { font-size: 11.5px; }
+.room-utilization-row b { text-align: right; color: #245f43; font-variant-numeric: tabular-nums; }
+.room-utilization-row > span { color: var(--muted); text-align: right; font-variant-numeric: tabular-nums; }
+.utilization-track { height: 8px; overflow: hidden; border-radius: 99px; background: #edf1ee; }
+.utilization-track span { display: block; height: 100%; border-radius: inherit; background: #397858; }
+
+@media (max-width: 1200px) {
+  .hotel-kpis { grid-template-columns: repeat(3,minmax(0,1fr)); }
+  .hotel-kpis article { border-bottom: 1px solid var(--line); }
+  .hotel-visual-grid { grid-template-columns: 1fr; }
+}
+@media (max-width: 700px) {
+  .dashboard-section-heading { align-items: flex-start; flex-direction: column; }
+  .hotel-kpis { grid-template-columns: repeat(2,minmax(0,1fr)); }
+  .hotel-kpis article { padding: 13px; }
+  .hotel-kpis strong { font-size: 22px; }
+  .hotel-chart-panel { min-height: 280px; overflow: hidden; }
+  .hotel-trend-chart svg { height: 190px; }
+  .hotel-trend-labels { grid-template-columns: repeat(13,32px); overflow: hidden; }
+  .revenue-bars { gap: 5px; }
+  .revenue-bar-value { display: none; }
+  .room-utilization-row { grid-template-columns: minmax(90px,1fr) 70px 48px; gap: 8px; }
+  .room-utilization-row .utilization-track { grid-column: 1 / -1; grid-row: 2; }
+  .room-utilization-row > span:nth-last-child(2) { display: none; }
+}
