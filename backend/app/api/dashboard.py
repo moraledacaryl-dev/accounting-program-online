@@ -147,6 +147,9 @@ def _parse_stay_date(value):
 
 def _hotel_performance(db: Session, today: date, active_room_count: int) -> dict:
     """Operational hotel KPIs. Gross booking value is allocated evenly across stay nights."""
+    today = _parse_stay_date(today)
+    if today is None:
+        return {'period_label': '', 'current_month': {}, 'previous_month': None, 'monthly_trend': [], 'room_utilization': []}
     month_start = today.replace(day=1)
     next_month = (month_start.replace(day=28) + timedelta(days=4)).replace(day=1)
     history_start = (month_start - timedelta(days=365)).replace(day=1)
