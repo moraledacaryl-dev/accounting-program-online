@@ -185,7 +185,6 @@ def _hotel_performance(db: Session, today: date, active_room_count: int) -> dict
     # Physical room identity, not the display name, determines room-night uniqueness.
     # Display names are not unique; track each physical room separately.
     occupied_nights = set()
-    room_names_by_id = {room.id: room.name for room in rooms}
     active_room_ids = set(room_names_by_id)
     for booking in bookings:
         check_in = _parse_stay_date(booking.check_in)
