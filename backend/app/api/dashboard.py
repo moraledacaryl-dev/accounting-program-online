@@ -182,6 +182,10 @@ def _hotel_performance(db: Session, today: date, active_room_count: int) -> dict
         cursor = nxt
 
     current_by_room = {room.name: {'room': room.name, 'room_nights': 0, 'room_revenue': 0.0} for room in rooms if room.name}
+    # Physical room identity, not the display name, determines room-night uniqueness.
+    # Keep unassigned bookings distinct until their room can be reconciled.
+    occupied_nights = set()
+    room_names_by_id = {room.id: room.name for room in rooms}
     for booking in bookings:
         check_in = _parse_stay_date(booking.check_in)
         check_out = _parse_stay_date(booking.check_out)
@@ -189,21 +193,27 @@ def _hotel_performance(db: Session, today: date, active_room_count: int) -> dict
             continue
         stay_nights = (check_out - check_in).days
         nightly_revenue = float(booking.gross_amount or 0) / stay_nights if stay_nights else 0.0
+        room_id = booking.room_id
+        room_name = room_names_by_id.get(room_id) or booking.room_name or (booking.room.name if booking.room else '') or 'Unassigned'
+        # A booking without a physical room cannot establish occupancy.
+        # Preserve its estimated booking value separately only after a room is assigned.
+        if room_id is None:
+            continue
         for bucket in months:
             overlap_start = max(check_in, bucket['start'])
             overlap_end = min(check_out, bucket['end'])
-            nights = max(0, (overlap_end - overlap_start).days)
-            if nights:
-                bucket['room_nights'] += nights
-                bucket['room_revenue'] += nightly_revenue * nights
-        overlap_start = max(check_in, month_start)
-        overlap_end = min(check_out, next_month)
-        nights = max(0, (overlap_end - overlap_start).days)
-        if nights:
-            room_name = booking.room_name or (booking.room.name if booking.room else '') or 'Unassigned'
-            row = current_by_room.setdefault(room_name, {'room': room_name, 'room_nights': 0, 'room_revenue': 0.0})
-            row['room_nights'] += nights
-            row['room_revenue'] += nightly_revenue * nights
+            for offset in range(max(0, (overlap_end - overlap_start).days)):
+                night = overlap_start + timedelta(days=offset)
+                identity = (room_id, night)
+                if identity in occupied_nights:
+                    continue
+                occupied_nights.add(identity)
+                bucket['room_nights'] += 1
+                bucket['room_revenue'] += nightly_revenue
+                if month_start <= night < next_month:
+                    row = current_by_room.setdefault(room_name, {'room': room_name, 'room_nights': 0, 'room_revenue': 0.0})
+                    row['room_nights'] += 1
+                    row['room_revenue'] += nightly_revenue
 
     for bucket in months:
         available = active_room_count * (bucket['end'] - bucket['start']).days
