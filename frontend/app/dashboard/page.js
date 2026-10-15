@@ -145,6 +145,7 @@ export default function DashboardPage() {
   const previousHotelMonth = hotel.previous_month || {};
   const hotelTrend = hotel.monthly_trend || [];
   const roomUtilization = hotel.room_utilization || [];
+  const hasHotelInventory = Boolean(hotel.has_inventory);
 
   const primaryMetrics = financeView ? [
     { label: 'Cash and bank', value: currency(Number(summary?.cash_on_hand || 0) + Number(summary?.bank_balance || 0), 2), note: 'Current cash and bank balances', href: '/cashflow' },
@@ -277,20 +278,20 @@ export default function DashboardPage() {
               <Link href="/bookings/calendar" className="button-link secondary-link">Booking calendar</Link>
             </div>
             <div className="hotel-kpis">
-              <article><span>Occupancy MTD</span><strong>{percent(hotelMonth.occupancy_rate)}</strong><small>{delta(hotelMonth.occupancy_rate, previousHotelMonth.occupancy_rate, 'percent')}</small></article>
-              <article><span>Room revenue</span><strong>{currency(hotelMonth.room_revenue)}</strong><small>{delta(hotelMonth.room_revenue, previousHotelMonth.room_revenue, 'currency')}</small></article>
-              <article><span>ADR</span><strong>{currency(hotelMonth.adr)}</strong><small>Average daily rate</small></article>
-              <article><span>RevPAR</span><strong>{currency(hotelMonth.revpar)}</strong><small>Revenue per available room</small></article>
-              <article><span>Room nights</span><strong>{plain(hotelMonth.room_nights)} <em>/ {plain(hotelMonth.available_room_nights)}</em></strong><small>Occupied / available</small></article>
+              <article><span>Occupancy MTD</span><strong>{hasHotelInventory ? percent(hotelMonth.occupancy_rate) : '—'}</strong><small>{hasHotelInventory ? delta(hotelMonth.occupancy_rate, previousHotelMonth.occupancy_rate, 'percent') : 'No active room inventory'}</small></article>
+              <article><span>Estimated booking value</span><strong>{hasHotelInventory ? currency(hotelMonth.room_revenue) : '—'}</strong><small>Estimated gross booking value</small></article>
+              <article><span>ADR</span><strong>—</strong><small>Requires verified room-only revenue</small></article>
+              <article><span>RevPAR</span><strong>—</strong><small>Requires verified room-only revenue</small></article>
+              <article><span>Room nights</span><strong>{hasHotelInventory ? plain(hotelMonth.room_nights) : '—'} <em>/ {hasHotelInventory ? plain(hotelMonth.available_room_nights) : '—'}</em></strong><small>Occupied / available</small></article>
             </div>
             <div className="hotel-visual-grid">
               <article className="dashboard-panel hotel-chart-panel">
-                <div className="dashboard-panel-head"><div><h2>Occupancy trend</h2><p>Monthly occupied room nights as a share of available room nights.</p></div><span className="chart-current">{percent(hotelMonth.occupancy_rate)}</span></div>
-                <TrendChart rows={hotelTrend} />
+                <div className="dashboard-panel-head"><div><h2>Occupancy trend</h2><p>Monthly occupied room nights as a share of available room nights.</p></div><span className="chart-current">{hasHotelInventory ? percent(hotelMonth.occupancy_rate) : '—'}</span></div>
+                {hasHotelInventory ? <TrendChart rows={hotelTrend} /> : <p className="hotel-empty-state">Configure active rooms to calculate occupancy trends.</p>}
               </article>
               <article className="dashboard-panel hotel-chart-panel">
-                <div className="dashboard-panel-head"><div><h2>Room revenue</h2><p>Allocated across occupied stay nights.</p></div></div>
-                <RevenueBars rows={hotelTrend} />
+                <div className="dashboard-panel-head"><div><h2>Estimated booking value</h2><p>Gross booking value allocated across stay nights; may include extras.</p></div></div>
+                {hasHotelInventory && hotelTrend.some((row) => Number(row.room_revenue || 0) > 0) ? <RevenueBars rows={hotelTrend} /> : <p className="hotel-empty-state">No booking value available for this period.</p>}
               </article>
             </div>
             {!!roomUtilization.length && <article className="dashboard-panel room-performance-panel">
