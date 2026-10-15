@@ -153,6 +153,7 @@ def _hotel_performance(db: Session, today: date, active_room_count: int) -> dict
     month_start = today.replace(day=1)
     next_month = (month_start.replace(day=28) + timedelta(days=4)).replace(day=1)
     history_start = (month_start - timedelta(days=365)).replace(day=1)
+    rooms = db.query(Room).filter(Room.is_active.is_(True)).all()
     bookings = (
         db.query(Booking)
         .filter(
@@ -180,7 +181,7 @@ def _hotel_performance(db: Session, today: date, active_room_count: int) -> dict
         })
         cursor = nxt
 
-    current_by_room = {}
+    current_by_room = {room.name: {'room': room.name, 'room_nights': 0, 'room_revenue': 0.0} for room in rooms if room.name}
     for booking in bookings:
         check_in = _parse_stay_date(booking.check_in)
         check_out = _parse_stay_date(booking.check_out)
