@@ -475,3 +475,8 @@
 }
 
 .hotel-empty-state { display: flex; min-height: 155px; align-items: center; justify-content: center; padding: 20px; border: 1px dashed #dce4dd; border-radius: 10px; color: #596c60; text-align: center; font-size: 13px; line-height: 1.5; }
+
+@media (max-width: 700px) {
+  .dashboard-page .dashboard-guest-tabs, .dashboard-page .dashboard-movement-tabs { max-width: 100%; overflow-x: auto; scrollbar-width: thin; }
+  .dashboard-page .dashboard-guest-tabs > *, .dashboard-page .dashboard-movement-tabs > * { flex-shrink: 0; }
+}
