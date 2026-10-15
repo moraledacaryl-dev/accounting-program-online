@@ -1,3 +1,5 @@
+from datetime import date, timedelta
+
 from fastapi import APIRouter, Depends
 from sqlalchemy import and_, func, or_
 from sqlalchemy.orm import Session, selectinload
@@ -134,6 +136,108 @@ def _line_work_item(line: BookingFolioLine) -> dict:
     }
 
 
+def _parse_stay_date(value):
+    if not value:
+        return None
+    try:
+        return date.fromisoformat(str(value)[:10])
+    except (TypeError, ValueError):
+        return None
+
+
+def _hotel_performance(db: Session, today: date, active_room_count: int) -> dict:
+    """Operational hotel KPIs. Gross booking value is allocated evenly across stay nights."""
+    today = _parse_stay_date(today)
+    if today is None:
+        return {'period_label': '', 'current_month': {}, 'previous_month': None, 'monthly_trend': [], 'room_utilization': []}
+    month_start = today.replace(day=1)
+    next_month = (month_start.replace(day=28) + timedelta(days=4)).replace(day=1)
+    history_start = (month_start - timedelta(days=365)).replace(day=1)
+    rooms = db.query(Room).filter(Room.is_active.is_(True)).all()
+    bookings = (
+        db.query(Booking)
+        .filter(
+            ordinary_stay_condition(),
+            Booking.check_in.isnot(None),
+            Booking.check_out.isnot(None),
+        )
+        .all()
+    )
+
+    def month_key(day):
+        return f'{day.year:04d}-{day.month:02d}'
+
+    months = []
+    cursor = history_start
+    while cursor <= month_start:
+        nxt = (cursor.replace(day=28) + timedelta(days=4)).replace(day=1)
+        months.append({
+            'key': month_key(cursor),
+            'label': cursor.strftime('%b %Y'),
+            'start': cursor,
+            'end': nxt,
+            'room_nights': 0,
+            'room_revenue': 0.0,
+        })
+        cursor = nxt
+
+    current_by_room = {room.name: {'room': room.name, 'room_nights': 0, 'room_revenue': 0.0} for room in rooms if room.name}
+    for booking in bookings:
+        check_in = _parse_stay_date(booking.check_in)
+        check_out = _parse_stay_date(booking.check_out)
+        if not check_in or not check_out or check_out <= check_in:
+            continue
+        stay_nights = (check_out - check_in).days
+        nightly_revenue = float(booking.gross_amount or 0) / stay_nights if stay_nights else 0.0
+        for bucket in months:
+            overlap_start = max(check_in, bucket['start'])
+            overlap_end = min(check_out, bucket['end'])
+            nights = max(0, (overlap_end - overlap_start).days)
+            if nights:
+                bucket['room_nights'] += nights
+                bucket['room_revenue'] += nightly_revenue * nights
+        overlap_start = max(check_in, month_start)
+        overlap_end = min(check_out, next_month)
+        nights = max(0, (overlap_end - overlap_start).days)
+        if nights:
+            room_name = booking.room_name or (booking.room.name if booking.room else '') or 'Unassigned'
+            row = current_by_room.setdefault(room_name, {'room': room_name, 'room_nights': 0, 'room_revenue': 0.0})
+            row['room_nights'] += nights
+            row['room_revenue'] += nightly_revenue * nights
+
+    for bucket in months:
+        available = active_room_count * (bucket['end'] - bucket['start']).days
+        bucket['available_room_nights'] = available
+        bucket['occupancy_rate'] = round(bucket['room_nights'] / available * 100, 1) if available else 0.0
+        bucket['adr'] = round(bucket['room_revenue'] / bucket['room_nights'], 2) if bucket['room_nights'] else 0.0
+        bucket['revpar'] = round(bucket['room_revenue'] / available, 2) if available else 0.0
+        bucket['room_revenue'] = round(bucket['room_revenue'], 2)
+        for key in ('start', 'end'):
+            bucket.pop(key, None)
+
+    current = months[-1] if months else {
+        'room_nights': 0, 'available_room_nights': 0, 'occupancy_rate': 0.0,
+        'room_revenue': 0.0, 'adr': 0.0, 'revpar': 0.0,
+    }
+    days_in_month = (next_month - month_start).days
+    room_rows = []
+    for row in current_by_room.values():
+        row['utilization_rate'] = round(row['room_nights'] / days_in_month * 100, 1) if days_in_month else 0.0
+        row['room_revenue'] = round(row['room_revenue'], 2)
+        room_rows.append(row)
+    room_rows.sort(key=lambda row: (row['utilization_rate'], row['room_revenue']), reverse=True)
+
+    previous = months[-2] if len(months) > 1 else None
+    return {
+        'period_label': month_start.strftime('%B %Y'),
+        'current_month': current,
+        'previous_month': previous,
+        'monthly_trend': months,
+        'room_utilization': room_rows,
+        'methodology': 'Operational booking value allocated evenly across occupied stay nights; active rooms define available room nights.',
+    }
+
+
 @router.get('/summary')
 def summary(db: Session = Depends(get_db), user=Depends(require_permissions('dashboard.view'))):
     today = business_today()
@@ -186,6 +290,7 @@ def summary(db: Session = Depends(get_db), user=Depends(require_permissions('das
 
     room_count_total = int(db.query(Room).filter(Room.is_active == True).count() or 0)
     occupancy_rate = round((float(in_house) / float(room_count_total) * 100.0), 2) if room_count_total else 0.0
+    hotel_performance = _hotel_performance(db, today, room_count_total)
 
     room_revenue_today = _to_currency(
         db.query(func.coalesce(func.sum(Booking.gross_amount), 0))
@@ -477,6 +582,7 @@ def summary(db: Session = Depends(get_db), user=Depends(require_permissions('das
         'pending_by_workflow': pending_by_workflow,
         'in_house_guests': in_house,
         'occupancy_rate': occupancy_rate,
+        'hotel_performance': hotel_performance,
         'room_count_total': room_count_total,
         'room_revenue_today': room_revenue_today,
         'revenue_today': revenue_today,
