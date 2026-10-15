@@ -186,6 +186,7 @@ def _hotel_performance(db: Session, today: date, active_room_count: int) -> dict
     # Keep unassigned bookings distinct until their room can be reconciled.
     occupied_nights = set()
     room_names_by_id = {room.id: room.name for room in rooms}
+    active_room_ids = set(room_names_by_id)
     for booking in bookings:
         check_in = _parse_stay_date(booking.check_in)
         check_out = _parse_stay_date(booking.check_out)
@@ -196,8 +197,8 @@ def _hotel_performance(db: Session, today: date, active_room_count: int) -> dict
         room_id = booking.room_id
         room_name = room_names_by_id.get(room_id) or booking.room_name or (booking.room.name if booking.room else '') or 'Unassigned'
         # A booking without a physical room cannot establish occupancy.
-        # Preserve its estimated booking value separately only after a room is assigned.
-        if room_id is None:
+        # Inactive or unknown rooms also cannot contribute to current sellable capacity.
+        if room_id not in active_room_ids:
             continue
         for bucket in months:
             overlap_start = max(check_in, bucket['start'])
