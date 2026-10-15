@@ -181,9 +181,9 @@ def _hotel_performance(db: Session, today: date, active_room_count: int) -> dict
         })
         cursor = nxt
 
-    current_by_room = {room.name: {'room': room.name, 'room_nights': 0, 'room_revenue': 0.0} for room in rooms if room.name}
+    current_by_room = {room.id: {'room': room.name or room.room_no or f'Room {room.id}', 'room_nights': 0, 'room_revenue': 0.0} for room in rooms}
     # Physical room identity, not the display name, determines room-night uniqueness.
-    # Keep unassigned bookings distinct until their room can be reconciled.
+    # Display names are not unique; track each physical room separately.
     occupied_nights = set()
     room_names_by_id = {room.id: room.name for room in rooms}
     active_room_ids = set(room_names_by_id)
@@ -195,7 +195,6 @@ def _hotel_performance(db: Session, today: date, active_room_count: int) -> dict
         stay_nights = (check_out - check_in).days
         nightly_revenue = float(booking.gross_amount or 0) / stay_nights if stay_nights else 0.0
         room_id = booking.room_id
-        room_name = room_names_by_id.get(room_id) or booking.room_name or (booking.room.name if booking.room else '') or 'Unassigned'
         # A booking without a physical room cannot establish occupancy.
         # Inactive or unknown rooms also cannot contribute to current sellable capacity.
         if room_id not in active_room_ids:
@@ -212,7 +211,7 @@ def _hotel_performance(db: Session, today: date, active_room_count: int) -> dict
                 bucket['room_nights'] += 1
                 bucket['room_revenue'] += nightly_revenue
                 if month_start <= night < next_month:
-                    row = current_by_room.setdefault(room_name, {'room': room_name, 'room_nights': 0, 'room_revenue': 0.0})
+                    row = current_by_room[room_id]
                     row['room_nights'] += 1
                     row['room_revenue'] += nightly_revenue
 
