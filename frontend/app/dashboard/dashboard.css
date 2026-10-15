@@ -485,3 +485,8 @@
  .dashboard-page .movement-tabs { display: flex; max-width: 100%; min-width: 0; overflow-x: auto; overscroll-behavior-x: contain; scrollbar-width: thin; }
  .dashboard-page .movement-tab { flex: 0 0 auto; white-space: nowrap; }
 }
+
+@media (max-width: 700px) {
+ .dashboard-page .movement-tabs { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 4px; overflow: visible; width: 100%; }
+ .dashboard-page .movement-tab { min-width: 0; padding: 8px 3px; font-size: 11px; white-space: nowrap; }
+}
