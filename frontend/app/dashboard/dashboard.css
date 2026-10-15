@@ -480,3 +480,8 @@
   .dashboard-page .dashboard-guest-tabs, .dashboard-page .dashboard-movement-tabs { max-width: 100%; overflow-x: auto; scrollbar-width: thin; }
   .dashboard-page .dashboard-guest-tabs > *, .dashboard-page .dashboard-movement-tabs > * { flex-shrink: 0; }
 }
+
+@media (max-width: 700px) {
+ .dashboard-page .movement-tabs { display: flex; max-width: 100%; min-width: 0; overflow-x: auto; overscroll-behavior-x: contain; scrollbar-width: thin; }
+ .dashboard-page .movement-tab { flex: 0 0 auto; white-space: nowrap; }
+}
