@@ -298,7 +298,7 @@ def summary(db: Session = Depends(get_db), user=Depends(require_permissions('das
     no_show_bookings = int(db.query(Booking).filter(Booking.status.in_(['no_show', 'noshow'])).count() or 0)
 
     room_count_total = int(db.query(Room).filter(Room.is_active == True).count() or 0)
-    # Report inventory counts alongside booking-link coverage for production diagnosis.
+    # Report room inventory and booking-link coverage for production diagnosis.
     room_inventory_diagnostics = {
         'total_rooms': int(db.query(Room).count() or 0),
         'active_rooms': room_count_total,
