@@ -145,8 +145,7 @@ export default function DashboardPage() {
   const previousHotelMonth = hotel.previous_month || {};
   const hotelTrend = hotel.monthly_trend || [];
   const roomUtilization = hotel.room_utilization || [];
-  // The summary API reports room inventory at the top level; older hotel payloads
-  // do not include a has_inventory flag. Use actual available capacity instead.
+  // Determine hotel inventory from available room-night capacity, not an absent API flag.
   const hasHotelInventory = Number(hotelMonth.available_room_nights || 0) > 0;
 
   const primaryMetrics = financeView ? [
