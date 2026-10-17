@@ -145,7 +145,9 @@ export default function DashboardPage() {
   const previousHotelMonth = hotel.previous_month || {};
   const hotelTrend = hotel.monthly_trend || [];
   const roomUtilization = hotel.room_utilization || [];
-  const hasHotelInventory = Boolean(hotel.has_inventory);
+  // The summary API reports room inventory at the top level; older hotel payloads
+  // do not include a has_inventory flag. Use actual available capacity instead.
+  const hasHotelInventory = Number(hotelMonth.available_room_nights || 0) > 0;
 
   const primaryMetrics = financeView ? [
     { label: 'Cash and bank', value: currency(Number(summary?.cash_on_hand || 0) + Number(summary?.bank_balance || 0), 2), note: 'Current cash and bank balances', href: '/cashflow' },
