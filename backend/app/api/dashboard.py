@@ -298,6 +298,14 @@ def summary(db: Session = Depends(get_db), user=Depends(require_permissions('das
     no_show_bookings = int(db.query(Booking).filter(Booking.status.in_(['no_show', 'noshow'])).count() or 0)
 
     room_count_total = int(db.query(Room).filter(Room.is_active == True).count() or 0)
+    # Expose non-sensitive inventory diagnostics so a zero-capacity dashboard can be
+    # distinguished from missing room records or unlinked imported bookings.
+    room_inventory_diagnostics = {
+        'total_rooms': int(db.query(Room).count() or 0),
+        'active_rooms': room_count_total,
+        'bookings_with_room_id': int(db.query(Booking).filter(Booking.room_id.isnot(None)).count() or 0),
+        'bookings_without_room_id': int(db.query(Booking).filter(Booking.room_id.is_(None)).count() or 0),
+    }
     occupancy_rate = round((float(in_house) / float(room_count_total) * 100.0), 2) if room_count_total else 0.0
     hotel_performance = _hotel_performance(db, today, room_count_total)
 
@@ -593,6 +601,7 @@ def summary(db: Session = Depends(get_db), user=Depends(require_permissions('das
         'occupancy_rate': occupancy_rate,
         'hotel_performance': hotel_performance,
         'room_count_total': room_count_total,
+        'room_inventory_diagnostics': room_inventory_diagnostics,
         'room_revenue_today': room_revenue_today,
         'revenue_today': revenue_today,
         'cash_in_today': cash_in_today,
