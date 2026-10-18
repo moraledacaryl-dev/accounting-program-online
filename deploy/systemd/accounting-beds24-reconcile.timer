@@ -1,0 +1,11 @@
+[Unit]
+Description=Check Beds24 for missed booking cancellations twice hourly
+
+[Timer]
+OnCalendar=*-*-* *:00,30:00
+RandomizedDelaySec=45s
+Persistent=true
+Unit=accounting-beds24-reconcile.service
+
+[Install]
+WantedBy=timers.target
