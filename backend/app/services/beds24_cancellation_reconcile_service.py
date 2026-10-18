@@ -74,6 +74,7 @@ def reconcile_beds24_cancellations(
     start = _previous_watermark(db, end)
     counters = {'fetched': 0, 'cancelled': 0, 'unchanged': 0, 'not_linked': 0, 'pages': 0}
     failed_ids: list[str] = []
+    seen_ids: set[str] = set()
 
     try:
         for page in range(1, max_pages + 1):
@@ -92,6 +93,9 @@ def reconcile_beds24_cancellations(
                 if not bid:
                     failed_ids.append('<missing-id>')
                     continue
+                if bid in seen_ids:
+                    continue
+                seen_ids.add(bid)
                 try:
                     result = apply_beds24_cancellation(db, item, source_type='reconciliation')
                     db.commit()
@@ -109,7 +113,10 @@ def reconcile_beds24_cancellations(
 
             # Beds24 V2 explicitly advertises the next page. Never guess by
             # list length or reuse arrival-date filters when checking changes.
-            next_link = payload.get('nextPageLink') if isinstance(payload, dict) else None
+            pages = payload.get('pages') if isinstance(payload, dict) else None
+            next_link = pages.get('nextPageLink') if isinstance(pages, dict) else None
+            if isinstance(pages, dict) and pages.get('nextPageExists') and not next_link:
+                raise RuntimeError('Beds24 reports another page without a usable nextPageLink')
             if not next_link:
                 break
         else:
