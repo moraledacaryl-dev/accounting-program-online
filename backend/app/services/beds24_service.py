@@ -353,6 +353,8 @@ def fetch_beds24_bookings(
     filter_value: str | None = None,
     limit: int | None = None,
     offset: int | None = None,
+    page: int | None = None,
+    modified_from: str | None = None,
     arrival_from: str | None = None,
     arrival_to: str | None = None,
     property_id: str | None = None,
@@ -376,6 +378,10 @@ def fetch_beds24_bookings(
         params['limit'] = int(limit)
     if offset and int(offset) > 0:
         params['offset'] = int(offset)
+    if page is not None:
+        params['page'] = max(1, int(page))
+    if modified_from:
+        params['modifiedFrom'] = _normalize_str(modified_from)
     if arrival_from:
         params['arrivalFrom'] = _normalize_str(arrival_from)
     if arrival_to:
