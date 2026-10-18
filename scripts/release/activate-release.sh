@@ -58,6 +58,8 @@ fi
 install -o root -g root -m 0644 "$RELEASE/deploy/systemd/accounting-backend.service" /etc/systemd/system/accounting-backend.service
 install -o root -g root -m 0644 "$RELEASE/deploy/systemd/accounting-frontend.service" /etc/systemd/system/accounting-frontend.service
 install -o root -g root -m 0644 "$RELEASE/deploy/systemd/accounting-operations-outbox.service" /etc/systemd/system/accounting-operations-outbox.service
+install -o root -g root -m 0644 "$RELEASE/deploy/systemd/accounting-beds24-reconcile.service" /etc/systemd/system/accounting-beds24-reconcile.service
+install -o root -g root -m 0644 "$RELEASE/deploy/systemd/accounting-beds24-reconcile.timer" /etc/systemd/system/accounting-beds24-reconcile.timer
 systemctl daemon-reload
 
 ln -sfn "$RELEASE" "${CURRENT_LINK}.new"
@@ -68,10 +70,13 @@ test "$(readlink -f "$CURRENT_LINK")" = "$RELEASE"
 systemctl restart accounting-backend
 systemctl restart accounting-operations-outbox
 systemctl restart accounting-frontend
+systemctl enable --now accounting-beds24-reconcile.timer
 
 for service in accounting-backend accounting-operations-outbox accounting-frontend; do
   test "$(systemctl is-active "$service")" = active
 done
+
+test "$(systemctl is-active accounting-beds24-reconcile.timer)" = active
 
 for _ in $(seq 1 30); do
   curl -fsS http://127.0.0.1:8000/healthz >/dev/null 2>&1 && curl -fsSI http://127.0.0.1:3000 >/dev/null 2>&1 && break
