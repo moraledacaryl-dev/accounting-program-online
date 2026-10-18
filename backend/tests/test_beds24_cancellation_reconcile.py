@@ -19,16 +19,16 @@ def test_reconciliation_scans_modified_bookings_without_arrival_filter_and_only_
     payload_two = [
         {'id': 3, 'status': 'canceled', 'arrival': '2026-07-01'},
     ]
-    with patch(f'{MODULE}.load_beds24_settings', return_value=SETTINGS), \\
-         patch(f'{MODULE}._previous_watermark', return_value=NOW), \\
+    with patch(f'{MODULE}.load_beds24_settings', return_value=SETTINGS), \
+         patch(f'{MODULE}._previous_watermark', return_value=NOW), \
          patch(f'{MODULE}.fetch_beds24_bookings', side_effect=[
              (payload_one, {'nextPageLink': '/bookings?page=2'}, SETTINGS),
              (payload_two, {'data': payload_two}, SETTINGS),
-         ]) as fetch, \\
+         ]) as fetch, \
          patch(f'{MODULE}.apply_beds24_cancellation', side_effect=[
              {'action': 'cancelled'}, {'action': 'not_linked'},
-         ]) as cancel, \\
-         patch(f'{MODULE}._save_watermark') as save, \\
+         ]) as cancel, \
+         patch(f'{MODULE}._save_watermark') as save, \
          patch(f'{MODULE}._upsert_sync_log'):
         result = reconcile_beds24_cancellations(db, now=NOW)
 
@@ -53,13 +53,13 @@ def test_reconciliation_scans_modified_bookings_without_arrival_filter_and_only_
 
 def test_reconciliation_wont_move_cursor_after_cancel_error():
     db = MagicMock()
-    with patch(f'{MODULE}.load_beds24_settings', return_value=SETTINGS), \\
-         patch(f'{MODULE}._previous_watermark', return_value=NOW), \\
+    with patch(f'{MODULE}.load_beds24_settings', return_value=SETTINGS), \
+         patch(f'{MODULE}._previous_watermark', return_value=NOW), \
          patch(f'{MODULE}.fetch_beds24_bookings', return_value=(
              [{'id': 10, 'status': 'cancelled'}], {}, SETTINGS,
-         )), \\
-         patch(f'{MODULE}.apply_beds24_cancellation', side_effect=ValueError('mapping conflict')), \\
-         patch(f'{MODULE}._save_watermark') as save, \\
+         )), \
+         patch(f'{MODULE}.apply_beds24_cancellation', side_effect=ValueError('mapping conflict')), \
+         patch(f'{MODULE}._save_watermark') as save, \
          patch(f'{MODULE}._upsert_sync_log') as log:
         with pytest.raises(RuntimeError, match='need review'):
             reconcile_beds24_cancellations(db, now=NOW)
@@ -70,10 +70,10 @@ def test_reconciliation_wont_move_cursor_after_cancel_error():
 
 def test_reconciliation_wont_move_cursor_if_page_limit_hit():
     db = MagicMock()
-    with patch(f'{MODULE}.load_beds24_settings', return_value=SETTINGS), \\
-         patch(f'{MODULE}._previous_watermark', return_value=NOW), \\
-         patch(f'{MODULE}.fetch_beds24_bookings', return_value=([], {'nextPageLink': 'more'}, SETTINGS)), \\
-         patch(f'{MODULE}._save_watermark') as save, \\
+    with patch(f'{MODULE}.load_beds24_settings', return_value=SETTINGS), \
+         patch(f'{MODULE}._previous_watermark', return_value=NOW), \
+         patch(f'{MODULE}.fetch_beds24_bookings', return_value=([], {'nextPageLink': 'more'}, SETTINGS)), \
+         patch(f'{MODULE}._save_watermark') as save, \
          patch(f'{MODULE}._upsert_sync_log'):
         with pytest.raises(RuntimeError, match='exceeded'):
             reconcile_beds24_cancellations(db, now=NOW, max_pages=2)
@@ -82,7 +82,7 @@ def test_reconciliation_wont_move_cursor_if_page_limit_hit():
 
 def test_reconciliation_respects_manual_sync_only_setting():
     db = MagicMock()
-    with patch(f'{MODULE}.load_beds24_settings', return_value={'enabled': True, 'manual_sync_only': True}), \\
+    with patch(f'{MODULE}.load_beds24_settings', return_value={'enabled': True, 'manual_sync_only': True}), \
          patch(f'{MODULE}.fetch_beds24_bookings') as fetch:
         result = reconcile_beds24_cancellations(db, now=NOW)
     assert result['skipped'] is True
