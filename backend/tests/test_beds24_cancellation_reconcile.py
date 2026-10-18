@@ -22,7 +22,7 @@ def test_reconciliation_scans_modified_bookings_without_arrival_filter_and_only_
     with patch(f'{MODULE}.load_beds24_settings', return_value=SETTINGS), \
          patch(f'{MODULE}._previous_watermark', return_value=NOW), \
          patch(f'{MODULE}.fetch_beds24_bookings', side_effect=[
-             (payload_one, {'nextPageLink': '/bookings?page=2'}, SETTINGS),
+             (payload_one, {'pages': {'nextPageLink': '/bookings?page=2'}}, SETTINGS),
              (payload_two, {'data': payload_two}, SETTINGS),
          ]) as fetch, \
          patch(f'{MODULE}.apply_beds24_cancellation', side_effect=[
@@ -72,7 +72,7 @@ def test_reconciliation_wont_move_cursor_if_page_limit_hit():
     db = MagicMock()
     with patch(f'{MODULE}.load_beds24_settings', return_value=SETTINGS), \
          patch(f'{MODULE}._previous_watermark', return_value=NOW), \
-         patch(f'{MODULE}.fetch_beds24_bookings', return_value=([], {'nextPageLink': 'more'}, SETTINGS)), \
+         patch(f'{MODULE}.fetch_beds24_bookings', return_value=([], {'pages': {'nextPageLink': 'more'}}, SETTINGS)), \
          patch(f'{MODULE}._save_watermark') as save, \
          patch(f'{MODULE}._upsert_sync_log'):
         with pytest.raises(RuntimeError, match='exceeded'):
