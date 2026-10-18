@@ -80,6 +80,20 @@ def test_reconciliation_wont_move_cursor_if_page_limit_hit():
     save.assert_not_called()
 
 
+def test_reconciliation_does_not_advance_after_incomplete_page_metadata():
+    db = MagicMock()
+    with patch(f'{MODULE}.load_beds24_settings', return_value=SETTINGS), \\
+         patch(f'{MODULE}._previous_watermark', return_value=NOW), \\
+         patch(f'{MODULE}.fetch_beds24_bookings', return_value=(
+             [], {'pages': {'nextPageExists': True}}, SETTINGS,
+         )), \\
+         patch(f'{MODULE}._save_watermark') as save, \\
+         patch(f'{MODULE}._upsert_sync_log'):
+        with pytest.raises(RuntimeError, match='without a usable nextPageLink'):
+            reconcile_beds24_cancellations(db, now=NOW)
+    save.assert_not_called()
+
+
 def test_reconciliation_respects_manual_sync_only_setting():
     db = MagicMock()
     with patch(f'{MODULE}.load_beds24_settings', return_value={'enabled': True, 'manual_sync_only': True}), \
