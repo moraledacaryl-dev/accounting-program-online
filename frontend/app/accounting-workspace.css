@@ -1,0 +1,81 @@
+/* Shared Accounting workspace surfaces. */
+:root { --sidebar-width:256px; --workspace-ink:#24362f; --workspace-muted:#617169; --workspace-line:#e0e6df; }
+body,.shell-content { background:#f5f6f2; color:var(--workspace-ink); }
+.sidebar { background:#fbfcf9; border-color:var(--workspace-line); padding:22px 14px 14px; }
+.sidebar .brand { padding:0 0 20px; border:0; }
+.sidebar .brand-badge { background:#284c3b; border-radius:14px 14px 5px 14px; }
+.sidebar .brand-copy h2 { font-size:16px; letter-spacing:-.4px; }
+.sidebar .sidebar-filter { background:#f0f3ed; border:1px solid transparent; margin:0 0 22px; }
+.sidebar .sidebar-eyebrow { font-size:10px; letter-spacing:.12em; margin-bottom:10px; }
+.sidebar .nav-group-toggle { min-height:46px; padding:10px; }
+.sidebar .nav-group-heading strong { font-size:12px; font-weight:600; }
+.sidebar .nav-group-items { border-left:0; padding-left:0; margin:3px 0 12px; }
+.sidebar .nav-group-items a { padding:10px 12px; min-height:40px; border:0; border-radius:9px; font-size:12px; gap:10px; }
+.sidebar .nav-group-items .nav-symbol { display:inline-flex; }
+.sidebar .nav-group-items a.active { background:#e6eddf; color:#284b35; box-shadow:none; border:0; font-weight:650; }
+
+.sidebar .sidebar-user { background:#f0f3ed; border:0; border-radius:12px; padding:12px; }
+.topbar { background:#f5f6f2; border-bottom:1px solid var(--workspace-line); box-shadow:none; min-height:72px; }
+.topbar .topbar-title { font-size:14px; font-weight:600; }.topbar-copy { display:flex; align-items:center; flex-wrap:wrap; gap:5px 12px; }.topbar-subtitle { flex-basis:100%; }
+.topbar-search { background:#fff; border-color:var(--workspace-line); border-radius:10px; }
+.main { padding:30px 34px 48px; max-width:1600px; margin-inline:auto; }
+.main h1 { letter-spacing:-1px; font-size:30px; font-weight:600; }.main h2 { letter-spacing:-.4px; font-size:17px; font-weight:600; }
+.main :is(.section,.card,.dashboard-panel,.metric-card) { border-color:var(--workspace-line); box-shadow:none; border-radius:16px; }
+.main .section { padding:24px; }.main :is(.page-header,.section-title-row) { margin-bottom:22px; }
+.main :is(button,.button-link) { border-radius:9px; font-size:12px; font-weight:600; box-shadow:none; }
+.main :is(input,select,textarea) { border-color:#cbd5cb; border-radius:9px; box-shadow:none; }
+.main :is(.table,table) { border-color:var(--workspace-line); }
+.main :is(.table,table) th { background:#f7f8f4; color:#657168; font-size:10px; letter-spacing:.07em; text-transform:uppercase; padding:14px 16px; border-bottom:1px solid var(--workspace-line); }
+.main :is(.table,table) td { padding:16px; border-bottom:1px solid #edf0e9; font-size:12px; line-height:1.5; }
+.main :is(.table,table) tbody tr:hover { background:#f9fbf6; }
+.main .metric-card { padding:22px; background:#fff; }.main .metric-card:nth-child(1) { background:#e9efdf; }
+.main .metric-card :is(.metric-value,strong) { letter-spacing:-.8px; }
+.main .cash-account-card { min-height:150px; padding:22px; text-align:left; border:1px solid #d7dfcf; background:#eef2e8; border-radius:14px; color:#274b35; }
+.main .cash-account-card:nth-child(2n) { background:#f1eee5; border-color:#e1dccb; color:#66542e; }
+.main .cash-account-card:nth-child(3n) { background:#eaf0ef; border-color:#d4e1de; color:#315b5a; }
+.main .cash-account-card strong { font-size:26px; letter-spacing:-1px; margin-block:15px; }.main .cash-account-card small { text-transform:capitalize; color:inherit; }
+.sidebar .nav-group:not(.connected-apps) .nav-group-items::before { content:none; }
+.sidebar .nav-group:not(.connected-apps) .nav-group-items a { padding-left:12px; }
+.sidebar .nav-group:not(.connected-apps) .nav-group-items .nav-symbol { display:inline-flex; }
+.main .cash-workspace .cash-account-card { background:#eef2e8!important; color:#274b35!important; border:1px solid #d7dfcf!important; }
+.main .cash-workspace .cash-account-card:nth-child(2n) { background:#f1eee5!important; color:#66542e!important; border-color:#e1dccb!important; }
+.main .cash-workspace .cash-account-card:nth-child(3n) { background:#eaf0ef!important; color:#315b5a!important; border-color:#d4e1de!important; }
+.main .cash-workspace .cash-account-card :is(span,strong,small) { color:inherit!important; }
+/* Preserve every original dashboard metric, chart, section, and action. */
+.main .dashboard-page { gap:26px; }
+.main .dashboard-hero { padding:4px 0 8px; background:transparent; border:0; box-shadow:none; }
+.main .dashboard-hero h1 { font-size:34px; font-weight:600; letter-spacing:-1.1px; }
+.main .dashboard-hero p { font-size:12px; color:#617169; }
+.main .dashboard-eyebrow { color:#617169; font-size:10px; letter-spacing:.12em; }
+.main .dashboard-metrics { gap:14px; border:0; background:transparent; box-shadow:none; overflow:visible; }
+.main .dashboard-metric { padding:22px; background:#edf1e6; border:1px solid #dce4d3; border-radius:16px; }
+.main .dashboard-metric:nth-child(2) { background:#edf2ef; border-color:#dce5df; }
+.main .dashboard-metric:nth-child(3) { background:#f4eee2; border-color:#e8dfcd; }
+.main .dashboard-metric:nth-child(4) { background:#eeedf2; border-color:#e0dde7; }
+.main .dashboard-metric-value { margin:16px 0 12px; font-weight:550; font-size:28px; color:#24362f; }
+.main .dashboard-metric-note { color:#5d6b62; }
+.main .hotel-performance-section { gap:18px; }
+.main .dashboard-section-heading { padding:3px 0; }
+.main .dashboard-section-heading h2 { margin-top:7px; font-size:23px; }
+.main .hotel-kpis { gap:12px; background:transparent; border:0; box-shadow:none; overflow:visible; }
+.main .hotel-kpis article { padding:22px 18px; border:1px solid #e0e6df; border-radius:15px; background:#fff; }
+.main .hotel-kpis article:first-child { background:#e5edd9; border-color:#d5e2c6; }
+.main .hotel-kpis article:nth-child(2) { background:#f2ebdc; border-color:#e7dcc5; }
+.main .hotel-kpis strong { margin:18px 0 12px; font-weight:550; color:#24362f; }
+.main .hotel-kpis small { color:#5d6b62; }
+.main .hotel-visual-grid { gap:20px; grid-template-columns:1.25fr 1fr; }
+.main .dashboard-panel { padding:24px; border-radius:18px; }
+.main .hotel-chart-panel { min-height:320px; }
+.main .chart-line { stroke:#65894c; stroke-width:3; }
+.main .chart-dot { fill:#65894c; stroke:#fff; stroke-width:2; }
+.main .chart-grid { stroke:#e5eade; stroke-dasharray:4 5; }
+.main .chart-axis,.main .hotel-trend-labels { fill:#5d6b62; color:#5d6b62; }
+.main .revenue-bar-fill { background:#b4c69b; border-radius:7px 7px 2px 2px; }
+.main .revenue-bar-track { background:#f4f6ef; border-radius:7px; }
+.main .utilization-track { height:10px; background:#edf1e6; border-radius:5px; }
+.main .utilization-track span { background:#a4bb87; border-radius:5px; }
+.main .room-utilization-row { padding-block:15px; }
+.main .dashboard-integrations { gap:14px; }
+.main .integration-card { background:#f8faf5; border:1px solid #e0e6df; border-radius:12px; padding:18px; }
+@media(max-width:1200px) { .main { padding:24px; }.main .dashboard-metric { padding:18px; }.main .dashboard-metric-value { font-size:24px; } }
+@media(max-width:760px) { .main { padding:20px 16px; }.main .dashboard-page { gap:20px; }.main .dashboard-metrics { grid-template-columns:repeat(2,minmax(0,1fr)); gap:12px; }.main .dashboard-metric { padding:17px; }.main .dashboard-metric-value { font-size:22px; }.main .hotel-visual-grid { grid-template-columns:1fr; }.main .dashboard-panel { padding:20px; }.main .hotel-kpis { grid-template-columns:repeat(2,minmax(0,1fr)); }.main .hotel-kpis article { padding:18px 14px; }.main .dashboard-hero h1 { font-size:28px; } }
