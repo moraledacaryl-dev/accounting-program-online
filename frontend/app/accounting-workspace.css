@@ -10,7 +10,7 @@ body,.shell-content { background:#f5f6f2; color:var(--workspace-ink); }
 .sidebar .nav-group-toggle { min-height:46px; padding:10px; }
 .sidebar .nav-group-heading strong { font-size:12px; font-weight:600; }
 .sidebar .nav-group-items { border-left:0; padding-left:0; margin:3px 0 12px; }
-.sidebar .nav-group-items a { padding:10px 12px; min-height:40px; border:0; border-radius:9px; font-size:12px; gap:10px; }
+.sidebar .nav-group-items a { padding:10px 9px; min-height:40px; border:0; border-radius:9px; font-size:12px; gap:6px; }
 .sidebar .nav-group-items .nav-symbol { display:inline-flex; }
 .sidebar .nav-group-items a.active { background:#e6eddf; color:#284b35; box-shadow:none; border:0; font-weight:650; }
 
@@ -35,7 +35,7 @@ body,.shell-content { background:#f5f6f2; color:var(--workspace-ink); }
 .main .cash-account-card:nth-child(3n) { background:#eaf0ef; border-color:#d4e1de; color:#315b5a; }
 .main .cash-account-card strong { font-size:26px; letter-spacing:-1px; margin-block:15px; }.main .cash-account-card small { text-transform:capitalize; color:inherit; }
 .sidebar .nav-group:not(.connected-apps) .nav-group-items::before { content:none; }
-.sidebar .nav-group:not(.connected-apps) .nav-group-items a { padding-left:12px; }
+.sidebar .nav-group:not(.connected-apps) .nav-group-items a { padding-left:9px; }
 .sidebar .nav-group:not(.connected-apps) .nav-group-items .nav-symbol { display:inline-flex; }
 .main .cash-workspace .cash-account-card { background:#eef2e8!important; color:#274b35!important; border:1px solid #d7dfcf!important; }
 .main .cash-workspace .cash-account-card:nth-child(2n) { background:#f1eee5!important; color:#66542e!important; border-color:#e1dccb!important; }
@@ -79,3 +79,8 @@ body,.shell-content { background:#f5f6f2; color:var(--workspace-ink); }
 .main .integration-card { background:#f8faf5; border:1px solid #e0e6df; border-radius:12px; padding:18px; }
 @media(max-width:1200px) { .main { padding:24px; }.main .dashboard-metric { padding:18px; }.main .dashboard-metric-value { font-size:24px; } }
 @media(max-width:760px) { .main { padding:20px 16px; }.main .dashboard-page { gap:20px; }.main .dashboard-metrics { grid-template-columns:repeat(2,minmax(0,1fr)); gap:12px; }.main .dashboard-metric { padding:17px; }.main .dashboard-metric-value { font-size:22px; }.main .hotel-visual-grid { grid-template-columns:1fr; }.main .dashboard-panel { padding:20px; }.main .hotel-kpis { grid-template-columns:repeat(2,minmax(0,1fr)); }.main .hotel-kpis article { padding:18px 14px; }.main .dashboard-hero h1 { font-size:28px; } }
+
+/* Keep labels readable on the softer surfaces and navigation compact. */
+.sidebar .nav-group-items .nav-symbol { flex:0 0 16px; width:16px; height:16px; }
+.sidebar .nav-group-items .nav-symbol svg { width:16px; height:16px; }
+.topbar .topbar-subtitle,.main .dashboard-metric-label,.main .hotel-kpis article > span { color:#5d6b62; }
