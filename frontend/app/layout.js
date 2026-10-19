@@ -58,6 +58,7 @@ import './pass-70-final-ux-wcag.css';
 import './sidebar.css';
 import './shell-controls.css';
 import './event-calendar-mobile.css';
+import './accounting-workspace.css';
 import ConfirmActionProvider from '../components/ConfirmActionProvider';
 import InputActionProvider from '../components/InputActionProvider';
 import LegacyBrowserCredentialPurge from '../components/LegacyBrowserCredentialPurge';

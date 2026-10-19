@@ -129,7 +129,7 @@ export default function Sidebar() {
   }, [pathname]);
 
   useEffect(() => {
-    document.documentElement.style.setProperty('--sidebar-width', desktopCollapsed ? '76px' : '304px');
+    document.documentElement.style.setProperty('--sidebar-width', desktopCollapsed ? '76px' : '256px');
     try {
       window.localStorage.setItem(SIDEBAR_KEY, desktopCollapsed ? '1' : '0');
     } catch {
