@@ -1,8 +1,6 @@
 """Read-only, resumable Beds24 booking status audit. Run where Accounting DB is accessible."""
 import argparse
 import csv
-import os
-import re
 import time
 from collections import Counter
 from pathlib import Path
@@ -79,6 +77,9 @@ def run(output: Path, delay: float, max_requests: int):
                                 continue
                             classification, remote_status = "API_ERROR", ""
                             print(f"API error for {bid}: {type(exc).__name__} (HTTP {exc.status_code})", flush=True)
+                            if exc.status_code == 429:
+                                print("Stopping batch: Beds24 rate limit persists after retries.", flush=True)
+                                return 3
                             break
                         except Exception as exc:
                             db.rollback()
