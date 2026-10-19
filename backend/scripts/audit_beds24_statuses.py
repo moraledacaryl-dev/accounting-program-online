@@ -7,7 +7,7 @@ from pathlib import Path
 
 from sqlalchemy import text
 from app.db.database import SessionLocal
-from app.services.beds24_service import Beds24ApiError, fetch_beds24_bookings
+from app.services.beds24_service import Beds24ApiError, fetch_beds24_bookings, load_beds24_settings, _api_get
 
 FIELDS = ["beds24_booking_id", "accounting_booking_id", "accounting_status", "beds24_status", "classification"]
 CANCELLED = {"cancelled", "canceled"}
@@ -34,6 +34,13 @@ def run(output: Path, delay: float, max_requests: int):
                 for row in csv.DictReader(file):
                     if row["classification"] != "API_ERROR":
                         completed[row["beds24_booking_id"]] = row
+        settings = load_beds24_settings(db)
+        if not settings.get("enabled"):
+            raise RuntimeError("Beds24 integration disabled")
+        token = str(settings.get("access_token") or "").strip()
+        if not token:
+            raise RuntimeError("Audit requires an existing access token; refresh is intentionally disabled")
+        base_url = str(settings.get("api_base_url") or "https://beds24.com/api/v2").rstrip("/")
         count = 0
         with output.open("a", newline="") as file:
             writer = csv.DictWriter(file, fieldnames=FIELDS)
@@ -49,9 +56,9 @@ def run(output: Path, delay: float, max_requests: int):
                 else:
                     for attempt in range(5):
                         try:
-                            bookings, _, _ = fetch_beds24_bookings(
-                                db, booking_id=bid, include_invoice_items=False
-                            )
+                            from app.services.beds24_service import extract_bookings_from_payload
+                            payload = _api_get(base_url, "/bookings", headers={"token": token}, params={"id": bid, "includeInvoiceItems": "false"})
+                            bookings = extract_bookings_from_payload(payload)
                             matches = [b for b in bookings if str(b.get("id") or b.get("bookingId") or "") == bid]
                             if not matches:
                                 classification, remote_status = "MISSING_IN_BEDS24", ""
