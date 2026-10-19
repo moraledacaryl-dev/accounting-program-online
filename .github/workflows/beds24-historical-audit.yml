@@ -1,0 +1,55 @@
+name: Beds24 historical status audit
+
+on:
+  workflow_dispatch:
+    inputs:
+      max_requests:
+        description: Maximum new Beds24 IDs to check
+        required: true
+        default: '1600'
+      delay_seconds:
+        description: Minimum delay between API requests
+        required: true
+        default: '2'
+
+permissions:
+  contents: read
+
+jobs:
+  audit:
+    # Requires a dedicated, trusted self-hosted runner with read access to the
+    # Accounting database and the backend environment. Do not expose the DB
+    # publicly or put its credentials in GitHub Actions logs.
+    runs-on: [self-hosted, accounting-audit]
+    timeout-minutes: 240
+    steps:
+      - uses: actions/checkout@v4
+      - name: Validate audit inputs
+        env:
+          MAX_REQUESTS: ${{ inputs.max_requests }}
+          DELAY_SECONDS: ${{ inputs.delay_seconds }}
+        run: |
+          [[ "$MAX_REQUESTS" =~ ^[0-9]+$ ]] && [ "$MAX_REQUESTS" -ge 1 ] && [ "$MAX_REQUESTS" -le 1600 ]
+          [[ "$DELAY_SECONDS" =~ ^[0-9]+([.][0-9]+)?$ ]]
+      - name: Run read-only audit
+        env:
+          MAX_REQUESTS: ${{ inputs.max_requests }}
+          DELAY_SECONDS: ${{ inputs.delay_seconds }}
+        run: |
+          set -euo pipefail
+          mkdir -p "$RUNNER_TEMP/beds24-audit"
+          cd backend
+          # Runner administrator must supply an isolated Python environment
+          # and Accounting DB configuration via a protected runner service.
+          python -m scripts.audit_beds24_statuses \
+            --output "$RUNNER_TEMP/beds24-audit/statuses.csv" \
+            --max-requests "$MAX_REQUESTS" \
+            --delay "$DELAY_SECONDS"
+      - name: Upload status report
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: beds24-status-audit
+          path: ${{ runner.temp }}/beds24-audit/statuses.csv
+          retention-days: 7
+          if-no-files-found: warn
