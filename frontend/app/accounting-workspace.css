@@ -10,7 +10,7 @@ body,.shell-content { background:#f5f6f2; color:var(--workspace-ink); }
 .sidebar .nav-group-toggle { min-height:46px; padding:10px; }
 .sidebar .nav-group-heading strong { font-size:12px; font-weight:600; }
 .sidebar .nav-group-items { border-left:0; padding-left:0; margin:3px 0 12px; }
-.sidebar .nav-group-items a { padding:10px 9px; min-height:40px; border:0; border-radius:9px; font-size:12px; gap:6px; }
+.sidebar .nav-group-items a { padding:10px 7px; min-height:40px; border:0; border-radius:9px; font-size:12px; gap:6px; }
 .sidebar .nav-group-items .nav-symbol { display:inline-flex; }
 .sidebar .nav-group-items a.active { background:#e6eddf; color:#284b35; box-shadow:none; border:0; font-weight:650; }
 
@@ -35,7 +35,7 @@ body,.shell-content { background:#f5f6f2; color:var(--workspace-ink); }
 .main .cash-account-card:nth-child(3n) { background:#eaf0ef; border-color:#d4e1de; color:#315b5a; }
 .main .cash-account-card strong { font-size:26px; letter-spacing:-1px; margin-block:15px; }.main .cash-account-card small { text-transform:capitalize; color:inherit; }
 .sidebar .nav-group:not(.connected-apps) .nav-group-items::before { content:none; }
-.sidebar .nav-group:not(.connected-apps) .nav-group-items a { padding-left:9px; }
+.sidebar .nav-group:not(.connected-apps) .nav-group-items a { padding-left:7px; }
 .sidebar .nav-group:not(.connected-apps) .nav-group-items .nav-symbol { display:inline-flex; }
 .main .cash-workspace .cash-account-card { background:#eef2e8!important; color:#274b35!important; border:1px solid #d7dfcf!important; }
 .main .cash-workspace .cash-account-card:nth-child(2n) { background:#f1eee5!important; color:#66542e!important; border-color:#e1dccb!important; }
