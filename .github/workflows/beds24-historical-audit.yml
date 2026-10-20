@@ -7,6 +7,10 @@ on:
         description: Maximum new Beds24 IDs to check (start with 100)
         required: true
         default: '100'
+      start_after_id:
+        description: Last Beds24 ID from previous batch (leave empty for first batch)
+        required: false
+        default: ''
       delay_seconds:
         description: Minimum delay between API requests
         required: true
@@ -28,9 +32,11 @@ jobs:
         env:
           MAX_REQUESTS: ${{ inputs.max_requests }}
           DELAY_SECONDS: ${{ inputs.delay_seconds }}
+          START_AFTER_ID: ${{ inputs.start_after_id }}
         run: |
           [[ "$MAX_REQUESTS" =~ ^[0-9]+$ ]] && [ "$MAX_REQUESTS" -ge 1 ] && [ "$MAX_REQUESTS" -le 1600 ]
           [[ "$DELAY_SECONDS" =~ ^[0-9]+([.][0-9]+)?$ ]]
+          [[ -z "$START_AFTER_ID" || "$START_AFTER_ID" =~ ^[0-9]+$ ]]
       - name: Run read-only audit
         env:
           MAX_REQUESTS: ${{ inputs.max_requests }}
@@ -44,7 +50,8 @@ jobs:
           python -m scripts.audit_beds24_statuses \
             --output "$RUNNER_TEMP/beds24-audit/statuses.csv" \
             --max-requests "$MAX_REQUESTS" \
-            --delay "$DELAY_SECONDS"
+            --delay "$DELAY_SECONDS" \
+            --start-after-id "$START_AFTER_ID"
       - name: Upload status report
         if: always()
         uses: actions/upload-artifact@v4
