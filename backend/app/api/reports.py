@@ -5,8 +5,9 @@ import io
 from types import SimpleNamespace
 from decimal import Decimal
 from datetime import datetime
+from typing import Annotated
 
-from fastapi import APIRouter, Depends, HTTPException, Query, Response
+from fastapi import APIRouter, Depends, Header, HTTPException, Query, Response
 from sqlalchemy import func, or_
 from sqlalchemy.orm import Session
 
@@ -46,6 +47,11 @@ from app.models.entities import (
     Supplier,
 )
 from app.schemas.common import RecordSettlementCreate
+from app.services.permission_service import get_user_permission_keys
+from app.services.payable_atomicity_service import IdempotencyConflict
+from app.services.record_settlement_atomicity_service import (
+    SettlementConflict, create_record_settlement_idempotent,
+)
 from app.services.cashflow_service import cashflow_summary
 
 from app.services.journal_integrity_service import posted_journal_filter, money
@@ -1155,52 +1161,39 @@ def create_settlement(
     payload: RecordSettlementCreate,
     db: Session = Depends(get_db),
     user=Depends(require_any_permissions('cashflow.money_in', 'cashflow.money_out')),
+    idempotency_key: Annotated[str | None, Header(alias='Idempotency-Key')] = None,
 ):
+    # This endpoint records an approved credit invoice's settlement evidence.
+    # It does NOT move cash, alter linked subledgers, or generate a journal.
+    # Those flows remain owned by their respective money-posting workflows.
     record = db.get(Record, int(payload.record_id))
     if not record:
-        raise HTTPException(status_code=404, detail=f'Record {payload.record_id} not found.')
-    if record.workflow_status != 'approved':
-        raise HTTPException(status_code=400, detail='Only approved records can be settled.')
-    if not _is_on_account(record.payment_method):
-        raise HTTPException(status_code=400, detail='Record is not marked as on-account/credit.')
-
-    amount = float(payload.amount or 0)
-    if amount <= 0:
-        raise HTTPException(status_code=400, detail='Settlement amount must be greater than zero.')
-
-    settled_total = float(
-        db.query(func.coalesce(func.sum(RecordSettlement.amount), 0))
-        .filter(RecordSettlement.record_id == record.id)
-        .scalar()
-        or 0
+        raise HTTPException(status_code=404, detail='Record not found.')
+    direction = _norm(record.direction)
+    required = (
+        {'cashflow.money_in'} if direction == 'income'
+        else {'cashflow.money_out'} if direction == 'expense'
+        else {'cashflow.money_in', 'cashflow.money_out'}
     )
-    outstanding = round(abs(float(record.amount or 0)) - settled_total, 4)
-    if outstanding <= 0:
-        raise HTTPException(status_code=400, detail='Record is already fully settled.')
-    if amount > outstanding + 0.0001:
-        raise HTTPException(status_code=400, detail=f'Settlement exceeds outstanding amount ({outstanding}).')
-
-    row = RecordSettlement(
-        record_id=record.id,
-        settlement_date=payload.settlement_date or _today(),
-        amount=amount,
-        payment_method=payload.payment_method or record.payment_method,
-        reference_no=payload.reference_no,
-        notes=payload.notes,
-        created_by=getattr(user, 'username', None),
-    )
-    db.add(row)
-    db.commit()
-    db.refresh(row)
-
-    new_settled_total = float(
-        db.query(func.coalesce(func.sum(RecordSettlement.amount), 0))
-        .filter(RecordSettlement.record_id == record.id)
-        .scalar()
-        or 0
-    )
+    if getattr(user, 'role', None) not in {'owner', 'admin'}:
+        granted = get_user_permission_keys(db, user)
+        missing = required - granted
+        if missing:
+            raise HTTPException(status_code=403, detail=f'Missing permissions: {", ".join(sorted(missing))}')
+    try:
+        row, before, after, replayed = create_record_settlement_idempotent(
+            db, payload,
+            idempotency_key=idempotency_key,
+            username=getattr(user, 'username', None),
+        )
+    except (IdempotencyConflict, SettlementConflict) as exc:
+        raise HTTPException(status_code=409, detail=str(exc)) from exc
+    except ValueError as exc:
+        raise HTTPException(status_code=400, detail=str(exc)) from exc
     return {
         'settlement': _serialize_settlement(db, row),
-        'outstanding_before': round(outstanding, 4),
-        'outstanding_after': round(abs(float(record.amount or 0)) - new_settled_total, 4),
+        'outstanding_before': _round_money(before),
+        'outstanding_after': _round_money(after),
+        'replayed': replayed,
+        'posting_effect': 'settlement_evidence_only',
     }
