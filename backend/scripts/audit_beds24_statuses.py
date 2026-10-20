@@ -61,6 +61,7 @@ def run(output: Path, delay: float, max_requests: int, start_after_id: str = "")
             raise RuntimeError("Audit requires an existing access token; refresh is intentionally disabled")
         base_url = str(settings.get("api_base_url") or "https://beds24.com/api/v2").rstrip("/")
         count = 0
+        batch_last_id = ""
         if start_after_id and start_after_id not in grouped:
             raise ValueError(f"Start-after ID {start_after_id} is not present in Accounting booking links")
         start_reached = not start_after_id
@@ -115,6 +116,7 @@ def run(output: Path, delay: float, max_requests: int, start_after_id: str = "")
                     "classification": classification,
                 })
                 file.flush()
+                batch_last_id = bid
                 count += 1
                 if count % 25 == 0:
                     print(f"Processed {count} new IDs", flush=True)
@@ -132,7 +134,7 @@ def run(output: Path, delay: float, max_requests: int, start_after_id: str = "")
         for key, value in sorted(counts.items()):
             print(f"{key}: {value}")
         print(f"Report: {output}")
-        print(f"Last processed Beds24 ID: {next(reversed(latest)) if latest else 'none'}")
+        print(f"Last processed Beds24 ID in this batch: {batch_last_id or 'none'}")
         return 0 if not counts["API_ERROR"] else 2
     finally:
         db.rollback()
