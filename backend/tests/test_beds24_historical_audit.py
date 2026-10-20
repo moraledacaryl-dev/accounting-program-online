@@ -30,7 +30,7 @@ class BookingClassificationTests(unittest.TestCase):
 
     def test_reclassifies_old_csv_mismatch_without_new_api_call(self):
         row = {"classification": "OTHER_STATUS_MISMATCH", "accounting_status": "confirmed", "beds24_status": "new"}
-        self.assertEqual(effective_classification(row), "MATCHED")
+        self.assertEqual(effective_classification(row), "STATUS_ALIAS_MATCH")
 
     def test_retains_missing_remote_status_exception(self):
         row = {"classification": "MISSING_IN_BEDS24", "accounting_status": "confirmed", "beds24_status": ""}
