@@ -17,7 +17,7 @@ CANCELLED = {"cancelled", "canceled"}
 def classify_status_pair(local_status, remote_status, sub_status=None, status_code=None):
     """Compare Accounting state to the same normalized state used by Beds24 sync."""
     raw = str(remote_status or "").strip().lower()
-    if not raw:
+    if not (raw or str(sub_status or "").strip() or str(status_code or "").strip()):
         return "API_ERROR"
     mapped = _map_status(raw, sub_status, status_code)
     local = str(local_status or "").strip().lower()
@@ -38,6 +38,9 @@ def classify_booking(local, matches):
         return "DUPLICATE_REMOTE", ""
     remote = matches[0]
     raw_status = str(remote.get("status") or "").strip().lower()
+    # Beds24 can convey its effective cancellation in subStatus or statusCode
+    # even when the top-level status is blank. Retain a reviewable raw token.
+    status_token = raw_status or str(remote.get("subStatus") or remote.get("statusCode") or "").strip().lower()
     return (
         classify_status_pair(
             local[0]["status"],
@@ -45,7 +48,7 @@ def classify_booking(local, matches):
             remote.get("subStatus"),
             remote.get("statusCode"),
         ),
-        raw_status,
+        status_token,
     )
 
 
@@ -172,6 +175,10 @@ def run(output: Path, delay: float, max_requests: int, start_after_id: str = "",
             print(f"Further review items: {len(review_rows) - 50} (see protected CSV report)")
         print(f"Report: {output}")
         print(f"Last processed Beds24 ID in this batch: {batch_last_id or 'none'}")
+        if complete_marker is not None and (pending > 0 or counts["API_ERROR"]):
+            # A new local Beds24 link or failed API lookup invalidates the old
+            # completion marker. A later batch may restore it after full coverage.
+            complete_marker.unlink(missing_ok=True)
         if complete_marker is not None and pending == 0 and not counts["API_ERROR"]:
             complete_marker.parent.mkdir(parents=True, exist_ok=True)
             complete_marker.write_text(f"Historical Beds24 scan complete; total linked IDs: {len(grouped)}" + chr(10))

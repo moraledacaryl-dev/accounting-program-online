@@ -14,7 +14,7 @@ from sqlalchemy.orm import Session
 from app.models.entities import SystemSetting
 from app.services.beds24_cancellation_service import apply_beds24_cancellation
 from app.services.beds24_service import fetch_beds24_bookings, load_beds24_settings
-from app.services.beds24_sync_service import _upsert_sync_log
+from app.services.beds24_sync_service import _map_status, _upsert_sync_log
 
 logger = logging.getLogger(__name__)
 STATE_KEY = 'beds24_cancellation_reconcile_state'
@@ -41,7 +41,10 @@ def _previous_watermark(db: Session, now: datetime) -> datetime:
         value = datetime.fromisoformat(str(data['last_success_utc']).replace('Z', '+00:00'))
         if value.tzinfo is None:
             raise ValueError('Missing UTC offset')
-        return max(fallback, min(value.astimezone(timezone.utc) - timedelta(minutes=OVERLAP_MINUTES), now))
+        # A prolonged outage must never silently skip older updates. Preserving
+        # the original cursor can require multiple pages; on page-limit failures
+        # the worker will signal an error instead of advancing the watermark.
+        return min(value.astimezone(timezone.utc) - timedelta(minutes=OVERLAP_MINUTES), now)
     except (ValueError, TypeError, KeyError, json.JSONDecodeError):
         return fallback
 
@@ -53,7 +56,10 @@ def _save_watermark(db: Session, now: datetime) -> None:
     row.value_json = json.dumps({'last_success_utc': _utc_iso(now)})
     row.updated_by = 'beds24_cancellation_reconcile'
     db.add(row)
-    db.commit()
+    # Keep watermark and success log in the same transaction: _upsert_sync_log
+    # commits both after successful logging. A logging failure must not advance
+    # the persisted cursor while the scan remains incomplete.
+    db.flush()
 
 
 def reconcile_beds24_cancellations(
@@ -87,7 +93,7 @@ def reconcile_beds24_cancellations(
             counters['pages'] += 1
             counters['fetched'] += len(bookings)
             for item in bookings:
-                if str(item.get('status') or '').strip().lower() not in {'cancelled', 'canceled'}:
+                if _map_status(item.get('status'), item.get('subStatus'), item.get('statusCode')) != 'cancelled':
                     continue
                 bid = str(item.get('id') or item.get('bookingId') or '').strip()
                 if not bid:

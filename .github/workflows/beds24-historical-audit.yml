@@ -2,7 +2,8 @@ name: Beds24 historical status audit
 
 on:
   # A long full-sweep audit may already be running. Do not start another on merge.
-  # Scheduled batches resume the server-side CSV after the current run finishes.
+  # Scheduled batches resume the server-side CSV and detect newly linked Beds24 IDs.
+  # Already-audited IDs never generate repeated Beds24 requests.
   schedule:
     - cron: '5,25,45 * * * *'
   workflow_dispatch:
@@ -72,10 +73,9 @@ jobs:
             install -d -m 0700 "$STATE"
             exec 9>"$STATE/.lock"
             flock -n 9 || { echo "Beds24 historical audit or repair is running; safely postponing this batch"; exit 0; }
-            if [[ -f "$STATE/statuses.csv.complete" && -z "$START_AFTER_ID" ]]; then
-              echo "Historical audit already completed; no further Beds24 API calls."
-              exit 0
-            fi
+            # Always run the read-only local snapshot check. The complete marker
+            # is a point-in-time result; fresh imported IDs invalidate it and
+            # must be checked. The audit CSV skips IDs already completed.
             SCRIPT="$STATE/audit-$AUDIT_SHA.py"
             git -C "$SOURCE" show "$AUDIT_SHA:backend/scripts/audit_beds24_statuses.py" > "$SCRIPT"
             chmod 0600 "$SCRIPT"

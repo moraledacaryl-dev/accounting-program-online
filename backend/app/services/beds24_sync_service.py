@@ -1312,7 +1312,7 @@ def sync_booking_payload(
         raise ValueError('Beds24 booking payload does not contain booking id.')
 
     # Cancellation must bypass all identity, guest matching and financial mirrors.
-    if _norm_lower(booking_payload.get('status')) in {'cancelled', 'canceled'}:
+    if _map_status(booking_payload.get('status'), booking_payload.get('subStatus'), booking_payload.get('statusCode')) == 'cancelled':
         from app.services.beds24_cancellation_service import apply_beds24_cancellation
         result = apply_beds24_cancellation(db, booking_payload, source_type=source_type)
         db.commit()

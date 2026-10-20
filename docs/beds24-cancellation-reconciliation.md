@@ -1,5 +1,14 @@
 # Beds24 cancellation synchronization — production runbook
 
+Historical audit completion marks coverage of linked Beds24 IDs at that time, not
+permanent status consistency. The scheduled read-only audit rescans Accounting's
+local booking links and calls Beds24 only for newly linked or previously failed
+IDs. If new IDs are found, the old completion marker is removed until the batch
+finishes. Existing completed CSV rows are historical snapshots, **not** evidence
+that the bookings have remained unchanged; the 30-minute reconciliation timer
+is responsible for new cancellations. Re-check individual mismatches against
+current Beds24 before any status-only repair.
+
 ## Why a booking can stay confirmed
 
 Accounting has two different sources of incoming Beds24 events:
