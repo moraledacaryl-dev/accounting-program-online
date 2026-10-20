@@ -32,7 +32,7 @@ def classify_booking(local, matches):
     return "OTHER_STATUS_MISMATCH", remote_status
 
 
-def run(output: Path, delay: float, max_requests: int, start_after_id: str = ""):
+def run(output: Path, delay: float, max_requests: int, start_after_id: str = "", complete_marker: Path | None = None):
     output.parent.mkdir(parents=True, exist_ok=True)
     db = SessionLocal()
     try:
@@ -143,6 +143,10 @@ def run(output: Path, delay: float, max_requests: int, start_after_id: str = "")
             print(f"Further review items: {len(review_rows) - 50} (see protected CSV report)")
         print(f"Report: {output}")
         print(f"Last processed Beds24 ID in this batch: {batch_last_id or 'none'}")
+        if complete_marker is not None and pending == 0 and not counts["API_ERROR"]:
+            complete_marker.parent.mkdir(parents=True, exist_ok=True)
+            complete_marker.write_text(f"Historical Beds24 scan complete; total linked IDs: {len(grouped)}" + chr(10))
+            print("Historical Beds24 status audit: COMPLETE", flush=True)
         return 0 if not counts["API_ERROR"] else 2
     finally:
         db.rollback()
@@ -155,5 +159,6 @@ if __name__ == "__main__":
     parser.add_argument("--delay", type=float, default=2.0)
     parser.add_argument("--max-requests", type=int, default=100)
     parser.add_argument("--start-after-id", type=str, default="", help="Resume from the next Beds24 ID after this ID")
+    parser.add_argument("--complete-marker", type=Path, default=None, help="Mark complete after all linked bookings are checked")
     args = parser.parse_args()
-    raise SystemExit(run(args.output, max(0.5, args.delay), max(1, args.max_requests), args.start_after_id))
+    raise SystemExit(run(args.output, max(0.5, args.delay), max(1, args.max_requests), args.start_after_id, args.complete_marker))
