@@ -1,0 +1,122 @@
+name: Accounting Disk Recovery
+
+on:
+  workflow_dispatch:
+    inputs:
+      operation:
+        description: 'Inspect storage, or reclaim verified inactive immutable releases'
+        type: choice
+        required: true
+        default: inspect
+        options:
+          - inspect
+          - reclaim_inactive_releases
+      confirmation:
+        description: 'For reclaim only, enter RECLAIM; inspect needs no confirmation'
+        type: string
+        required: false
+        default: ''
+
+permissions:
+  contents: read
+
+concurrency:
+  group: accounting-disk-recovery
+  cancel-in-progress: false
+
+jobs:
+  maintenance:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Inspect or safely reclaim inactive Accounting releases
+        uses: appleboy/ssh-action@029f5b4aeeeb58fdfe1410a5d17f967dacf36262
+        with:
+          host: ${{ secrets.SERVER_HOST }}
+          username: ${{ secrets.SERVER_USER }}
+          key: ${{ secrets.SERVER_SSH_KEY }}
+          port: ${{ secrets.SERVER_PORT }}
+          envs: OPERATION,CONFIRMATION
+          command_timeout: 20m
+          script: |
+            set -euo pipefail
+            export PATH="/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin"
+            SOURCE=/opt/accounting-program-online
+            RELEASES=/opt/accounting-releases
+            ACTIVE_LINK=/opt/accounting-current
+            ROLLBACK_FILE=/var/lib/hiddenoasis/accounting-release/previous.sha
+            BACKUPS=/var/backups/hiddenoasis/accounting
+
+            echo "ACCOUNTING STORAGE BEFORE"
+            df -h / "$RELEASES" "$BACKUPS"
+            du -sh "$RELEASES" "$BACKUPS" 2>/dev/null || true
+            echo "PostgreSQL readiness before: "
+            pg_isready -h 127.0.0.1 -p 5432 || true
+            echo "Release worktrees:"
+            git -C "$SOURCE" worktree list
+
+            if [ "$OPERATION" = "inspect" ]; then
+              echo "INSPECTION ONLY: No files were changed."
+              exit 0
+            fi
+            if [ "$OPERATION" != "reclaim_inactive_releases" ] || [ "$CONFIRMATION" != "RECLAIM" ]; then
+              echo "Refusing destructive operation without exact RECLAIM confirmation." >&2
+              exit 2
+            fi
+
+            test -d "$SOURCE/.git"
+            test -L "$ACTIVE_LINK"
+            test -f "$ROLLBACK_FILE"
+            ACTIVE="$(readlink -f "$ACTIVE_LINK")"
+            ROLLBACK_SHA="$(cat "$ROLLBACK_FILE")"
+            [[ "$ROLLBACK_SHA" =~ ^[0-9a-f]{40}$ ]] || { echo "Invalid rollback SHA; stopping." >&2; exit 2; }
+            ROLLBACK="$RELEASES/$ROLLBACK_SHA"
+            [[ "$ACTIVE" =~ ^/opt/accounting-releases/[0-9a-f]{40}$ ]] || { echo "Active release path unexpected; stopping." >&2; exit 2; }
+            test -d "$ACTIVE"
+            test -d "$ROLLBACK"
+
+            echo "Protected active release: $(basename "$ACTIVE")"
+            echo "Protected rollback release: $ROLLBACK_SHA"
+            mapfile -t WORKTREES < <(git -C "$SOURCE" worktree list --porcelain | sed -n 's/^worktree //p')
+            REMOVED=0
+            for candidate in "${WORKTREES[@]}"; do
+              [[ "$candidate" =~ ^/opt/accounting-releases/[0-9a-f]{40}$ ]] || continue
+              [ "$candidate" != "$ACTIVE" ] || continue
+              [ "$candidate" != "$ROLLBACK" ] || continue
+              [ -d "$candidate" ] || continue
+              [ ! -L "$candidate" ] || continue
+              candidate_sha="$(basename "$candidate")"
+              if [ -f "$candidate/.release-manifest" ]; then
+                grep -qx "release_sha=$candidate_sha" "$candidate/.release-manifest" || {
+                  echo "SKIP: mismatched release manifest for $candidate_sha"
+                  continue
+                }
+              fi
+              if [ -d "$candidate/backend/uploads" ] && find "$candidate/backend/uploads" -type f -print -quit | grep -q .; then
+                echo "SKIP: old release contains uploads needing manual inspection: $candidate_sha"
+                continue
+              fi
+              test "$(readlink -f "$ACTIVE_LINK")" = "$ACTIVE" || { echo "Active release changed during maintenance; stopping." >&2; exit 2; }
+              echo "Reclaiming inactive registered Git worktree: $candidate_sha"
+              git -C "$SOURCE" worktree remove --force "$candidate"
+              REMOVED=$((REMOVED+1))
+            done
+
+            echo "ACCOUNTING STORAGE AFTER; inactive releases removed: $REMOVED"
+            df -h / "$RELEASES" "$BACKUPS"
+            du -sh "$RELEASES" "$BACKUPS" 2>/dev/null || true
+            echo "PostgreSQL readiness after:"
+            if pg_isready -h 127.0.0.1 -p 5432; then
+              echo "POSTGRESQL CONNECTIONS ACCEPTED"
+            else
+              echo "WARNING: PostgreSQL still not accepting connections; check service and server logs." >&2
+              exit 1
+            fi
+            AVAILABLE="$(df -B1 --output=avail "$BACKUPS" | tail -n1 | tr -d ' ')"
+            if [ "$AVAILABLE" -lt 1073741824 ]; then
+              echo "WARNING: Less than 1 GiB free for the mandatory backup; do not deploy yet." >&2
+              exit 1
+            fi
+            echo "INACTIVE RELEASE CLEANUP PASS: active/rollback and all backups retained"
+        env:
+          OPERATION: ${{ inputs.operation }}
+          CONFIRMATION: ${{ inputs.confirmation }}
