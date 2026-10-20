@@ -8,6 +8,7 @@ from sqlalchemy.orm import Session
 from app.core.business_clock import business_today
 from app.models.entities import Beds24BookingMap, Beds24SyncLog, Booking, BookingFolio, Receivable
 from app.services.beds24_service import fetch_beds24_bookings
+from app.services.beds24_sync_service import _map_status
 
 CANCELLED_BOOKING_STATUSES = {'cancelled', 'canceled'}
 
@@ -80,7 +81,7 @@ def apply_beds24_cancellation(db: Session, payload: dict, *, source_type='status
     if not bid:
         raise ValueError('An exact Beds24 booking ID is required.')
     result = {'ok': True, 'beds24_booking_id': bid, 'action': 'unchanged', 'status_only': True}
-    if str(payload.get('status') or '').strip().lower() not in CANCELLED_BOOKING_STATUSES:
+    if _map_status(payload.get('status'), payload.get('subStatus'), payload.get('statusCode')) != 'cancelled':
         return result
     rows = db.query(Booking).filter(
         Booking.external_source == 'beds24', Booking.external_booking_id == bid,
