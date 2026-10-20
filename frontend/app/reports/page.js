@@ -1,6 +1,7 @@
 'use client';
 import Link from 'next/link';
 import { businessDateISO } from '../../lib/businessDate';
+import { useAppShell } from '../../components/app-shell/AppShellContext';
 
 import { useEffect, useMemo, useRef, useState } from 'react';
 import {
@@ -10,6 +11,7 @@ import {
   fetchManagementCsv,
   fetchManagementReport,
   fetchSettlements,
+  fetchJournalLinkageReview,
 } from '../../lib/api';
 import { shouldPreventEnterSubmit } from '../../lib/formBehavior';
 
@@ -60,6 +62,8 @@ function StatementTable({ title, rows = [], amountLabel = 'Balance' }) {
 }
 
 export default function ReportsPage() {
+  const { user } = useAppShell();
+  const canReviewJournalLinks = user?.role === 'owner' || user?.role === 'admin';
   const [activeView, setActiveView] = useState('overview');
   const [filters, setFilters] = useState({
     start_date: monthStartISO(),
@@ -71,6 +75,12 @@ export default function ReportsPage() {
   const [aging, setAging] = useState(null);
   const [settlements, setSettlements] = useState([]);
   const [savingSettlement, setSavingSettlement] = useState(false);
+  const [journalReview, setJournalReview] = useState(null);
+  const [journalReviewPage, setJournalReviewPage] = useState(1);
+  const [journalReviewSource, setJournalReviewSource] = useState('');
+  const [journalReviewYear, setJournalReviewYear] = useState('');
+  const [journalReviewLoading, setJournalReviewLoading] = useState(false);
+  const [journalReviewError, setJournalReviewError] = useState('');
   const submissionInFlight = useRef(false);
   const lastSettlementSubmission = useRef(null);
   const [notice, setNotice] = useState('');
@@ -108,6 +118,29 @@ export default function ReportsPage() {
   useEffect(() => {
     load().catch((e) => setError(e.message || 'Failed to load reports.'));
   }, []);
+
+  useEffect(() => {
+    if (!canReviewJournalLinks || activeView !== 'journal-review') return;
+    let cancelled = false;
+    setJournalReviewLoading(true);
+    setJournalReviewError('');
+    fetchJournalLinkageReview({
+      year: journalReviewYear,
+      source: journalReviewSource,
+      page: journalReviewPage,
+      limit: 25,
+    }).then((result) => {
+      if (!cancelled) setJournalReview(result);
+    }).catch((failure) => {
+      if (!cancelled) {
+        setJournalReview(null);
+        setJournalReviewError(failure?.message || 'Unable to load journal exception review.');
+      }
+    }).finally(() => {
+      if (!cancelled) setJournalReviewLoading(false);
+    });
+    return () => { cancelled = true; };
+  }, [activeView, canReviewJournalLinks, journalReviewYear, journalReviewSource, journalReviewPage]);
 
   const settlementOptions = useMemo(() => {
     const receivables = aging?.receivables?.items || [];
@@ -224,6 +257,7 @@ export default function ReportsPage() {
             ['operations', 'Rooms, F&B & Inventory'],
             ['finance', 'AR, AP & Settlements'],
             ['payroll', 'Payroll & BIR'],
+            ...(canReviewJournalLinks ? [['journal-review', 'Journal Review']] : []),
           ].map(([value, label]) => <button key={value} type="button" aria-pressed={activeView === value} className={activeView === value ? 'tab active' : 'tab'} onClick={() => setActiveView(value)}>{label}</button>)}
         </div>
       </section>
@@ -731,6 +765,76 @@ export default function ReportsPage() {
         </section>
       </div>
       </div>
+
+      {canReviewJournalLinks && (
+        <div hidden={activeView !== 'journal-review'}>
+          <section className="section journal-review-section">
+            <h2>Journal Linkage Review</h2>
+            <p className="muted">
+              Owner/admin-only evidence review of posted cash movements with no direct journal link.
+              A missing link does not establish missing revenue or justify posting a new journal.
+              This screen is read-only.
+            </p>
+            <div className="form-grid journal-review-filters">
+              <label>
+                Transaction Year
+                <select value={journalReviewYear} onChange={(event) => { setJournalReviewYear(event.target.value); setJournalReviewSource(''); setJournalReviewPage(1); }}>
+                  <option value="">All years</option>
+                  {['2024', '2025', '2026', '2027'].map((year) => <option key={year} value={year}>{year}</option>)}
+                </select>
+              </label>
+              <label>
+                External Source
+                <select value={journalReviewSource} onChange={(event) => { setJournalReviewSource(event.target.value); setJournalReviewPage(1); }}>
+                  <option value="">All sources</option>
+                  {(journalReview?.source_counts || []).map((entry) => (
+                    <option key={entry.source} value={entry.source}>{entry.source} ({number(entry.count)})</option>
+                  ))}
+                </select>
+              </label>
+            </div>
+            <div className="row wrap journal-review-summary">
+              <span className="badge">Unverified records: {number(journalReview?.count)}</span>
+              <span className="badge">Page {journalReviewPage} of {journalReview?.total_pages || 1}</span>
+              {journalReviewLoading && <span role="status" className="muted">Loading review…</span>}
+            </div>
+            {!!journalReviewError && <p role="alert" className="error-text">{journalReviewError}</p>}
+            <p className="muted">
+              Match each item against its external receipt, source cashbook, folio, and existing ledger
+              before approving any correction. No automatic matching or posting is performed.
+            </p>
+            <div className="journal-review-table-scroll" tabIndex={0} role="region" aria-label="Journal linkage exception records">
+              <table className="table dense-table journal-review-table" aria-label="Unverified journal linkage records">
+                <thead><tr>
+                  <th scope="col">Transaction</th><th scope="col">Date</th><th scope="col">Account ID</th>
+                  <th scope="col">Source</th><th scope="col">External Event</th><th scope="col">Payment Ref</th>
+                  <th scope="col">Amount (PHP)</th><th scope="col">Review</th>
+                </tr></thead>
+                <tbody>
+                  {(journalReview?.items || []).map((entry) => (
+                    <tr key={entry.id}>
+                      <td>{entry.id}</td><td>{entry.transaction_date || '—'}</td>
+                      <td>{entry.financial_account_id}</td><td>{entry.external_source || '—'}</td>
+                      <td>{entry.external_id || '—'}</td><td>{entry.reference_no || '—'}</td>
+                      <td className="numeric">{currency(entry.amount)}</td>
+                      <td><span className="badge">Unverified</span></td>
+                    </tr>
+                  ))}
+                  {!journalReviewLoading && !(journalReview?.items || []).length && (
+                    <tr><td colSpan="8" className="muted">No matching records. Try another year or source.</td></tr>
+                  )}
+                </tbody>
+              </table>
+            </div>
+            <div className="row wrap journal-review-pagination">
+              <button type="button" className="secondary" disabled={journalReviewLoading || journalReviewPage <= 1}
+                onClick={() => setJournalReviewPage((page) => Math.max(1, page - 1))}>Previous</button>
+              <button type="button" className="secondary" disabled={journalReviewLoading || journalReviewPage >= (journalReview?.total_pages || 1)}
+                onClick={() => setJournalReviewPage((page) => page + 1)}>Next</button>
+            </div>
+          </section>
+        </div>
+      )}
     </div>
   );
 }

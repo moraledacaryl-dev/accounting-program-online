@@ -226,6 +226,13 @@ export const fetchFinancialStatements = ({ startDate = '', endDate = '', asOfDat
   return request(`/reports/financial-statements${query ? `?${query}` : ''}`);
 };
 export const fetchAgingReport = (asOfDate = '') => request(`/reports/ar-ap-aging${asOfDate ? `?as_of_date=${encodeURIComponent(asOfDate)}` : ''}`);
+export const fetchJournalLinkageReview = ({ year = '', source = '', page = 1, limit = 25 } = {}) => {
+  const params = new URLSearchParams({ page: String(page), limit: String(limit) });
+  if (year) params.set('year', year);
+  if (source) params.set('source', source);
+  return request(`/reports/journal-linkage-review?${params.toString()}`);
+};
+
 export const fetchSettlements = ({ recordId = null, limit = 200 } = {}) => request(`/reports/settlements?limit=${encodeURIComponent(limit)}${recordId ? `&record_id=${encodeURIComponent(recordId)}` : ''}`);
 export const createSettlement = (payload, { idempotencyKey } = {}) => request('/reports/settlements', { method: 'POST', headers: idempotencyKey ? { 'Idempotency-Key': idempotencyKey } : {}, body: JSON.stringify(payload) });
 
