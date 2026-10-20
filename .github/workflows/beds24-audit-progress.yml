@@ -31,6 +31,10 @@ jobs:
             test -f "$REPORT" || { echo "AUDIT_PROGRESS: no server-side report yet"; exit 1; }
             CURRENT=/opt/accounting-current/backend
             test -x "$CURRENT/.venv/bin/python"
+            test -f /etc/hiddenoasis/accounting-backend.env
+            set -a
+            . /etc/hiddenoasis/accounting-backend.env
+            set +a
             export PYTHONPATH="$CURRENT"
             REPORT="$REPORT" MARKER="$MARKER" "$CURRENT/.venv/bin/python" - <<'PY'
             import csv
@@ -39,6 +43,9 @@ jobs:
             from datetime import datetime, timezone
             from pathlib import Path
             from app.services.beds24_sync_service import _map_status
+            from app.db.database import SessionLocal
+            from app.services.beds24_service import load_beds24_settings
+            from sqlalchemy import text
 
             report = Path(os.environ["REPORT"])
             known = {
@@ -111,4 +118,14 @@ jobs:
             if len(exceptions) > 25:
                 print(f"AUDIT_EXCEPTION: further_count={len(exceptions) - 25}")
             print("AUDIT_PROGRESS: completion_marker=" + str(Path(os.environ["MARKER"]).is_file()).lower())
+            db = SessionLocal()
+            try:
+                db.execute(text("SET TRANSACTION READ ONLY"))
+                settings = load_beds24_settings(db)
+                print("AUDIT_CONFIG: beds24_enabled=" + str(bool(settings.get("enabled"))).lower())
+                print("AUDIT_CONFIG: manual_sync_only=" + str(bool(settings.get("manual_sync_only"))).lower())
+            finally:
+                db.rollback()
+                db.close()
             PY
+            echo "AUDIT_CONFIG: reconcile_timer=$(systemctl is-active accounting-beds24-reconcile.timer 2>/dev/null || echo unavailable)"
