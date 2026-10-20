@@ -8,28 +8,53 @@ from pathlib import Path
 from sqlalchemy import text
 from app.db.database import SessionLocal
 from app.services.beds24_service import Beds24ApiError, load_beds24_settings, _api_get, extract_bookings_from_payload
+from app.services.beds24_sync_service import _map_status
 
 FIELDS = ["beds24_booking_id", "accounting_booking_id", "accounting_status", "beds24_status", "classification"]
 CANCELLED = {"cancelled", "canceled"}
 
 
+def classify_status_pair(local_status, remote_status, sub_status=None, status_code=None):
+    """Compare Accounting state to the same normalized state used by Beds24 sync."""
+    raw = str(remote_status or "").strip().lower()
+    if not raw:
+        return "API_ERROR"
+    mapped = _map_status(raw, sub_status, status_code)
+    local = str(local_status or "").strip().lower()
+    if mapped == "cancelled" and local not in CANCELLED:
+        return "CANCELLATION_MISMATCH"
+    if mapped == local or (mapped == "cancelled" and local in CANCELLED):
+        return "MATCHED"
+    return "OTHER_STATUS_MISMATCH"
+
+
 def classify_booking(local, matches):
-    """Classify one Beds24 ID without changing accounting records."""
+    """Classify one Beds24 ID using the canonical integration status mapping."""
     if len(local) > 1:
         return "DUPLICATE_LINK", ""
     if not matches:
         return "MISSING_IN_BEDS24", ""
     if len(matches) > 1:
         return "DUPLICATE_REMOTE", ""
-    remote_status = str(matches[0].get("status") or "").strip().lower()
-    local_status = str(local[0]["status"] or "").strip().lower()
-    if not remote_status:
-        return "API_ERROR", ""
-    if remote_status in CANCELLED and local_status not in CANCELLED:
-        return "CANCELLATION_MISMATCH", remote_status
-    if remote_status == local_status or (remote_status in CANCELLED and local_status in CANCELLED):
-        return "MATCHED", remote_status
-    return "OTHER_STATUS_MISMATCH", remote_status
+    remote = matches[0]
+    raw_status = str(remote.get("status") or "").strip().lower()
+    return (
+        classify_status_pair(
+            local[0]["status"],
+            raw_status,
+            remote.get("subStatus"),
+            remote.get("statusCode"),
+        ),
+        raw_status,
+    )
+
+
+def effective_classification(row):
+    """Re-evaluate older CSV entries whose raw status comparisons were misleading."""
+    previous = str(row.get("classification") or "")
+    if previous in {"MATCHED", "OTHER_STATUS_MISMATCH", "CANCELLATION_MISMATCH"}:
+        return classify_status_pair(row.get("accounting_status"), row.get("beds24_status"))
+    return previous
 
 
 def run(output: Path, delay: float, max_requests: int, start_after_id: str = "", complete_marker: Path | None = None):
@@ -129,16 +154,16 @@ def run(output: Path, delay: float, max_requests: int, start_after_id: str = "",
             for row in csv.DictReader(file):
                 latest[row["beds24_booking_id"]] = row
         current_rows = {bid: row for bid, row in latest.items() if bid in grouped}
-        counts = Counter(r["classification"] for r in current_rows.values())
-        processed = sum(1 for r in current_rows.values() if r["classification"] != "API_ERROR")
+        counts = Counter(effective_classification(r) for r in current_rows.values())
+        processed = sum(1 for r in current_rows.values() if effective_classification(r) != "API_ERROR")
         pending = len(grouped) - processed
         issues = sum(value for key, value in counts.items() if key not in {"MATCHED", "API_ERROR"})
         print(f"Total linked IDs: {len(grouped)}; processed: {processed}; pending: {pending}; needs review: {issues}")
         for key, value in sorted(counts.items()):
             print(f"{key}: {value}")
-        review_rows = [row for row in current_rows.values() if row["classification"] not in {"MATCHED", "API_ERROR"}]
+        review_rows = [row for row in current_rows.values() if effective_classification(row) not in {"MATCHED", "API_ERROR"}]
         for row in review_rows[:50]:
-            print(f"REVIEW_REQUIRED {row['classification']} Beds24={row['beds24_booking_id']} Accounting={row['accounting_booking_id']} AccountingStatus={row['accounting_status']} Beds24Status={row['beds24_status']}")
+            print(f"REVIEW_REQUIRED {effective_classification(row)} Beds24={row['beds24_booking_id']} Accounting={row['accounting_booking_id']} AccountingStatus={row['accounting_status']} Beds24Status={row['beds24_status']}")
         if len(review_rows) > 50:
             print(f"Further review items: {len(review_rows) - 50} (see protected CSV report)")
         print(f"Report: {output}")
