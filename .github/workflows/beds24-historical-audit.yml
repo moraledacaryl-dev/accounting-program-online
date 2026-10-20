@@ -4,7 +4,7 @@ on:
   # A long full-sweep audit may already be running. Do not start another on merge.
   # Scheduled batches resume the server-side CSV after the current run finishes.
   schedule:
-    - cron: '7,27,47 * * * *'
+    - cron: '5,25,45 * * * *'
   workflow_dispatch:
     inputs:
       max_requests:
@@ -71,7 +71,7 @@ jobs:
 
             install -d -m 0700 "$STATE"
             exec 9>"$STATE/.lock"
-            flock -n 9 || { echo "Beds24 historical audit is already running"; exit 1; }
+            flock -n 9 || { echo "Beds24 historical audit or repair is running; safely postponing this batch"; exit 0; }
             if [[ -f "$STATE/statuses.csv.complete" && -z "$START_AFTER_ID" ]]; then
               echo "Historical audit already completed; no further Beds24 API calls."
               exit 0
