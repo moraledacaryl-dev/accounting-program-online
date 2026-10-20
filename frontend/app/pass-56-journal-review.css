@@ -16,6 +16,22 @@
   gap: 6px;
 }
 .main[data-route="/reports"] .journal-review-summary { gap: 8px; }
+.main[data-route="/reports"] .journal-review-summary .badge {
+  display: inline-flex;
+  width: max-content;
+  max-width: 100%;
+  white-space: nowrap;
+  overflow: visible;
+}
+.main[data-route="/reports"] > div > .section:first-child > h1 {
+  line-height: 1.12;
+  margin-bottom: 10px;
+}
+.main[data-route="/reports"] > div > .section:first-child > p.muted {
+  line-height: 1.4;
+  margin-top: 0;
+}
+
 .main[data-route="/reports"] .journal-review-table-scroll {
   max-width: 100%;
   overflow-x: auto;
