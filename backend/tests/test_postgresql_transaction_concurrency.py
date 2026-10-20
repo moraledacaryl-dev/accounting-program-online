@@ -12,6 +12,12 @@ from app.models.entities import (
     PurchaseOrder, PurchaseRequest, PurchaseRequestLine, Receivable, Supplier,
 )
 from app.schemas.cashflow import MoneyTransactionCreate, ReceivableCollectPayload, ReceivableCreate
+from app.schemas.common import RecordSettlementCreate
+from app.models.entities import Record, RecordSettlement
+from app.models.mutation_idempotency import MutationIdempotency
+from app.services.record_settlement_atomicity_service import (
+    SettlementConflict, create_record_settlement_idempotent,
+)
 from app.services.cashflow_service import (
     collect_receivable,
     create_money_transaction,
@@ -270,3 +276,66 @@ def test_postgresql_concurrent_payroll_posting_creates_one_journal():
         assert period.status == 'posted'
         assert period.generated_journal_entry_id in journal_ids
         assert db.query(JournalEntry).filter(JournalEntry.reference_no == f'PPR-{period_id}').count() == 1
+
+
+def _seed_record_for_settlement_race(marker: str) -> int:
+    with SessionLocal() as db:
+        row = Record(
+            module_slug='events', module_name='Events',
+            category='Rental', bucket='Rental', item='Venue',
+            name=f'Group2 settlement race {marker}', amount=100,
+            direction='income', payment_method='on_account',
+            workflow_status='approved', transaction_date='2026-10-01',
+        )
+        db.add(row)
+        db.commit()
+        return row.id
+
+
+def _concurrent_record_settlement(record_id: int, *, key: str, ref: str, amount: float = 75):
+    def run():
+        with SessionLocal() as db:
+            return create_record_settlement_idempotent(
+                db,
+                RecordSettlementCreate(
+                    record_id=record_id, settlement_date='2026-10-20',
+                    amount=amount, payment_method='bank_transfer', reference_no=ref,
+                ),
+                idempotency_key=key, username='group2-postgresql',
+            )
+    return run
+
+
+def test_postgresql_concurrent_record_settlements_cannot_overpay():
+    marker = uuid4().hex[:14]
+    rid = _seed_record_for_settlement_race(marker)
+    results = _run_concurrently(
+        _concurrent_record_settlement(rid, key=f'{marker}-settlement-a', ref=f'{marker}-a'),
+        _concurrent_record_settlement(rid, key=f'{marker}-settlement-b', ref=f'{marker}-b'),
+    )
+    assert [kind for kind, _ in results].count('ok') == 1
+    assert [kind for kind, _ in results].count('error') == 1
+    assert isinstance(next(value for kind, value in results if kind == 'error'), SettlementConflict)
+    with SessionLocal() as db:
+        rows = db.query(RecordSettlement).filter(RecordSettlement.record_id == rid).all()
+        assert len(rows) == 1
+        assert float(rows[0].amount) == 75
+        assert db.query(MutationIdempotency).filter(
+            MutationIdempotency.scope == f'record_settlement:create:{rid}',
+        ).count() == 1
+
+
+def test_postgresql_same_key_concurrent_settlement_replays_one_result():
+    marker = uuid4().hex[:14]
+    rid = _seed_record_for_settlement_race(marker)
+    request = _concurrent_record_settlement(rid, key=f'{marker}-same-key', ref=f'{marker}-ref', amount=50)
+    results = _run_concurrently(request, request)
+    assert [kind for kind, _ in results].count('ok') == 2
+    payloads = [value for _, value in results]
+    assert sorted(x[3] for x in payloads) == [False, True]
+    assert payloads[0][0].id == payloads[1][0].id
+    with SessionLocal() as db:
+        assert db.query(RecordSettlement).filter(RecordSettlement.record_id == rid).count() == 1
+        assert db.query(MutationIdempotency).filter(
+            MutationIdempotency.scope == f'record_settlement:create:{rid}',
+        ).count() == 1
