@@ -140,3 +140,30 @@ def test_cash_movements_keep_unknown_finance_flows_unclassified(db):
     assert cash['unclassified_activities'][0]['net'] == -25
     assert cash['totals'] == {'cash_in': 420, 'cash_out': 115, 'net_cash_flow': 305}
     assert cash['method'] == 'management_direct_cash_movements'
+
+
+def test_cash_reversal_offsets_original_across_reporting_periods(db):
+    account = FinancialAccount(name='Cash', code='CASH-REV-01', account_type='cash_drawer')
+    db.add(account)
+    db.flush()
+    db.add(MoneyTransaction(
+        financial_account_id=account.id, transaction_date='2026-09-10',
+        posted_at='2026-09-10', module='events', category='Event payment',
+        direction='in', amount=300, status='reversed', is_reversed=True,
+    ))
+    db.flush()
+    original = db.query(MoneyTransaction).one()
+    db.add(MoneyTransaction(
+        financial_account_id=account.id, transaction_date='2026-10-02',
+        posted_at='2026-10-02', module='events', category='Event payment',
+        direction='out', amount=300, status='posted', is_reversed=False,
+        reversed_from_id=original.id,
+    ))
+    db.commit()
+    september = _build_cash_flow_statement(db, '2026-09-01', '2026-09-30')
+    october = _build_cash_flow_statement(db, '2026-10-01', '2026-10-31')
+    both = _build_cash_flow_statement(db, '2026-09-01', '2026-10-31')
+    assert september['totals']['net_cash_flow'] == 300
+    assert october['totals']['net_cash_flow'] == -300
+    assert both['totals']['net_cash_flow'] == 0
+    assert both['classification_counts']['operating'] == 2
