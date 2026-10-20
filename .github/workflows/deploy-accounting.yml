@@ -89,11 +89,44 @@ jobs:
             git -C "$ROOT" fetch --no-tags origin main
             git -C "$ROOT" cat-file -e "$RELEASE_SHA^{commit}"
             git -C "$ROOT" merge-base --is-ancestor "$RELEASE_SHA" origin/main
-            BOOTSTRAP=/tmp/accounting-prepare-release-$RELEASE_SHA.sh
-            git -C "$ROOT" show "$RELEASE_SHA:scripts/release/prepare-release.sh" > "$BOOTSTRAP"
-            chmod 700 "$BOOTSTRAP"
-            SOURCE_ROOT="$ROOT" bash "$BOOTSTRAP" "$RELEASE_SHA"
-            rm -f "$BOOTSTRAP"
-            bash "/opt/accounting-releases/$RELEASE_SHA/scripts/release/activate-release.sh" "$RELEASE_SHA"
+            # Disk exhaustion previously blocked pg_dump after an expensive build.
+            # Check capacity and a writable primary before any prepare or activation.
+            BACKUPS=/var/backups/hiddenoasis/accounting
+            mkdir -p "$BACKUPS"
+            FREE_BYTES="$(df -B1 --output=avail "$BACKUPS" | tail -n 1 | tr -d ' ')"
+            echo "Available bytes for mandatory database backup: $FREE_BYTES"
+            if [ "$FREE_BYTES" -lt 4294967296 ]; then
+              echo "Deployment blocked: less than 4 GiB available; preserve backups and free space safely." >&2
+              exit 1
+            fi
+            pg_isready -h 127.0.0.1 -p 5432
+            IN_RECOVERY="$(sudo -u postgres psql -d postgres -Atqc 'SELECT pg_is_in_recovery()')"
+            if [ "$IN_RECOVERY" != "f" ]; then
+              echo "Deployment blocked: PostgreSQL not confirmed as writable primary." >&2
+              exit 1
+            fi
+
+            RELEASE="/opt/accounting-releases/$RELEASE_SHA"
+            if [ -e "$RELEASE" ] || [ -L "$RELEASE" ]; then
+              # The previous deployment may have built the complete immutable
+              # release but failed at its mandatory pre-activation backup.
+              # Never overwrite or erase it. Only reuse an exact, fully
+              # verified SHA/config/dependency/build artifact.
+              test -d "$RELEASE"
+              test ! -L "$RELEASE"
+              echo "Prepared release already exists; verifying exact identity without rebuilding."
+              bash "$RELEASE/scripts/release/verify-release.sh" "$RELEASE_SHA"
+            else
+              BOOTSTRAP="/tmp/accounting-prepare-release-$RELEASE_SHA.sh"
+              trap 'rm -f "$BOOTSTRAP"' EXIT
+              git -C "$ROOT" show "$RELEASE_SHA:scripts/release/prepare-release.sh" > "$BOOTSTRAP"
+              chmod 700 "$BOOTSTRAP"
+              SOURCE_ROOT="$ROOT" bash "$BOOTSTRAP" "$RELEASE_SHA"
+              rm -f "$BOOTSTRAP"
+              trap - EXIT
+            fi
+            # activate-release.sh independently verifies the SHA and always
+            # runs the mandatory database + uploads backup before migration.
+            bash "$RELEASE/scripts/release/activate-release.sh" "$RELEASE_SHA"
         env:
           RELEASE_SHA: ${{ inputs.release_sha }}
