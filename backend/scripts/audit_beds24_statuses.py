@@ -136,6 +136,11 @@ def run(output: Path, delay: float, max_requests: int, start_after_id: str = "")
         print(f"Total linked IDs: {len(grouped)}; processed: {processed}; pending: {pending}; needs review: {issues}")
         for key, value in sorted(counts.items()):
             print(f"{key}: {value}")
+        review_rows = [row for row in current_rows.values() if row["classification"] not in {"MATCHED", "API_ERROR"}]
+        for row in review_rows[:50]:
+            print(f"REVIEW_REQUIRED {row['classification']} Beds24={row['beds24_booking_id']} Accounting={row['accounting_booking_id']} AccountingStatus={row['accounting_status']} Beds24Status={row['beds24_status']}")
+        if len(review_rows) > 50:
+            print(f"Further review items: {len(review_rows) - 50} (see protected CSV report)")
         print(f"Report: {output}")
         print(f"Last processed Beds24 ID in this batch: {batch_last_id or 'none'}")
         return 0 if not counts["API_ERROR"] else 2
