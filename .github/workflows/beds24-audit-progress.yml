@@ -38,12 +38,15 @@ jobs:
             export PYTHONPATH="$CURRENT"
             REPORT="$REPORT" MARKER="$MARKER" "$CURRENT/.venv/bin/python" - <<'PY'
             import csv
+            import json
             import os
             from collections import Counter
             from datetime import datetime, timezone
             from pathlib import Path
             from app.services.beds24_sync_service import _map_status
             from app.db.database import SessionLocal
+            from app.models.entities import SystemSetting, Beds24SyncLog
+            from app.services.beds24_cancellation_reconcile_service import STATE_KEY
             from app.services.beds24_service import load_beds24_settings
             from sqlalchemy import text
 
@@ -124,6 +127,33 @@ jobs:
                 settings = load_beds24_settings(db)
                 print("AUDIT_CONFIG: beds24_enabled=" + str(bool(settings.get("enabled"))).lower())
                 print("AUDIT_CONFIG: manual_sync_only=" + str(bool(settings.get("manual_sync_only"))).lower())
+                watermark = db.query(SystemSetting).filter(SystemSetting.key == STATE_KEY).one_or_none()
+                try:
+                    watermark_data = json.loads(watermark.value_json or "{}") if watermark else {}
+                except (TypeError, ValueError):
+                    watermark_data = {"last_success_utc": "invalid"}
+                last_success = str(watermark_data.get("last_success_utc") or "none")
+                print("AUDIT_RECONCILE: last_success_utc=" + last_success)
+                last_log = (
+                    db.query(Beds24SyncLog)
+                    .filter(Beds24SyncLog.event_type == "cancellation_reconciliation")
+                    .order_by(Beds24SyncLog.id.desc())
+                    .first()
+                )
+                if last_log:
+                    try:
+                        payload = json.loads(last_log.payload_json or "{}")
+                    except (TypeError, ValueError):
+                        payload = {}
+                    print("AUDIT_RECONCILE: last_log_status=" + str(last_log.status or "none"))
+                    for key in ("fetched", "pages", "cancelled", "error_type"):
+                        if key in payload:
+                            value = str(payload[key])
+                            if key == "error_type":
+                                value = "".join(ch for ch in value if ch.isalnum() or ch == "_")[:48]
+                            print(f"AUDIT_RECONCILE: last_{key}={value}")
+                else:
+                    print("AUDIT_RECONCILE: last_log_status=none")
             finally:
                 db.rollback()
                 db.close()
