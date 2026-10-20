@@ -29,11 +29,9 @@ def run(output: Path, delay: float, max_requests: int):
             if bid:
                 grouped.setdefault(bid, []).append(row)
         completed = {}
-        existing_rows = {}
         if output.exists():
             with output.open(newline="") as file:
                 for row in csv.DictReader(file):
-                    existing_rows[row["beds24_booking_id"]] = row
                     if row["classification"] != "API_ERROR":
                         completed[row["beds24_booking_id"]] = row
         settings = load_beds24_settings(db)
@@ -115,7 +113,8 @@ def run(output: Path, delay: float, max_requests: int):
             for row in csv.DictReader(file):
                 latest[row["beds24_booking_id"]] = row
         counts = Counter(r["classification"] for r in latest.values())
-        print(f"Total linked IDs: {len(grouped)}; checked: {len(latest)}; remaining: {len(grouped)-len(latest)}")
+        verified = sum(1 for r in latest.values() if r["classification"] != "API_ERROR")
+        print(f"Total linked IDs: {len(grouped)}; verified: {verified}; remaining: {len(grouped)-verified}")
         for key, value in sorted(counts.items()):
             print(f"{key}: {value}")
         print(f"Report: {output}")
