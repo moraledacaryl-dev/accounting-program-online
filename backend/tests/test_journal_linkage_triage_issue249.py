@@ -53,7 +53,7 @@ def test_triage_counts_ambiguous_reference_candidates_without_linking(capsys):
                 (1,'posted',NULL,'2025-01-12','2025-01-12','rooms','ref-abc',NULL,NULL,11,NULL,0,1),
                 (2,'posted',NULL,'2025-05-12','','finance','ref-one','beds24','remote-2',NULL,NULL,0,1),
                 (3,'posted',NULL,'2026-09-12','2026-09-12','Unexpected Guest Name','ref-draft',NULL,NULL,NULL,NULL,0,2),
-                (4,'posted',NULL,'2024-12-31','2024-12-31',NULL,NULL,NULL,NULL,NULL,1,1),
+                (4,'posted',NULL,'2024-12-31','2024-12-31',NULL,NULL,NULL,NULL,NULL,1,0,1),
                 (5,'posted',4,'2026-10-12','2026-10-12','events','ref-draft',NULL,NULL,NULL,NULL,0,2),
                 (6,'reversed',NULL,'2026-10-12','2026-10-12','events','ref-abc',NULL,NULL,NULL,NULL,1,2)""")
         with engine.connect() as db:
