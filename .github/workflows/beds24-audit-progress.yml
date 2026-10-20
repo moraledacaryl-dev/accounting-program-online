@@ -1,0 +1,66 @@
+name: Beds24 historical audit progress
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - '.github/workflows/beds24-audit-progress.yml'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  progress:
+    if: github.ref == 'refs/heads/main'
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - name: Summarize protected server-side audit CSV (no booking details)
+        uses: appleboy/ssh-action@029f5b4aeeeb58fdfe1410a5d17f967dacf36262
+        with:
+          host: ${{ secrets.SERVER_HOST }}
+          username: ${{ secrets.SERVER_USER }}
+          key: ${{ secrets.SERVER_SSH_KEY }}
+          port: ${{ secrets.SERVER_PORT }}
+          command_timeout: 5m
+          script: |
+            set -euo pipefail
+            REPORT=/var/lib/hiddenoasis/accounting-beds24-audit/statuses.csv
+            MARKER=/var/lib/hiddenoasis/accounting-beds24-audit/statuses.csv.complete
+            test -f "$REPORT" || { echo "AUDIT_PROGRESS: no server-side report yet"; exit 1; }
+            REPORT="$REPORT" MARKER="$MARKER" python3 - <<'PY'
+            import csv
+            import os
+            from collections import Counter
+            from datetime import datetime, timezone
+            from pathlib import Path
+
+            report = Path(os.environ["REPORT"])
+            known = {
+                "MATCHED",
+                "CANCELLATION_MISMATCH",
+                "OTHER_STATUS_MISMATCH",
+                "MISSING_IN_BEDS24",
+                "DUPLICATE_LINK",
+                "DUPLICATE_REMOTE",
+                "API_ERROR",
+            }
+            latest = {}
+            with report.open(newline="") as handle:
+                for row in csv.DictReader(handle):
+                    if not row or row.get("classification") not in known:
+                        continue
+                    booking_id = str(row.get("beds24_booking_id") or "").strip()
+                    if booking_id.isdigit():
+                        latest[booking_id] = row
+            counts = Counter(row["classification"] for row in latest.values())
+            verified = sum(value for key, value in counts.items() if key != "API_ERROR")
+            issues = sum(value for key, value in counts.items() if key not in {"MATCHED", "API_ERROR"})
+            timestamp = datetime.fromtimestamp(report.stat().st_mtime, tz=timezone.utc).isoformat()
+            print("AUDIT_PROGRESS: report_updated_utc=" + timestamp)
+            print(f"AUDIT_PROGRESS: distinct_rows={len(latest)} inspected={verified} needs_review={issues}")
+            for key in sorted(counts):
+                print(f"AUDIT_PROGRESS: {key}={counts[key]}")
+            print("AUDIT_PROGRESS: completion_marker=" + str(Path(os.environ["MARKER"]).is_file()).lower())
+            PY
