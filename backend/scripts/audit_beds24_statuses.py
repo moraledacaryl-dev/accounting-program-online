@@ -17,7 +17,7 @@ CANCELLED = {"cancelled", "canceled"}
 def classify_status_pair(local_status, remote_status, sub_status=None, status_code=None):
     """Compare Accounting state to the same normalized state used by Beds24 sync."""
     raw = str(remote_status or "").strip().lower()
-    if not raw:
+    if not (raw or str(sub_status or "").strip() or str(status_code or "").strip()):
         return "API_ERROR"
     mapped = _map_status(raw, sub_status, status_code)
     local = str(local_status or "").strip().lower()
