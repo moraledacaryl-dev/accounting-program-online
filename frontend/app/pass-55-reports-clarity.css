@@ -1,0 +1,141 @@
+/* Group 4 — report information hierarchy and small-screen ergonomics.
+   The whole pass is scoped to /reports to avoid altering operational forms. */
+.main[data-route="/reports"] {
+  --reports-gap: 14px;
+}
+.main[data-route="/reports"] .section > h2 {
+  font-size: clamp(1rem, 1.3vw, 1.125rem);
+  font-weight: 720;
+  letter-spacing: -.02em;
+  margin-bottom: 12px;
+}
+.main[data-route="/reports"] > div > .section:first-child > .form-grid label {
+  gap: 6px;
+  font-size: .8125rem;
+  line-height: 1.3;
+  font-weight: 650;
+}
+.main[data-route="/reports"] > div > .section:first-child > .form-grid {
+  grid-template-columns: repeat(3, minmax(165px, 200px));
+  gap: 11px;
+}
+.main[data-route="/reports"] > div > .section:first-child > .tabs .tab {
+  font-size: .8125rem;
+  min-height: 42px;
+  padding: 9px 13px;
+  font-weight: 620;
+}
+.main[data-route="/reports"] .badge {
+  min-height: 28px;
+  font-size: .75rem;
+  line-height: 1.3;
+  padding: 5px 9px;
+}
+.main[data-route="/reports"] .dense-table th {
+  font-size: .725rem;
+  letter-spacing: .045em;
+  font-weight: 700;
+}
+.main[data-route="/reports"] .dense-table td {
+  font-size: .8125rem;
+  line-height: 1.4;
+}
+.main[data-route="/reports"] .dense-table tbody tr:nth-child(even) td {
+  background: #fafcfa;
+}
+.main[data-route="/reports"] .dense-table tbody tr:hover td {
+  background: #f2f7f3;
+}
+.main[data-route="/reports"] .report-kpi-grid {
+  display: grid;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  gap: 10px;
+}
+.main[data-route="/reports"] .report-kpi {
+  min-width: 0;
+  padding: 13px 14px 12px;
+  border: 1px solid #dfe8e2;
+  border-radius: 12px;
+  background: linear-gradient(160deg, #ffffff, #f8fbf9);
+  box-shadow: 0 2px 7px rgba(14, 43, 29, .025);
+  display: grid;
+  gap: 7px;
+}
+.main[data-route="/reports"] .report-kpi__label {
+  color: #52665b;
+  font-size: .78rem;
+  font-weight: 630;
+  letter-spacing: .01em;
+  overflow-wrap: normal;
+}
+.main[data-route="/reports"] .report-kpi__value {
+  display: block;
+  color: #173f2c;
+  font-size: clamp(.93rem, 1.5vw, 1.28rem);
+  letter-spacing: -.025em;
+  font-variant-numeric: tabular-nums;
+  line-height: 1.22;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+.main[data-route="/reports"] .section .dense-table {
+  width: 100%;
+}
+@media (min-width: 641px) and (max-width: 1150px) {
+  .main[data-route="/reports"] .report-kpi-grid { grid-template-columns: repeat(3, minmax(0, 1fr)); }
+}
+@media (max-width: 900px) {
+  .main[data-route="/reports"] > div > .section:first-child > .form-grid {
+    grid-template-columns: repeat(3, minmax(0, 1fr));
+  }
+}
+@media (max-width: 640px) {
+  .main[data-route="/reports"] { --reports-gap: 11px; }
+  .main[data-route="/reports"] > div > .section:first-child {
+    padding: 16px 14px;
+  }
+  .main[data-route="/reports"] > div > .section:first-child > .form-grid {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    gap: 10px;
+  }
+  .main[data-route="/reports"] > div > .section:first-child > .form-grid label:last-child {
+    grid-column: 1 / -1;
+  }
+  .main[data-route="/reports"] > div > .section:first-child > .tabs {
+    gap: 6px;
+    padding: 4px;
+    scroll-padding-inline: 4px;
+    scrollbar-width: thin;
+  }
+  .main[data-route="/reports"] > div > .section:first-child > .tabs .tab {
+    min-height: 44px;
+    padding: 10px 12px;
+  }
+  .main[data-route="/reports"] .section { padding: 14px; }
+  .main[data-route="/reports"] .report-kpi-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 8px; }
+  .main[data-route="/reports"] .report-kpi { padding: 11px 10px; }
+  .main[data-route="/reports"] .report-kpi__value { font-size: 1rem; }
+  .main[data-route="/reports"] .dense-table {
+    min-width: 0;
+  }
+  /* Tables with 5+ columns must scroll inside their card, never expand the page. */
+  .main[data-route="/reports"] .dense-table:has(thead th:nth-child(5)) {
+    min-width: 580px;
+  }
+  .main[data-route="/reports"] .dense-table:has(thead th:nth-child(4)):not(:has(thead th:nth-child(5))) {
+    min-width: 440px;
+  }
+  .main[data-route="/reports"] .dense-table th,
+  .main[data-route="/reports"] .dense-table td {
+    padding: 9px 8px;
+  }
+  .main[data-route="/reports"] .section:has(> .dense-table) {
+    overflow-x: auto;
+    max-width: 100%;
+    overscroll-behavior-inline: contain;
+  }
+}
+@media (prefers-reduced-motion: reduce) {
+  .main[data-route="/reports"] .report-kpi { transition: none; }
+}
