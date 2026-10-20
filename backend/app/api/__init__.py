@@ -17,6 +17,7 @@ from app.api.menu import router as menu_router
 from app.api.bir import router as bir_router
 from app.api.approvals import router as approvals_router
 from app.api.reports import router as reports_router
+from app.api.journal_review import router as journal_review_router
 from app.api.attachments import router as attachments_router
 from app.api.cashflow import router as cashflow_router
 from app.api.financial_accounts import router as financial_accounts_router
@@ -70,6 +71,7 @@ api_router.include_router(menu_router, prefix='/menu', tags=['menu'])
 api_router.include_router(bir_router, prefix='/bir', tags=['bir'])
 api_router.include_router(approvals_router, prefix='/approvals', tags=['approvals'])
 api_router.include_router(reports_router, prefix='/reports', tags=['reports'])
+api_router.include_router(journal_review_router, prefix='/reports', tags=['reports'])
 api_router.include_router(attachments_router, prefix='/attachments', tags=['attachments'])
 api_router.include_router(cashflow_router, prefix='/cashflow', tags=['cashflow'])
 api_router.include_router(financial_accounts_router, prefix='/financial-accounts', tags=['financial-accounts'])
