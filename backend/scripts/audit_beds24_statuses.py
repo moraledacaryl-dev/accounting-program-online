@@ -175,6 +175,10 @@ def run(output: Path, delay: float, max_requests: int, start_after_id: str = "",
             print(f"Further review items: {len(review_rows) - 50} (see protected CSV report)")
         print(f"Report: {output}")
         print(f"Last processed Beds24 ID in this batch: {batch_last_id or 'none'}")
+        if complete_marker is not None and (pending > 0 or counts["API_ERROR"]):
+            # A new local Beds24 link or failed API lookup invalidates the old
+            # completion marker. A later batch may restore it after full coverage.
+            complete_marker.unlink(missing_ok=True)
         if complete_marker is not None and pending == 0 and not counts["API_ERROR"]:
             complete_marker.parent.mkdir(parents=True, exist_ok=True)
             complete_marker.write_text(f"Historical Beds24 scan complete; total linked IDs: {len(grouped)}" + chr(10))
