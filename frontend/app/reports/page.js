@@ -42,8 +42,8 @@ function StatementTable({ title, rows = [], amountLabel = 'Balance' }) {
   return (
     <section className="section">
       <h2>{title}</h2>
-      <table className="table dense-table">
-        <thead><tr><th>Account</th><th>Type</th><th>{amountLabel}</th></tr></thead>
+      <table className="table dense-table" aria-label={`${title} financial statement`}>
+        <thead><tr><th scope="col">Account</th><th scope="col">Type</th><th scope="col">{amountLabel}</th></tr></thead>
         <tbody>
           {rows.map((row) => (
             <tr key={`${title}-${row.account_code}-${row.account_name}`}>
@@ -197,8 +197,8 @@ export default function ReportsPage() {
       <section className="section">
         <h1>Reports & Reconciliation</h1>
         <p className="muted">Financial statements, aging, and close readiness. All amounts are in PHP.</p>
-        {!!notice && <p className="success-text">{notice}</p>}
-        {!!error && <p className="error-text">{error}</p>}
+        {!!notice && <p className="success-text" role="status" aria-live="polite">{notice}</p>}
+        {!!error && <p className="error-text" role="alert">{error}</p>}
         <div className="form-grid">
           <label>
             Period Start
@@ -237,8 +237,8 @@ export default function ReportsPage() {
           <span className={`badge ${report?.close_readiness?.can_close ? 'success' : 'danger'}`}>{report?.close_readiness?.can_close ? 'Close allowed' : 'Close blocked'}</span>
         </div>
         <p className="muted">{report?.close_readiness?.summary || 'Refresh the report to calculate close readiness.'}</p>
-        <table className="table dense-table" style={{ marginTop: 10 }}>
-          <thead><tr><th>Check</th><th>Count</th><th>Status</th><th>Action</th></tr></thead>
+        <table className="table dense-table" aria-label="Close readiness checks" style={{ marginTop: 10 }}>
+          <thead><tr><th scope="col">Check</th><th scope="col">Count</th><th scope="col">Status</th><th scope="col">Action</th></tr></thead>
           <tbody>
             {(report?.close_readiness?.checks || []).map((row) => (
               <tr key={row.key}>
@@ -255,14 +255,21 @@ export default function ReportsPage() {
 
       <section className="section">
         <h2>Management KPIs</h2>
-        <div className="row wrap">
-          <span className="badge">Income {currency(report?.kpis?.income_total)}</span>
-          <span className="badge">Expense {currency(report?.kpis?.expense_total)}</span>
-          <span className="badge">Net {currency(report?.kpis?.net_income)}</span>
-          <span className="badge">Sales Net {currency(report?.kpis?.sales_net_total)}</span>
-          <span className="badge">Inventory Value {currency(report?.kpis?.inventory_value)}</span>
-          <span className="badge">AR Outstanding {currency(report?.kpis?.ar_outstanding)}</span>
-          <span className="badge">AP Outstanding {currency(report?.kpis?.ap_outstanding)}</span>
+        <div className="report-kpi-grid">
+          {[
+            ['Income', report?.kpis?.income_total],
+            ['Expenses', report?.kpis?.expense_total],
+            ['Net Income', report?.kpis?.net_income],
+            ['Net Sales', report?.kpis?.sales_net_total],
+            ['Inventory', report?.kpis?.inventory_value],
+            ['Receivables', report?.kpis?.ar_outstanding],
+            ['Payables', report?.kpis?.ap_outstanding],
+          ].map(([label, value]) => (
+            <div className="report-kpi" key={label}>
+              <span className="report-kpi__label">{label}</span>
+              <strong className="report-kpi__value" title={`PHP ${currency(value)}`}>₱{currency(value)}</strong>
+            </div>
+          ))}
         </div>
       </section>
 
