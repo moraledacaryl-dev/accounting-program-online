@@ -302,8 +302,11 @@ export default function ReportsPage() {
         <div className="grid">
           <section className="section">
             <h2>Profit & Loss</h2>
+            {!statements?.profit_and_loss?.cost_of_sales_identified && <p className="muted">No COGS accounts detected in this period. Gross profit may be overstated until cost-of-sales accounts are correctly classified and posted.</p>}
             <div className="row wrap">
               <span className="badge">Revenue {currency(statements?.profit_and_loss?.totals?.revenue)}</span>
+              <span className="badge">COGS {currency(statements?.profit_and_loss?.totals?.cost_of_sales)}</span>
+              <span className="badge">Gross Profit {currency(statements?.profit_and_loss?.totals?.gross_profit)}</span>
               <span className="badge">Expenses {currency(statements?.profit_and_loss?.totals?.expenses)}</span>
               <span className="badge">Net Income {currency(statements?.profit_and_loss?.totals?.net_income)}</span>
             </div>
@@ -323,7 +326,9 @@ export default function ReportsPage() {
           </section>
 
           <section className="section">
-            <h2>Cash Flow</h2>
+            <h2>Cash Movements (Management)</h2>
+            <p className="muted">Transaction-based cash movements are not a formal statement of cash flows. Unclassified items require accountant review.</p>
+            {statements?.cash_flow?.classification_status === "requires_review" && <p className="setup-notice">{statements?.cash_flow?.classification_counts?.unclassified || 0} transaction(s) need cash-flow classification.</p>}
             <div className="row wrap">
               <span className="badge">Cash In {currency(statements?.cash_flow?.totals?.cash_in)}</span>
               <span className="badge">Cash Out {currency(statements?.cash_flow?.totals?.cash_out)}</span>
@@ -333,16 +338,21 @@ export default function ReportsPage() {
             <table className="table dense-table" style={{ marginTop: 10 }}>
               <thead><tr><th>Activity</th><th>Category</th><th>In</th><th>Out</th><th>Net</th></tr></thead>
               <tbody>
-                {(statements?.cash_flow?.operating_activities || []).map((row) => (
-                  <tr key={`cf-${row.activity}-${row.category}`}>
-                    <td>{row.activity}</td>
+                {[
+                  ['Operating', statements?.cash_flow?.operating_activities || []],
+                  ['Investing', statements?.cash_flow?.investing_activities || []],
+                  ['Financing', statements?.cash_flow?.financing_activities || []],
+                  ['Needs review', statements?.cash_flow?.unclassified_activities || []],
+                ].flatMap(([section, rows]) => rows.map((row) => (
+                  <tr key={`cf-${section}-${row.activity}-${row.category}`}>
+                    <td>{section} · {row.activity}</td>
                     <td>{row.category}</td>
                     <td>{currency(row.cash_in)}</td>
                     <td>{currency(row.cash_out)}</td>
                     <td>{currency(row.net)}</td>
                   </tr>
-                ))}
-                {!statements?.cash_flow?.operating_activities?.length && <tr><td colSpan="5" className="muted">No posted cash transactions in this period.</td></tr>}
+                )))}
+                {!statements?.cash_flow?.totals?.cash_in && !statements?.cash_flow?.totals?.cash_out && <tr><td colSpan="5" className="muted">No posted cash transactions in this period.</td></tr>}
               </tbody>
             </table>
           </section>
