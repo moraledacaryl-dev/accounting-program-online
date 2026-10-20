@@ -128,9 +128,12 @@ def run(output: Path, delay: float, max_requests: int, start_after_id: str = "")
         with output.open(newline="") as file:
             for row in csv.DictReader(file):
                 latest[row["beds24_booking_id"]] = row
-        counts = Counter(r["classification"] for r in latest.values())
-        verified = sum(1 for r in latest.values() if r["classification"] != "API_ERROR")
-        print(f"Total linked IDs: {len(grouped)}; verified: {verified}; remaining: {len(grouped)-verified}")
+        current_rows = {bid: row for bid, row in latest.items() if bid in grouped}
+        counts = Counter(r["classification"] for r in current_rows.values())
+        processed = sum(1 for r in current_rows.values() if r["classification"] != "API_ERROR")
+        pending = len(grouped) - processed
+        issues = sum(value for key, value in counts.items() if key not in {"MATCHED", "API_ERROR"})
+        print(f"Total linked IDs: {len(grouped)}; processed: {processed}; pending: {pending}; needs review: {issues}")
         for key, value in sorted(counts.items()):
             print(f"{key}: {value}")
         print(f"Report: {output}")
