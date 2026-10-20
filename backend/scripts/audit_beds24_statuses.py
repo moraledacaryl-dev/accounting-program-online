@@ -52,8 +52,12 @@ def classify_booking(local, matches):
 def effective_classification(row):
     """Re-evaluate older CSV entries whose raw status comparisons were misleading."""
     previous = str(row.get("classification") or "")
-    if previous in {"MATCHED", "OTHER_STATUS_MISMATCH", "CANCELLATION_MISMATCH"}:
-        return classify_status_pair(row.get("accounting_status"), row.get("beds24_status"))
+    if previous == "OTHER_STATUS_MISMATCH":
+        normalized = classify_status_pair(row.get("accounting_status"), row.get("beds24_status"))
+        # The old CSV does not contain subStatus/statusCode. Preserve the
+        # distinction between a status-label equivalence and a fully verified
+        # API payload match.
+        return "STATUS_ALIAS_MATCH" if normalized == "MATCHED" else normalized
     return previous
 
 
@@ -157,11 +161,11 @@ def run(output: Path, delay: float, max_requests: int, start_after_id: str = "",
         counts = Counter(effective_classification(r) for r in current_rows.values())
         processed = sum(1 for r in current_rows.values() if effective_classification(r) != "API_ERROR")
         pending = len(grouped) - processed
-        issues = sum(value for key, value in counts.items() if key not in {"MATCHED", "API_ERROR"})
+        issues = sum(value for key, value in counts.items() if key not in {"MATCHED", "STATUS_ALIAS_MATCH", "API_ERROR"})
         print(f"Total linked IDs: {len(grouped)}; processed: {processed}; pending: {pending}; needs review: {issues}")
         for key, value in sorted(counts.items()):
             print(f"{key}: {value}")
-        review_rows = [row for row in current_rows.values() if effective_classification(row) not in {"MATCHED", "API_ERROR"}]
+        review_rows = [row for row in current_rows.values() if effective_classification(row) not in {"MATCHED", "STATUS_ALIAS_MATCH", "API_ERROR"}]
         for row in review_rows[:50]:
             print(f"REVIEW_REQUIRED {effective_classification(row)} Beds24={row['beds24_booking_id']} Accounting={row['accounting_booking_id']} AccountingStatus={row['accounting_status']} Beds24Status={row['beds24_status']}")
         if len(review_rows) > 50:
