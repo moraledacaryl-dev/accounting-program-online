@@ -1,0 +1,68 @@
+name: Repair two verified historical Beds24 cancellations
+
+on:
+  # The long-running read-only historical scan has priority on the shared lock.
+  # Retry exact two-booking status-only repair after it releases the lock.
+  schedule:
+    - cron: '17,47 * * * *'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: accounting-beds24-verified-cancellation-repair
+  cancel-in-progress: false
+
+jobs:
+  repair:
+    if: github.ref == 'refs/heads/main'
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - name: Verify current Beds24 cancellation and apply status-only exact-ID repair
+        uses: appleboy/ssh-action@029f5b4aeeeb58fdfe1410a5d17f967dacf36262
+        env:
+          REPAIR_SHA: ${{ github.sha }}
+        with:
+          host: ${{ secrets.SERVER_HOST }}
+          username: ${{ secrets.SERVER_USER }}
+          key: ${{ secrets.SERVER_SSH_KEY }}
+          port: ${{ secrets.SERVER_PORT }}
+          command_timeout: 15m
+          envs: REPAIR_SHA
+          script: |
+            set -euo pipefail
+            export PATH="/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin"
+            [[ "$REPAIR_SHA" =~ ^[0-9a-f]{40}$ ]]
+            SOURCE=/opt/accounting-program-online
+            CURRENT=/opt/accounting-current/backend
+            STATE=/var/lib/hiddenoasis/accounting-beds24-audit
+            MARKER="$STATE/two-verified-cancellations.complete"
+            test -x "$CURRENT/.venv/bin/python"
+            test -f /etc/hiddenoasis/accounting-backend.env
+            install -d -m 0700 "$STATE"
+            exec 9>"$STATE/.lock"
+            flock -n 9 || {
+              echo "BACKFILL: postponed because historical Beds24 audit is still running"
+              exit 0
+            }
+            if [[ -f "$MARKER" ]]; then
+              echo "BACKFILL: exact two-booking correction already completed; no API request"
+              exit 0
+            fi
+            git -C "$SOURCE" fetch --no-tags origin main
+            git -C "$SOURCE" cat-file -e "$REPAIR_SHA^{commit}"
+            git -C "$SOURCE" merge-base --is-ancestor "$REPAIR_SHA" origin/main
+            SCRIPT="$STATE/repair-$REPAIR_SHA.py"
+            git -C "$SOURCE" show "$REPAIR_SHA:backend/scripts/repair_known_beds24_cancellations.py" > "$SCRIPT"
+            chmod 0600 "$SCRIPT"
+            set -a
+            . /etc/hiddenoasis/accounting-backend.env
+            set +a
+            export PYTHONPATH="$CURRENT"
+            cd "$CURRENT"
+            "$CURRENT/.venv/bin/python" "$SCRIPT"
+            printf 'Two exact Beds24 cancellations verified and repaired on %s\n' "$(date -u +%Y-%m-%dT%H:%M:%SZ)" > "$MARKER"
+            chmod 0600 "$MARKER"
+            echo "BACKFILL: status-only correction completed; no booking values or payment rows deleted"
