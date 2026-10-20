@@ -179,6 +179,13 @@ for (const [view, label] of [
   manifest.push({ name: `reports-${view}`, route: '/reports', viewport: '390x844', file, status: 'ok', state: true, title: await page.title() });
 }
 
+// Also inspect the restricted owner/admin journal exception view at mobile size.
+// This is a UI snapshot only; no export and no mutation are attempted.
+await page.getByRole('button', { name: 'Journal Review', exact: true }).click();
+await page.waitForTimeout(350);
+await page.screenshot({ path: path.join(OUT, 'reports-journal-review--mobile.png'), fullPage: true });
+manifest.push({ name: 'reports-journal-review', route: '/reports', viewport: '390x844', file: 'reports-journal-review--mobile.png', status: 'ok', state: true, title: await page.title() });
+
 // Chromium emits a generic console error for expected 401 /auth/me probes on
 // the public login screen. Match those known responses 1:1, and fail the audit
 // on every other error instead of quietly passing.
