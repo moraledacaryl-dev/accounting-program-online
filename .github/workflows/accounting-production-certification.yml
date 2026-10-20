@@ -1,0 +1,109 @@
+name: Accounting Production Certification
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - 'scripts/dr/production-certification.py'
+      - '.github/workflows/accounting-production-certification.yml'
+  workflow_dispatch:
+    inputs:
+      mode:
+        description: 'Read-only production baseline or isolated backup restore rehearsal'
+        type: choice
+        required: true
+        default: read_only
+        options:
+          - read_only
+          - restore_rehearsal
+      confirmation:
+        description: 'For restore_rehearsal only, enter RESTORE-REHEARSAL'
+        type: string
+        required: false
+        default: ''
+
+permissions:
+  contents: read
+
+concurrency:
+  group: accounting-production-certification
+  cancel-in-progress: false
+
+jobs:
+  certify-production:
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    steps:
+      - name: Read-only reconciliation and optional isolated restore
+        uses: appleboy/ssh-action@029f5b4aeeeb58fdfe1410a5d17f967dacf36262
+        with:
+          host: ${{ secrets.SERVER_HOST }}
+          username: ${{ secrets.SERVER_USER }}
+          key: ${{ secrets.SERVER_SSH_KEY }}
+          port: ${{ secrets.SERVER_PORT }}
+          envs: AUDIT_SHA,MODE,CONFIRMATION
+          command_timeout: 25m
+          script: |
+            set -euo pipefail
+            umask 077
+            export PATH="/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin"
+            SOURCE=/opt/accounting-program-online
+            CURRENT=/opt/accounting-current
+            BACKUPS=/var/backups/hiddenoasis/accounting
+
+            case "$MODE" in
+              read_only) ;;
+              restore_rehearsal)
+                if [ "$CONFIRMATION" != "RESTORE-REHEARSAL" ]; then
+                  echo "Explicit RESTORE-REHEARSAL confirmation required." >&2
+                  exit 2
+                fi
+                ;;
+              *) echo "Unsupported mode." >&2; exit 2 ;;
+            esac
+            test -L "$CURRENT"
+            test -x "$CURRENT/backend/.venv/bin/python"
+            test -f /etc/hiddenoasis/accounting-backend.env
+            git -C "$SOURCE" fetch --no-tags origin main
+            git -C "$SOURCE" cat-file -e "$AUDIT_SHA^{commit}"
+            git -C "$SOURCE" merge-base --is-ancestor "$AUDIT_SHA" origin/main
+
+            echo "CERTIFICATION: expected_workflow_commit=$AUDIT_SHA"
+            echo "CERTIFICATION: active_release_sha=$(basename "$(readlink -f "$CURRENT")")"
+            echo "CERTIFICATION: postgres_readiness=$(pg_isready -h 127.0.0.1 -p 5432 | awk '{print $NF}')"
+            pg_isready -h 127.0.0.1 -p 5432 >/dev/null
+            for service in accounting-backend accounting-frontend accounting-operations-outbox; do
+              echo "CERTIFICATION: $service=$(systemctl is-active "$service")"
+            done
+            echo "CERTIFICATION: beds24_reconcile_timer=$(systemctl is-active accounting-beds24-reconcile.timer)"
+            curl -fsS http://127.0.0.1:8000/healthz >/dev/null
+            curl -fsSI http://127.0.0.1:3000 >/dev/null
+
+            AUDIT_FILE="$(mktemp /tmp/accounting-certification.XXXXXXXX.py)"
+            trap 'rm -f "$AUDIT_FILE"' EXIT
+            git -C "$SOURCE" show "$AUDIT_SHA:scripts/dr/production-certification.py" > "$AUDIT_FILE"
+            test -s "$AUDIT_FILE"
+
+            set -a
+            . /etc/hiddenoasis/accounting-backend.env
+            set +a
+            "$CURRENT/backend/.venv/bin/python" "$AUDIT_FILE"
+
+            if [ "$MODE" = "restore_rehearsal" ]; then
+              # Rehearsal writes to a unique temporary PostgreSQL database only.
+              # Never touch the live database, original backup, or evidence data.
+              test -d "$BACKUPS"
+              DUMP="$(find "$BACKUPS" -maxdepth 1 -type f -name 'accounting-*.dump' -printf '%T@ %p\n' | sort -nr | head -1 | cut -d' ' -f2-)"
+              test -n "$DUMP"
+              test -f "${DUMP%.dump}.meta"
+              echo "CERTIFICATION: isolated_restore_backup_found=true"
+              bash "$CURRENT/scripts/dr/restore-rehearsal.sh" "$DUMP"
+              echo "CERTIFICATION: isolated_restore=PASS"
+            else
+              echo "CERTIFICATION: isolated_restore=NOT_REQUESTED"
+            fi
+            echo "ACCOUNTING PRODUCTION CERTIFICATION: EXECUTION PASS"
+        env:
+          AUDIT_SHA: ${{ github.sha }}
+          MODE: ${{ inputs.mode || 'read_only' }}
+          CONFIRMATION: ${{ inputs.confirmation || '' }}
