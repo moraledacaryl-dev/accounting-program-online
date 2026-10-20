@@ -30,7 +30,7 @@ def _rows(path):
         return list(csv.DictReader(stream))
 
 
-def _run(db, path, responses, *, max_requests=100, start_after_id=""):
+def _run(db, path, responses, *, max_requests=100, start_after_id="", complete_marker=None):
     with (
         patch.object(audit, "SessionLocal", return_value=db),
         patch.object(audit, "load_beds24_settings", return_value={
@@ -41,7 +41,7 @@ def _run(db, path, responses, *, max_requests=100, start_after_id=""):
         patch.object(audit, "_api_get", side_effect=responses) as api,
         patch.object(audit.time, "sleep") as sleep,
     ):
-        result = audit.run(path, 0.5, max_requests, start_after_id)
+        result = audit.run(path, 0.5, max_requests, start_after_id, complete_marker)
         db.commit.assert_not_called()
         db.close.assert_called()
         return result, api.call_args_list, sleep.call_args_list
@@ -132,3 +132,31 @@ def test_duplicate_local_link_does_not_send_api_request():
         assert rc == 0
         assert not calls
         assert _rows(path)[0]["classification"] == "DUPLICATE_LINK"
+
+
+def test_completion_marker_after_full_successful_scan_only():
+    bookings = [
+        {"id": 1, "external_booking_id": "123", "status": "confirmed"},
+        {"id": 2, "external_booking_id": "124", "status": "confirmed"},
+    ]
+    with TemporaryDirectory() as folder:
+        report = Path(folder) / "report.csv"
+        marker = Path(folder) / "report.complete"
+        db = _session(bookings)
+        result, _, _ = _run(db, report, [[{"id": "123", "status": "confirmed"}]], max_requests=1, complete_marker=marker)
+        assert result == 0
+        assert not marker.exists()
+        result, _, _ = _run(db, report, [[{"id": "124", "status": "cancelled"}]], max_requests=1, complete_marker=marker)
+        assert result == 0
+        assert marker.exists()
+        assert "2" in marker.read_text()
+
+
+def test_completion_marker_not_written_when_api_errors():
+    db = _session([{"id": 1, "external_booking_id": "123", "status": "confirmed"}])
+    with TemporaryDirectory() as folder:
+        report = Path(folder) / "report.csv"
+        marker = Path(folder) / "report.complete"
+        rc, _, _ = _run(db, report, [Beds24ApiError("denied", status_code=401)], complete_marker=marker)
+        assert rc == 2
+        assert not marker.exists()

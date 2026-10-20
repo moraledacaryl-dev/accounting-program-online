@@ -1,12 +1,10 @@
 name: Beds24 historical status audit
 
 on:
-  # Read-only, rate-limited reconciliation of historical bookings on audit-code updates.
-  push:
-    branches: [main]
-    paths:
-      - 'backend/scripts/audit_beds24_statuses.py'
-      - '.github/workflows/beds24-historical-audit.yml'
+  # A long full-sweep audit may already be running. Do not start another on merge.
+  # Scheduled batches resume the server-side CSV after the current run finishes.
+  schedule:
+    - cron: '7,27,47 * * * *'
   workflow_dispatch:
     inputs:
       max_requests:
@@ -43,8 +41,8 @@ jobs:
         uses: appleboy/ssh-action@029f5b4aeeeb58fdfe1410a5d17f967dacf36262
         env:
           AUDIT_SHA: ${{ github.sha }}
-          MAX_REQUESTS: ${{ github.event_name == 'push' && '1600' || inputs.max_requests }}
-          DELAY_SECONDS: ${{ github.event_name == 'push' && '4' || inputs.delay_seconds }}
+          MAX_REQUESTS: ${{ github.event_name == 'workflow_dispatch' && inputs.max_requests || '25' }}
+          DELAY_SECONDS: ${{ github.event_name == 'workflow_dispatch' && inputs.delay_seconds || '3' }}
           START_AFTER_ID: ${{ inputs.start_after_id || '' }}
         with:
           host: ${{ secrets.SERVER_HOST }}
@@ -74,6 +72,10 @@ jobs:
             install -d -m 0700 "$STATE"
             exec 9>"$STATE/.lock"
             flock -n 9 || { echo "Beds24 historical audit is already running"; exit 1; }
+            if [[ -f "$STATE/statuses.csv.complete" && -z "$START_AFTER_ID" ]]; then
+              echo "Historical audit already completed; no further Beds24 API calls."
+              exit 0
+            fi
             SCRIPT="$STATE/audit-$AUDIT_SHA.py"
             git -C "$SOURCE" show "$AUDIT_SHA:backend/scripts/audit_beds24_statuses.py" > "$SCRIPT"
             chmod 0600 "$SCRIPT"
@@ -88,6 +90,7 @@ jobs:
               --output "$STATE/statuses.csv" \
               --max-requests "$MAX_REQUESTS" \
               --delay "$DELAY_SECONDS" \
-              --start-after-id "$START_AFTER_ID"
+              --start-after-id "$START_AFTER_ID" \
+              --complete-marker "$STATE/statuses.csv.complete"
 
             echo "Audit results are stored on the Accounting server at $STATE/statuses.csv"
