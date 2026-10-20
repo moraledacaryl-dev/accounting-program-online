@@ -1,0 +1,56 @@
+name: Accounting Journal Linkage Triage
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - 'scripts/dr/journal-linkage-triage.py'
+      - '.github/workflows/accounting-journal-linkage-triage.yml'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: accounting-journal-linkage-triage
+  cancel-in-progress: false
+
+jobs:
+  read-only-triage:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - name: Run privacy-minimized read-only aggregate review on server
+        uses: appleboy/ssh-action@029f5b4aeeeb58fdfe1410a5d17f967dacf36262
+        with:
+          host: ${{ secrets.SERVER_HOST }}
+          username: ${{ secrets.SERVER_USER }}
+          key: ${{ secrets.SERVER_SSH_KEY }}
+          port: ${{ secrets.SERVER_PORT }}
+          envs: AUDIT_SHA
+          command_timeout: 7m
+          script: |
+            set -euo pipefail
+            umask 077
+            export PATH="/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin"
+            SOURCE=/opt/accounting-program-online
+            CURRENT=/opt/accounting-current
+            test -L "$CURRENT"
+            test -x "$CURRENT/backend/.venv/bin/python"
+            test -f /etc/hiddenoasis/accounting-backend.env
+            git -C "$SOURCE" fetch --no-tags origin main
+            git -C "$SOURCE" cat-file -e "$AUDIT_SHA^{commit}"
+            git -C "$SOURCE" merge-base --is-ancestor "$AUDIT_SHA" origin/main
+            echo "JOURNAL_LINKAGE_TRIAGE: active_release_sha=$(basename "$(readlink -f "$CURRENT")")"
+
+            SCRIPT_FILE="$(mktemp /tmp/accounting-journal-triage.XXXXXXXX.py)"
+            trap 'rm -f "$SCRIPT_FILE"' EXIT
+            git -C "$SOURCE" show "$AUDIT_SHA:scripts/dr/journal-linkage-triage.py" > "$SCRIPT_FILE"
+            test -s "$SCRIPT_FILE"
+            set -a
+            . /etc/hiddenoasis/accounting-backend.env
+            set +a
+            "$CURRENT/backend/.venv/bin/python" "$SCRIPT_FILE"
+            echo "JOURNAL LINKAGE READ-ONLY TRIAGE: PASS"
+        env:
+          AUDIT_SHA: ${{ github.sha }}
