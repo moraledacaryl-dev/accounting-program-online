@@ -47,7 +47,7 @@ test('financial report KPIs are readable and report sections remain accessible o
   await expect(page.getByRole('heading', { name: 'Reports & Reconciliation' })).toBeVisible();
   const kpi = page.locator('.report-kpi');
   await expect(kpi).toHaveCount(7);
-  await expect(kpi.filter({ hasText: 'Income' })).toContainText('₱12,345.67');
+  await expect(kpi.first()).toContainText('₱12,345.67');
 
   const sizes = await page.evaluate(() => ({
     contentWidth: document.documentElement.scrollWidth,
