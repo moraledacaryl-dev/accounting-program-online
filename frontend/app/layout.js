@@ -53,6 +53,7 @@ import './pass-51-record-detail-closure.css';
 import './pass-52-form-table-closure.css';
 import './pass-53-overlay-empty-state-closure.css';
 import './pass-54-responsive-edge-case-closure.css';
+import './pass-55-reports-clarity.css';
 import './visual-closure.css';
 import './pass-70-final-ux-wcag.css';
 import './sidebar.css';
