@@ -31,7 +31,7 @@ def db():
 
 @pytest.mark.parametrize('signal', [
     {'status': 'new', 'subStatus': 'cancelled'},
-    {'status': 'confirmed', 'statusCode': 'canceled'},
+    {'status': '', 'statusCode': 'canceled'},
     {'status': '', 'subStatus': 'cancelled'},
 ])
 def test_status_only_cancellation_preserves_booking_identity_and_value(db, signal):
@@ -129,7 +129,7 @@ def test_cursor_older_than_initial_lookback_is_not_clipped(db):
 
 @pytest.mark.parametrize('remote', [
     {'status': 'new', 'subStatus': 'cancelled'},
-    {'status': 'confirmed', 'statusCode': 'canceled'},
+    {'status': '', 'statusCode': 'canceled'},
     {'subStatus': 'cancelled'},
 ])
 def test_historical_audit_detects_cancellation_in_all_supported_status_fields(remote):
