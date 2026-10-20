@@ -1,0 +1,108 @@
+name: Beds24 cancellation backfill preflight
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - '.github/workflows/beds24-cancellation-preflight.yml'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  preflight:
+    if: github.ref == 'refs/heads/main'
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - name: Read-only safety assessment for two documented cancellation mismatches
+        uses: appleboy/ssh-action@029f5b4aeeeb58fdfe1410a5d17f967dacf36262
+        with:
+          host: ${{ secrets.SERVER_HOST }}
+          username: ${{ secrets.SERVER_USER }}
+          key: ${{ secrets.SERVER_SSH_KEY }}
+          port: ${{ secrets.SERVER_PORT }}
+          command_timeout: 5m
+          script: |
+            set -euo pipefail
+            CURRENT=/opt/accounting-current/backend
+            test -x "$CURRENT/.venv/bin/python"
+            test -f /etc/hiddenoasis/accounting-backend.env
+            set -a
+            . /etc/hiddenoasis/accounting-backend.env
+            set +a
+            cd "$CURRENT"
+            "$CURRENT/.venv/bin/python" - <<'PY'
+            import json
+            from datetime import datetime, timezone
+            from sqlalchemy import text
+            from app.db.database import SessionLocal
+            from app.models.entities import (
+                Beds24BookingMap, Beds24SyncLog, Booking, BookingFolio, Receivable, SystemSetting,
+            )
+            from app.services.beds24_service import load_beds24_settings
+
+            ids = ("86810780", "87953694")
+            db = SessionLocal()
+            try:
+                db.execute(text("SET TRANSACTION READ ONLY"))
+                settings = load_beds24_settings(db)
+                print("PREFLIGHT: beds24_enabled=" + str(bool(settings.get("enabled"))).lower())
+                print("PREFLIGHT: manual_sync_only=" + str(bool(settings.get("manual_sync_only"))).lower())
+                state = db.query(SystemSetting).filter(
+                    SystemSetting.key == "beds24_cancellation_reconcile_state"
+                ).one_or_none()
+                if state:
+                    try:
+                        timestamp = json.loads(state.value_json or "{}").get("last_success_utc")
+                    except (ValueError, TypeError):
+                        timestamp = None
+                    print("PREFLIGHT: reconciler_watermark_present=" + str(bool(timestamp)).lower())
+                    if timestamp:
+                        try:
+                            dt = datetime.fromisoformat(str(timestamp).replace("Z", "+00:00"))
+                            age = (datetime.now(timezone.utc) - dt.astimezone(timezone.utc)).total_seconds() / 3600
+                            print(f"PREFLIGHT: reconciler_watermark_age_hours={age:.1f}")
+                        except (ValueError, TypeError):
+                            print("PREFLIGHT: reconciler_watermark_age_hours=unreadable")
+                else:
+                    print("PREFLIGHT: reconciler_watermark_present=false")
+                log = db.query(Beds24SyncLog).filter(
+                    Beds24SyncLog.event_type == "cancellation_reconciliation"
+                ).order_by(Beds24SyncLog.id.desc()).first()
+                if log:
+                    print(f"PREFLIGHT: last_reconcile_log_status={log.status}")
+                    print(f"PREFLIGHT: last_reconcile_log_id={log.id}")
+                for bid in ids:
+                    bookings = db.query(Booking).filter(
+                        Booking.external_source == "beds24",
+                        Booking.external_booking_id == bid,
+                    ).all()
+                    maps = db.query(Beds24BookingMap).filter(
+                        Beds24BookingMap.beds24_booking_id == bid
+                    ).all()
+                    booking = bookings[0] if len(bookings) == 1 else None
+                    map_conflict = bool(booking and any(
+                        maprow.local_booking_id not in {None, booking.id} for maprow in maps
+                    ))
+                    receivables = [] if not booking else db.query(Receivable).filter(
+                        Receivable.source_type == "booking", Receivable.source_id == booking.id
+                    ).all()
+                    folio_count = 0 if not booking else db.query(BookingFolio).filter(
+                        BookingFolio.booking_id == booking.id
+                    ).count()
+                    print(
+                        f"PREFLIGHT_BOOKING: beds24_id={bid} local_matches={len(bookings)} "
+                        f"local_id={booking.id if booking else 'none'} "
+                        f"status={booking.status if booking else 'none'} "
+                        f"map_count={len(maps)} map_conflict={str(map_conflict).lower()} "
+                        f"folio_count={folio_count} receivable_count={len(receivables)} "
+                        f"positive_stay_balances={sum(1 for r in receivables if r.receivable_type == 'guest_balance' and float(r.balance_due or 0) > 0)} "
+                        f"collected_receivables={sum(1 for r in receivables if float(r.amount_collected or 0) > 0)}"
+                    )
+            finally:
+                db.rollback()
+                db.close()
+            PY
+            echo "PREFLIGHT: reconciliation_timer=$(systemctl is-active accounting-beds24-reconcile.timer 2>/dev/null || echo unavailable)"
