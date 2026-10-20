@@ -60,7 +60,7 @@ jobs:
                         latest[booking_id] = row
             def mapped_classification(row):
                 original = row["classification"]
-                if original not in {"MATCHED", "OTHER_STATUS_MISMATCH", "CANCELLATION_MISMATCH"}:
+                if original != "OTHER_STATUS_MISMATCH":
                     return original
                 raw_status = str(row.get("beds24_status") or "").strip().lower()
                 if not raw_status:
@@ -70,18 +70,18 @@ jobs:
                 if normalized == "cancelled" and local_status not in {"cancelled", "canceled"}:
                     return "CANCELLATION_MISMATCH"
                 if normalized == local_status or (normalized == "cancelled" and local_status in {"cancelled", "canceled"}):
-                    return "MATCHED"
+                    return "STATUS_ALIAS_MATCH"
                 return "OTHER_STATUS_MISMATCH"
 
             raw_counts = Counter(row["classification"] for row in latest.values())
             counts = Counter(mapped_classification(row) for row in latest.values())
             verified = sum(value for key, value in counts.items() if key != "API_ERROR")
-            issues = sum(value for key, value in counts.items() if key not in {"MATCHED", "API_ERROR"})
+            issues = sum(value for key, value in counts.items() if key not in {"MATCHED", "STATUS_ALIAS_MATCH", "API_ERROR"})
             timestamp = datetime.fromtimestamp(report.stat().st_mtime, tz=timezone.utc).isoformat()
             print("AUDIT_PROGRESS: report_updated_utc=" + timestamp)
             print(f"AUDIT_PROGRESS: distinct_rows={len(latest)} inspected={verified} needs_review={issues}")
             print(f"AUDIT_PROGRESS: raw_other_status_mismatch={raw_counts['OTHER_STATUS_MISMATCH']}")
-            print("AUDIT_PROGRESS: counts below use canonical Beds24-to-Accounting status mapping")
+            print("AUDIT_PROGRESS: STATUS_ALIAS_MATCH means a raw status alias matches; historical subStatus was not captured")
             for key in sorted(counts):
                 print(f"AUDIT_PROGRESS: {key}={counts[key]}")
             print("AUDIT_PROGRESS: completion_marker=" + str(Path(os.environ["MARKER"]).is_file()).lower())
