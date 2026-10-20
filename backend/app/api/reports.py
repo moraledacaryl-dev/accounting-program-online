@@ -186,7 +186,7 @@ def _is_cost_of_sales_account(row: dict) -> bool:
     """Use explicit chart classification or unambiguous account names, never a 5xxx guess."""
     words = ' '.join(str(row.get(field) or '') for field in ('account_type', 'account_subtype', 'account_name'))
     words = ' '.join(words.lower().replace('_', ' ').replace('-', ' ').split())
-    return any(phrase in words for phrase in (
+    return any(f' {phrase} ' in f' {words} ' for phrase in (
         'cost of goods sold', 'cost of sales', 'cost of services',
         'cogs', 'direct costs', 'direct cost of',
     ))
