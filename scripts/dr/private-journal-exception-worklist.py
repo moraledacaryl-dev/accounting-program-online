@@ -66,7 +66,11 @@ def write_worklist(rows, directory, *, timestamp=None):
             writer = csv.DictWriter(handle, fieldnames=FIELDS, extrasaction="ignore")
             writer.writeheader()
             for row in rows:
-                writer.writerow({key: protect_cell(row.get(key)) for key in FIELDS})
+                writer.writerow({
+                    key: (str(row.get(key)) if row.get(key) is not None else "")
+                    if key == "amount" else protect_cell(row.get(key))
+                    for key in FIELDS
+                })
             handle.flush()
             os.fsync(handle.fileno())
         os.replace(temp, destination)
