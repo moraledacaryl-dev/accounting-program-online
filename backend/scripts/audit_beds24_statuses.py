@@ -61,6 +61,8 @@ def run(output: Path, delay: float, max_requests: int, start_after_id: str = "")
             raise RuntimeError("Audit requires an existing access token; refresh is intentionally disabled")
         base_url = str(settings.get("api_base_url") or "https://beds24.com/api/v2").rstrip("/")
         count = 0
+        if start_after_id and start_after_id not in grouped:
+            raise ValueError(f"Start-after ID {start_after_id} is not present in Accounting booking links")
         start_reached = not start_after_id
         with output.open("a", newline="") as file:
             writer = csv.DictWriter(file, fieldnames=FIELDS)
@@ -130,6 +132,7 @@ def run(output: Path, delay: float, max_requests: int, start_after_id: str = "")
         for key, value in sorted(counts.items()):
             print(f"{key}: {value}")
         print(f"Report: {output}")
+        print(f"Last processed Beds24 ID: {next(reversed(latest)) if latest else 'none'}")
         return 0 if not counts["API_ERROR"] else 2
     finally:
         db.rollback()
