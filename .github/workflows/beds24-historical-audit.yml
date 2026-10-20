@@ -1,6 +1,12 @@
 name: Beds24 historical status audit
 
 on:
+  # Run one conservative read-only batch when the audit is introduced on main.
+  push:
+    branches: [main]
+    paths:
+      - 'backend/scripts/audit_beds24_statuses.py'
+      - '.github/workflows/beds24-historical-audit.yml'
   workflow_dispatch:
     inputs:
       max_requests:
@@ -37,9 +43,9 @@ jobs:
         uses: appleboy/ssh-action@029f5b4aeeeb58fdfe1410a5d17f967dacf36262
         env:
           AUDIT_SHA: ${{ github.sha }}
-          MAX_REQUESTS: ${{ inputs.max_requests }}
-          DELAY_SECONDS: ${{ inputs.delay_seconds }}
-          START_AFTER_ID: ${{ inputs.start_after_id }}
+          MAX_REQUESTS: ${{ github.event_name == 'push' && '25' || inputs.max_requests }}
+          DELAY_SECONDS: ${{ github.event_name == 'push' && '3' || inputs.delay_seconds }}
+          START_AFTER_ID: ${{ inputs.start_after_id || '' }}
         with:
           host: ${{ secrets.SERVER_HOST }}
           username: ${{ secrets.SERVER_USER }}
