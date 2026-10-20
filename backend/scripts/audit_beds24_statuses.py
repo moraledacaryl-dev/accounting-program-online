@@ -32,7 +32,7 @@ def classify_booking(local, matches):
     return "OTHER_STATUS_MISMATCH", remote_status
 
 
-def run(output: Path, delay: float, max_requests: int):
+def run(output: Path, delay: float, max_requests: int, start_after_id: str = ""):
     output.parent.mkdir(parents=True, exist_ok=True)
     db = SessionLocal()
     try:
@@ -61,11 +61,16 @@ def run(output: Path, delay: float, max_requests: int):
             raise RuntimeError("Audit requires an existing access token; refresh is intentionally disabled")
         base_url = str(settings.get("api_base_url") or "https://beds24.com/api/v2").rstrip("/")
         count = 0
+        start_reached = not start_after_id
         with output.open("a", newline="") as file:
             writer = csv.DictWriter(file, fieldnames=FIELDS)
             if file.tell() == 0:
                 writer.writeheader()
             for bid, local in grouped.items():
+                if not start_reached:
+                    if bid == start_after_id:
+                        start_reached = True
+                    continue
                 if bid in completed:
                     continue
                 if count >= max_requests:
@@ -135,6 +140,7 @@ if __name__ == "__main__":
     parser = argparse.ArgumentParser()
     parser.add_argument("--output", type=Path, default=Path("beds24-status-audit.csv"))
     parser.add_argument("--delay", type=float, default=2.0)
-    parser.add_argument("--max-requests", type=int, default=1600)
+    parser.add_argument("--max-requests", type=int, default=100)
+    parser.add_argument("--start-after-id", type=str, default="", help="Resume from the next Beds24 ID after this ID")
     args = parser.parse_args()
-    raise SystemExit(run(args.output, max(0.5, args.delay), max(1, args.max_requests)))
+    raise SystemExit(run(args.output, max(0.5, args.delay), max(1, args.max_requests), args.start_after_id))
