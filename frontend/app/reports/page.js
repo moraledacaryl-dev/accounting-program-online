@@ -2,7 +2,7 @@
 import Link from 'next/link';
 import { businessDateISO } from '../../lib/businessDate';
 
-import { useEffect, useMemo, useState } from 'react';
+import { useEffect, useMemo, useRef, useState } from 'react';
 import {
   createSettlement,
   fetchAgingReport,
@@ -70,6 +70,9 @@ export default function ReportsPage() {
   const [statements, setStatements] = useState(null);
   const [aging, setAging] = useState(null);
   const [settlements, setSettlements] = useState([]);
+  const [savingSettlement, setSavingSettlement] = useState(false);
+  const submissionInFlight = useRef(false);
+  const lastSettlementSubmission = useRef(null);
   const [notice, setNotice] = useState('');
   const [error, setError] = useState('');
 
@@ -147,32 +150,46 @@ export default function ReportsPage() {
 
   async function submitSettlement(e) {
     e.preventDefault();
+    if (submissionInFlight.current) return;
+    submissionInFlight.current = true;
+    setSavingSettlement(true);
     setError('');
     setNotice('');
+    const payload = {
+      record_id: Number(settlementForm.record_id),
+      settlement_date: settlementForm.settlement_date || null,
+      amount: Number(settlementForm.amount || 0),
+      payment_method: settlementForm.payment_method || null,
+      reference_no: settlementForm.reference_no || null,
+      notes: settlementForm.notes || null,
+    };
+    const fingerprint = JSON.stringify(payload);
+    const previous = lastSettlementSubmission.current;
+    const idempotencyKey = previous?.fingerprint === fingerprint
+      ? previous.key
+      : crypto.randomUUID();
+    lastSettlementSubmission.current = { fingerprint, key: idempotencyKey };
     try {
-      await createSettlement({
-        record_id: Number(settlementForm.record_id),
-        settlement_date: settlementForm.settlement_date || null,
-        amount: Number(settlementForm.amount || 0),
-        payment_method: settlementForm.payment_method || null,
-        reference_no: settlementForm.reference_no || null,
-        notes: settlementForm.notes || null,
-      });
+      const result = await createSettlement(payload, { idempotencyKey });
+      lastSettlementSubmission.current = null;
       setSettlementForm((prev) => ({
         ...prev,
         amount: '',
         reference_no: '',
         notes: '',
       }));
+      setNotice(result?.replayed ? 'Previous settlement request confirmed; no duplicate recorded.' : 'Settlement evidence saved. Cash and journal posting must be verified separately.');
       await load();
-      setNotice('Settlement saved.');
     } catch (e2) {
-      setError(e2.message || 'Failed to save settlement.');
+      setError(e2.message || 'Failed to save settlement. Retrying with the same details will use the same request key.');
+    } finally {
+      submissionInFlight.current = false;
+      setSavingSettlement(false);
     }
   }
 
   function isSettlementSubmittable() {
-    return !!(Number(settlementForm.record_id || 0) > 0 && Number(settlementForm.amount || 0) > 0);
+    return !savingSettlement && !!(Number(settlementForm.record_id || 0) > 0 && Number(settlementForm.amount || 0) > 0);
   }
 
   return (
@@ -647,7 +664,8 @@ export default function ReportsPage() {
 
       <div className="grid">
         <section className="section">
-          <h2>Add Settlement</h2>
+          <h2>Add Settlement Evidence</h2>
+          <p className="muted">This adjusts an approved credit record's settlement history only. It does not transfer cash or generate a journal; verify the payment separately in the money ledger.</p>
           <form onSubmit={submitSettlement} onKeyDown={(event) => shouldPreventEnterSubmit(event, isSettlementSubmittable)}>
             <div className="form-grid">
               <label>
@@ -682,7 +700,7 @@ export default function ReportsPage() {
               Notes
               <textarea value={settlementForm.notes} onChange={(e) => setSettlementForm((f) => ({ ...f, notes: e.target.value }))} />
             </label>
-            <button type="submit">Save Settlement</button>
+            <button type="submit" disabled={!isSettlementSubmittable()}>{savingSettlement ? 'Saving…' : 'Save Settlement Evidence'}</button>
           </form>
         </section>
 

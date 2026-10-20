@@ -227,7 +227,7 @@ export const fetchFinancialStatements = ({ startDate = '', endDate = '', asOfDat
 };
 export const fetchAgingReport = (asOfDate = '') => request(`/reports/ar-ap-aging${asOfDate ? `?as_of_date=${encodeURIComponent(asOfDate)}` : ''}`);
 export const fetchSettlements = ({ recordId = null, limit = 200 } = {}) => request(`/reports/settlements?limit=${encodeURIComponent(limit)}${recordId ? `&record_id=${encodeURIComponent(recordId)}` : ''}`);
-export const createSettlement = (payload) => request('/reports/settlements', { method: 'POST', body: JSON.stringify(payload) });
+export const createSettlement = (payload, { idempotencyKey } = {}) => request('/reports/settlements', { method: 'POST', headers: idempotencyKey ? { 'Idempotency-Key': idempotencyKey } : {}, body: JSON.stringify(payload) });
 
 export const fetchEvents = (params = {}) => request(`/events/${Object.keys(params).length ? `?${new URLSearchParams(Object.entries(params).filter(([, v]) => v !== '' && v !== null && typeof v !== 'undefined')).toString()}` : ''}`);
 export const createEvent = (payload) => request('/events/', { method: 'POST', body: JSON.stringify(payload) });
