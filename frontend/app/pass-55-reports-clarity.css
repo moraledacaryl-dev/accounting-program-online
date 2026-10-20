@@ -48,7 +48,7 @@
 }
 .main[data-route="/reports"] .report-kpi-grid {
   display: grid;
-  grid-template-columns: repeat(4, minmax(0, 1fr));
+  grid-template-columns: repeat(auto-fit, minmax(min(100%, 150px), 1fr));
   gap: 10px;
 }
 .main[data-route="/reports"] .report-kpi {
@@ -75,9 +75,9 @@
   letter-spacing: -.025em;
   font-variant-numeric: tabular-nums;
   line-height: 1.22;
-  white-space: nowrap;
-  overflow: hidden;
-  text-overflow: ellipsis;
+  white-space: normal;
+  overflow-wrap: anywhere;
+  text-overflow: clip;
 }
 .main[data-route="/reports"] .section .dense-table {
   width: 100%;
@@ -103,6 +103,9 @@
     grid-column: 1 / -1;
   }
   .main[data-route="/reports"] > div > .section:first-child > .tabs {
+    display: flex;
+    flex-wrap: nowrap;
+    white-space: nowrap;
     gap: 6px;
     padding: 4px;
     scroll-padding-inline: 4px;
