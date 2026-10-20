@@ -290,16 +290,22 @@ def _cash_activity_classification(tx: MoneyTransaction) -> str:
         'room', 'rooms', 'hotel', 'hospitality', 'reservation', 'reservations',
         'payroll', 'staff payroll', 'supplier', 'suppliers', 'procurement',
         'accounts payable', 'accounts receivable',
-    } or tx.receivable_id or tx.payable_id:
+    }:
         return 'operating'
     return 'unclassified'
 
 
 def _build_cash_flow_statement(db: Session, start_date: str | None, end_date: str | None) -> dict:
-    tx_query = db.query(MoneyTransaction).filter(
+    # Keep the historical posted original together with its later reversing
+    # transaction. Excluding the original would invent a net cash outflow.
+    tx_query = db.query(MoneyTransaction).filter(or_(
         MoneyTransaction.status == 'posted',
-        MoneyTransaction.is_reversed == False,
-    )
+        (
+            (MoneyTransaction.status == 'reversed')
+            & MoneyTransaction.is_reversed.is_(True)
+            & MoneyTransaction.posted_at.isnot(None)
+        ),
+    ))
     if start_date:
         tx_query = tx_query.filter(MoneyTransaction.transaction_date >= start_date)
     if end_date:
