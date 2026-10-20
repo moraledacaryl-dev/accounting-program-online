@@ -84,5 +84,31 @@ jobs:
             print("AUDIT_PROGRESS: STATUS_ALIAS_MATCH means a raw status alias matches; historical subStatus was not captured")
             for key in sorted(counts):
                 print(f"AUDIT_PROGRESS: {key}={counts[key]}")
+            # Only internal booking IDs and constrained status tokens; no guest
+            # identities or financial values are included in Actions logs.
+            def safe_status(value):
+                value = str(value or "").strip().lower()
+                return "".join(ch for ch in value if ch.isalnum() or ch in "_-")[:32] or "none"
+
+            exceptions = [
+                row for row in latest.values()
+                if mapped_classification(row) in {"OTHER_STATUS_MISMATCH", "CANCELLATION_MISMATCH"}
+            ]
+            pairs = Counter(
+                (safe_status(row.get("accounting_status")), safe_status(row.get("beds24_status")))
+                for row in exceptions
+            )
+            for (local, remote), value in sorted(pairs.items()):
+                print(f"AUDIT_EXCEPTION_PAIR: accounting={local} beds24={remote} count={value}")
+            for row in exceptions[:25]:
+                print(
+                    f"AUDIT_EXCEPTION: beds24_id={row['beds24_booking_id']} "
+                    f"accounting_id={row.get('accounting_booking_id')} "
+                    f"classification={mapped_classification(row)} "
+                    f"accounting_status={safe_status(row.get('accounting_status'))} "
+                    f"beds24_status={safe_status(row.get('beds24_status'))}"
+                )
+            if len(exceptions) > 25:
+                print(f"AUDIT_EXCEPTION: further_count={len(exceptions) - 25}")
             print("AUDIT_PROGRESS: completion_marker=" + str(Path(os.environ["MARKER"]).is_file()).lower())
             PY
