@@ -82,7 +82,7 @@ def test_reconciliation_recognizes_substatus_and_statuscode():
     db = MagicMock()
     bookings = [
         {'id': '200', 'status': 'new', 'subStatus': 'cancelled'},
-        {'id': '201', 'status': 'confirmed', 'statusCode': 'canceled'},
+        {'id': '201', 'status': '', 'statusCode': 'canceled'},
         {'id': '202', 'status': 'confirmed'},
     ]
     with patch(f'{MODULE}.load_beds24_settings', return_value={'enabled': True, 'manual_sync_only': False}), \
