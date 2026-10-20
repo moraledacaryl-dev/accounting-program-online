@@ -1,0 +1,60 @@
+name: Accounting Private Journal Exception Worklist
+
+on:
+  workflow_dispatch:
+    inputs:
+      confirmation:
+        description: 'Enter EXPORT-PRIVATE to generate a root-only worklist on the server'
+        required: true
+        type: string
+
+permissions:
+  contents: read
+
+concurrency:
+  group: accounting-private-exception-worklist
+  cancel-in-progress: false
+
+jobs:
+  export:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - name: Export server-private journal worklist after explicit confirmation
+        uses: appleboy/ssh-action@029f5b4aeeeb58fdfe1410a5d17f967dacf36262
+        with:
+          host: ${{ secrets.SERVER_HOST }}
+          username: ${{ secrets.SERVER_USER }}
+          key: ${{ secrets.SERVER_SSH_KEY }}
+          port: ${{ secrets.SERVER_PORT }}
+          envs: AUDIT_SHA,CONFIRMATION
+          command_timeout: 7m
+          script: |
+            set -euo pipefail
+            umask 077
+            export PATH="/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin"
+            if [ "$CONFIRMATION" != "EXPORT-PRIVATE" ]; then
+              echo "Refusing private export: exact EXPORT-PRIVATE confirmation required." >&2
+              exit 2
+            fi
+            SOURCE=/opt/accounting-program-online
+            CURRENT=/opt/accounting-current
+            test -L "$CURRENT"
+            test -x "$CURRENT/backend/.venv/bin/python"
+            test -f /etc/hiddenoasis/accounting-backend.env
+            git -C "$SOURCE" fetch --no-tags origin main
+            git -C "$SOURCE" cat-file -e "$AUDIT_SHA^{commit}"
+            git -C "$SOURCE" merge-base --is-ancestor "$AUDIT_SHA" origin/main
+
+            SCRIPT_FILE="$(mktemp /tmp/accounting-private-exceptions.XXXXXXXX.py)"
+            trap 'rm -f "$SCRIPT_FILE"' EXIT
+            git -C "$SOURCE" show "$AUDIT_SHA:scripts/dr/private-journal-exception-worklist.py" > "$SCRIPT_FILE"
+            test -s "$SCRIPT_FILE"
+            set -a
+            . /etc/hiddenoasis/accounting-backend.env
+            set +a
+            "$CURRENT/backend/.venv/bin/python" "$SCRIPT_FILE"
+            echo "PRIVATE EXCEPTION WORKLIST EXPORT: PASS"
+        env:
+          AUDIT_SHA: ${{ github.sha }}
+          CONFIRMATION: ${{ inputs.confirmation }}
