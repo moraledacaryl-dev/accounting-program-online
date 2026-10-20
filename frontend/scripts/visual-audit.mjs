@@ -17,6 +17,15 @@ const context = await browser.newContext({
 const page = await context.newPage();
 
 const consoleErrors = [];
+const expectedUnauthenticatedChecks = [];
+page.on('response', (response) => {
+  if (response.status() !== 401) return;
+  const requestPath = new URL(response.url()).pathname;
+  const currentPath = new URL(page.url()).pathname;
+  if (requestPath === '/api/auth/me' && currentPath === '/login') {
+    expectedUnauthenticatedChecks.push({ requestPath, currentPath });
+  }
+});
 page.on('console', (msg) => {
   if (msg.type() === 'error') consoleErrors.push({ url: page.url(), text: msg.text() });
 });
@@ -140,6 +149,7 @@ for (const [name, route] of [
   ['cashflow-accounts', '/cashflow/accounts'],
   ['cashflow-ledger', '/cashflow/ledger'],
   ...(firstAccountId ? [['cashflow-account-history', `/cashflow/${firstAccountId}`]] : []),
+  ['reports', '/reports'],
 ]) {
   let status = 'ok';
   let error = '';
@@ -155,19 +165,52 @@ for (const [name, route] of [
   manifest.push({ name, route, viewport: '390x844', file, status, error, title: await page.title() });
 }
 
+// Report tabs need their own mobile screenshots, not just the overview.
+await page.goto(BASE + '/reports', { waitUntil: 'networkidle', timeout: 30000 });
+for (const [view, label] of [
+  ['statements', 'Financial Statements'],
+  ['finance', 'AR, AP & Settlements'],
+  ['payroll', 'Payroll & BIR'],
+]) {
+  await page.getByRole('button', { name: label, exact: true }).click();
+  await page.waitForTimeout(150);
+  const file = `reports-${view}--mobile.png`;
+  await page.screenshot({ path: path.join(OUT, file), fullPage: true });
+  manifest.push({ name: `reports-${view}`, route: '/reports', viewport: '390x844', file, status: 'ok', state: true, title: await page.title() });
+}
+
+// Chromium emits a generic console error for expected 401 /auth/me probes on
+// the public login screen. Match those known responses 1:1, and fail the audit
+// on every other error instead of quietly passing.
+let expectedRemaining = expectedUnauthenticatedChecks.length;
+const unexpectedConsoleErrors = consoleErrors.filter((error) => {
+  if (expectedRemaining > 0 && new URL(error.url).pathname === '/login'
+    && /^Failed to load resource:.*401 \(Unauthorized\)$/.test(error.text)) {
+    expectedRemaining -= 1;
+    return false;
+  }
+  return true;
+});
+
 await fs.writeFile(path.join(OUT, 'manifest.json'), JSON.stringify({
   generated_at: new Date().toISOString(),
   base_url: BASE,
   account_count: accounts?.length || 0,
   screenshots: manifest,
-  console_errors: consoleErrors,
+  console_errors: unexpectedConsoleErrors,
+  expected_unauthenticated_checks: expectedUnauthenticatedChecks.length,
+  raw_browser_error_count: consoleErrors.length,
 }, null, 2));
 
 await browser.close();
 
 const failed = manifest.filter((item) => item.status !== 'ok');
 console.log(`Captured ${manifest.length} screenshots to ${OUT}`);
-if (consoleErrors.length) console.log(`Observed ${consoleErrors.length} browser console/page errors; see manifest.json`);
+console.log(`Expected unauthenticated login checks: ${expectedUnauthenticatedChecks.length}; unexpected browser errors: ${unexpectedConsoleErrors.length}`);
+if (unexpectedConsoleErrors.length) {
+  console.error(`Unexpected browser errors on: ${[...new Set(unexpectedConsoleErrors.map((row) => new URL(row.url).pathname))].join(', ')}`);
+  process.exitCode = 1;
+}
 if (failed.length) {
   console.error(`${failed.length} route captures reported navigation errors`);
   process.exitCode = 1;
