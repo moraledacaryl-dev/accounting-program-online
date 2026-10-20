@@ -100,7 +100,7 @@ def _account_family(account_code: str | None, account_type: str | None = None) -
             return 'equity'
         if 'revenue' in raw_type or 'income' in raw_type or 'sales' in raw_type:
             return 'revenue'
-        if 'expense' in raw_type or 'cost' in raw_type:
+        if 'expense' in raw_type or 'cost' in raw_type or raw_type in {'cogs', 'direct costs'}:
             return 'expenses'
     code = (account_code or '').strip()
     if code.startswith('1'):
@@ -153,6 +153,7 @@ def _group_lines(rows: list[tuple[JournalEntry, JournalLine]], chart_map: dict[s
                 'account_code': line.account_code,
                 'account_name': (account.name if account else line.account_name) or 'Unmapped',
                 'account_type': account.account_type if account else None,
+                'account_subtype': account.subtype if account else None,
                 'family': _account_family(line.account_code, account.account_type if account else None),
                 'debit': Decimal(0),
                 'credit': Decimal(0),
@@ -181,19 +182,38 @@ def _sum_family(items: list[dict], family: str) -> float:
     return _round_money(sum(float(row.get('balance') or 0) for row in items if row.get('family') == family))
 
 
+def _is_cost_of_sales_account(row: dict) -> bool:
+    """Use explicit chart classification or unambiguous account names, never a 5xxx guess."""
+    words = ' '.join(str(row.get(field) or '') for field in ('account_type', 'account_subtype', 'account_name'))
+    words = ' '.join(words.lower().replace('_', ' ').replace('-', ' ').split())
+    return any(phrase in words for phrase in (
+        'cost of goods sold', 'cost of sales', 'cost of services',
+        'cogs', 'direct costs', 'direct cost of',
+    ))
+
+
 def _build_profit_and_loss(period_items: list[dict]) -> dict:
     revenue = [row for row in period_items if row.get('family') == 'revenue' and abs(money(row.get('balance'))) > 0]
     expenses = [row for row in period_items if row.get('family') == 'expenses' and abs(money(row.get('balance'))) > 0]
-    revenue_total = _round_money(sum(float(row['balance']) for row in revenue))
-    expense_total = _round_money(sum(float(row['balance']) for row in expenses))
+    cost_of_sales = [row for row in expenses if _is_cost_of_sales_account(row)]
+    operating_expenses = [row for row in expenses if not _is_cost_of_sales_account(row)]
+    revenue_amount = sum((money(row['balance']) for row in revenue), Decimal(0))
+    cogs_amount = sum((money(row['balance']) for row in cost_of_sales), Decimal(0))
+    operating_amount = sum((money(row['balance']) for row in operating_expenses), Decimal(0))
+    expense_amount = cogs_amount + operating_amount
     return {
         'revenue': revenue,
-        'expenses': expenses,
+        'expenses': expenses,  # Compatibility: all expenses, including classified COGS.
+        'cost_of_sales': cost_of_sales,
+        'operating_expenses': operating_expenses,
+        'cost_of_sales_identified': bool(cost_of_sales),
         'totals': {
-            'revenue': revenue_total,
-            'expenses': expense_total,
-            'gross_profit': revenue_total,
-            'net_income': _round_money(revenue_total - expense_total),
+            'revenue': _round_money(revenue_amount),
+            'cost_of_sales': _round_money(cogs_amount),
+            'operating_expenses': _round_money(operating_amount),
+            'expenses': _round_money(expense_amount),
+            'gross_profit': _round_money(revenue_amount - cogs_amount),
+            'net_income': _round_money(revenue_amount - expense_amount),
         },
     }
 
@@ -245,6 +265,36 @@ def _build_trial_balance(as_of_items: list[dict]) -> dict:
     }
 
 
+def _cash_activity_classification(tx: MoneyTransaction) -> str:
+    """Classify only when source metadata gives reliable economic purpose.
+
+    Unknown finance movements remain unclassified rather than pretending to be
+    operating cash flows. This is a management movement schedule, not a
+    standards-compliant statement of cash flows.
+    """
+    module = _norm(tx.module).replace('_', ' ').replace('-', ' ')
+    category = ' '.join(_norm(getattr(tx, key, None)) for key in ('category', 'subcategory', 'level3_item'))
+    description = ' '.join((module, category)).replace('_', ' ').replace('-', ' ')
+    if any(label in description for label in (
+        'loan proceeds', 'loan repayment', 'loan principal', 'capital injection',
+        'owner contribution', 'owner withdrawal', 'dividend', 'financing activity',
+    )):
+        return 'financing'
+    if any(label in description for label in (
+        'fixed asset', 'asset purchase', 'asset disposal', 'capital expenditure',
+        'equipment purchase', 'investing activity',
+    )):
+        return 'investing'
+    if module in {
+        'events', 'event', 'restaurant', 'pos', 'cafe', 'bar',
+        'room', 'rooms', 'hotel', 'hospitality', 'reservation', 'reservations',
+        'payroll', 'staff payroll', 'supplier', 'suppliers', 'procurement',
+        'accounts payable', 'accounts receivable',
+    } or tx.receivable_id or tx.payable_id:
+        return 'operating'
+    return 'unclassified'
+
+
 def _build_cash_flow_statement(db: Session, start_date: str | None, end_date: str | None) -> dict:
     tx_query = db.query(MoneyTransaction).filter(
         MoneyTransaction.status == 'posted',
@@ -256,18 +306,23 @@ def _build_cash_flow_statement(db: Session, start_date: str | None, end_date: st
         tx_query = tx_query.filter(MoneyTransaction.transaction_date <= end_date)
     transactions = tx_query.order_by(MoneyTransaction.transaction_date.asc(), MoneyTransaction.id.asc()).all()
 
-    grouped: dict[str, dict] = {}
+    grouped = {}
+    classification_counts = {label: 0 for label in ('operating', 'investing', 'financing', 'unclassified')}
     for tx in transactions:
+        classification = _cash_activity_classification(tx)
+        classification_counts[classification] += 1
         activity = (tx.module or 'finance').strip() or 'finance'
         category = (tx.category or 'Uncategorized').strip() or 'Uncategorized'
-        key = f'{activity}::{category}'
-        row = grouped.setdefault(key, {'activity': activity, 'category': category, 'cash_in': 0.0, 'cash_out': 0.0, 'net': 0.0})
-        amount = float(tx.amount or 0)
+        key = (classification, activity, category)
+        row = grouped.setdefault(key, {
+            'classification': classification, 'activity': activity, 'category': category,
+            'cash_in': Decimal(0), 'cash_out': Decimal(0),
+        })
+        amount = money(tx.amount)
         if _norm(tx.direction) == 'in':
             row['cash_in'] += amount
         else:
             row['cash_out'] += amount
-        row['net'] = row['cash_in'] - row['cash_out']
 
     transfer_query = db.query(AccountTransfer).filter(AccountTransfer.status == 'posted', AccountTransfer.is_reversed == False)
     if start_date:
@@ -276,29 +331,35 @@ def _build_cash_flow_statement(db: Session, start_date: str | None, end_date: st
         transfer_query = transfer_query.filter(AccountTransfer.transfer_date <= end_date)
     transfers = transfer_query.all()
 
-    lines = [
-        {
-            **row,
-            'cash_in': _round_money(row['cash_in']),
-            'cash_out': _round_money(row['cash_out']),
-            'net': _round_money(row['net']),
-        }
-        for row in sorted(grouped.values(), key=lambda item: (item['activity'], item['category']))
-    ]
-    cash_in = _round_money(sum(float(row['cash_in']) for row in lines))
-    cash_out = _round_money(sum(float(row['cash_out']) for row in lines))
+    schedules = {name: [] for name in classification_counts}
+    total_in = Decimal(0)
+    total_out = Decimal(0)
+    for row in sorted(grouped.values(), key=lambda item: (item['classification'], item['activity'], item['category'])):
+        cash_in, cash_out = row['cash_in'], row['cash_out']
+        total_in += cash_in
+        total_out += cash_out
+        schedules[row['classification']].append({
+            'activity': row['activity'], 'category': row['category'],
+            'cash_in': _round_money(cash_in), 'cash_out': _round_money(cash_out),
+            'net': _round_money(cash_in - cash_out),
+        })
     return {
-        'method': 'direct',
-        'operating_activities': lines,
+        'method': 'management_direct_cash_movements',
+        'classification_status': 'requires_review' if classification_counts['unclassified'] else 'classified_by_source_metadata',
+        'classification_counts': classification_counts,
+        'operating_activities': schedules['operating'],
+        'investing_activities': schedules['investing'],
+        'financing_activities': schedules['financing'],
+        'unclassified_activities': schedules['unclassified'],
         'transfers': {
             'count': len(transfers),
-            'gross_transfer_amount': _round_money(sum(float(row.amount or 0) for row in transfers)),
+            'gross_transfer_amount': _round_money(sum((money(row.amount) for row in transfers), Decimal(0))),
             'net_cash_effect': 0,
         },
         'totals': {
-            'cash_in': cash_in,
-            'cash_out': cash_out,
-            'net_cash_flow': _round_money(cash_in - cash_out),
+            'cash_in': _round_money(total_in),
+            'cash_out': _round_money(total_out),
+            'net_cash_flow': _round_money(total_in - total_out),
         },
     }
 
@@ -394,42 +455,53 @@ def _build_financial_statements(db: Session, start_date: str | None = None, end_
         },
         'notes': [
             'Profit & Loss, Balance Sheet, and Trial Balance are generated from posted journal entries.',
-            'Cash Flow uses posted money-in and money-out transactions, with transfers shown separately at zero net cash effect.',
+            'Cash movements are a management schedule, classified conservatively from transaction metadata, not a complete standards-compliant cash flow statement; review unclassified items. Internal transfers are shown separately at zero net cash effect.',
             'Operational supplement shows live subledger values for cash accounts, receivables, payables, inventory, and assets where legacy rows may not yet be fully journalized.',
         ],
     }
 
 
-def _sum_settlements_by_record(db: Session, record_ids: list[int]) -> dict[int, float]:
+def _sum_settlements_by_record(db: Session, record_ids: list[int], *, as_of_date: str | None = None) -> dict[int, Decimal]:
     if not record_ids:
         return {}
-    rows = (
-        db.query(RecordSettlement.record_id, func.coalesce(func.sum(RecordSettlement.amount), 0))
-        .filter(RecordSettlement.record_id.in_(record_ids))
-        .group_by(RecordSettlement.record_id)
-        .all()
-    )
-    return {int(row[0]): float(row[1] or 0) for row in rows}
+    query = db.query(
+        RecordSettlement.record_id, func.coalesce(func.sum(RecordSettlement.amount), 0),
+    ).filter(RecordSettlement.record_id.in_(record_ids))
+    if as_of_date:
+        # Undated legacy settlements cannot be assigned to a historical cutoff.
+        query = query.filter(RecordSettlement.settlement_date <= as_of_date)
+    rows = query.group_by(RecordSettlement.record_id).all()
+    return {int(row[0]): money(row[1]) for row in rows}
 
 
 def _build_aging_report(db: Session, as_of_date: str | None = None):
+    if as_of_date and (_parse_iso_date(as_of_date) is None or len(as_of_date) != 10):
+        raise ValueError('as_of_date must be a valid YYYY-MM-DD date')
     as_of = _parse_iso_date(as_of_date) or datetime.strptime(business_today(), '%Y-%m-%d')
     as_of_str = as_of.strftime('%Y-%m-%d')
 
-    rows = db.query(Record).filter(Record.workflow_status == 'approved').order_by(Record.id.asc()).all()
+    rows = (
+        db.query(Record)
+        .filter(
+            Record.workflow_status == 'approved',
+            Record.transaction_date.isnot(None),
+            Record.transaction_date <= as_of_str,
+        )
+        .order_by(Record.id.asc())
+        .all()
+    )
     candidate_rows = [
         row for row in rows
         if _is_on_account(row.payment_method) and _norm(row.direction) in {'income', 'expense', 'asset', 'liability'}
     ]
-
-    settlement_map = _sum_settlements_by_record(db, [int(row.id) for row in candidate_rows])
-
-    receivables = []
-    payables = []
+    settlement_map = _sum_settlements_by_record(
+        db, [int(row.id) for row in candidate_rows], as_of_date=as_of_str,
+    )
+    receivables, payables = [], []
     for row in candidate_rows:
-        base_amount = abs(float(row.amount or 0))
-        settled = float(settlement_map.get(int(row.id), 0))
-        outstanding = round(base_amount - settled, 4)
+        base_amount = abs(money(row.amount))
+        settled = settlement_map.get(int(row.id), Decimal(0))
+        outstanding = money(base_amount - settled)
         if outstanding <= 0:
             continue
 
@@ -444,9 +516,9 @@ def _build_aging_report(db: Session, as_of_date: str | None = None):
             'reference_no': row.document_ref,
             'transaction_date': row.transaction_date,
             'due_date': row.due_date,
-            'original_amount': round(base_amount, 4),
-            'settled_amount': round(settled, 4),
-            'outstanding_amount': round(outstanding, 4),
+            'original_amount': _round_money(base_amount),
+            'settled_amount': _round_money(settled),
+            'outstanding_amount': _round_money(outstanding),
             'payment_method': row.payment_method,
             'age_days': age_days,
             'bucket': _age_bucket(age_days),
@@ -457,13 +529,13 @@ def _build_aging_report(db: Session, as_of_date: str | None = None):
             payables.append(item)
 
     def summarize(items: list[dict]):
-        buckets = {'0-30': 0.0, '31-60': 0.0, '61-90': 0.0, '91+': 0.0}
+        buckets = {name: Decimal(0) for name in ('0-30', '31-60', '61-90', '91+')}
         for item in items:
-            buckets[item['bucket']] += float(item['outstanding_amount'] or 0)
+            buckets[item['bucket']] += money(item['outstanding_amount'])
         return {
             'count': len(items),
-            'total_outstanding': round(sum(float(x['outstanding_amount'] or 0) for x in items), 4),
-            'bucket_totals': {k: round(v, 4) for k, v in buckets.items()},
+            'total_outstanding': _round_money(sum((money(x['outstanding_amount']) for x in items), Decimal(0))),
+            'bucket_totals': {k: _round_money(v) for k, v in buckets.items()},
         }
 
     receivables_sorted = sorted(receivables, key=lambda x: (-int(x['age_days']), -float(x['outstanding_amount'] or 0)))
@@ -471,14 +543,13 @@ def _build_aging_report(db: Session, as_of_date: str | None = None):
 
     return {
         'as_of_date': as_of_str,
-        'receivables': {
-            **summarize(receivables_sorted),
-            'items': receivables_sorted,
-        },
-        'payables': {
-            **summarize(payables_sorted),
-            'items': payables_sorted,
-        },
+        'historical_basis': 'current_approval_state_with_dated_source_and_settlements',
+        'limitations': [
+            'Undated source records and settlements are excluded from historical cutoffs.',
+            'Historical approval transitions cannot be reconstructed from current workflow status.',
+        ],
+        'receivables': {**summarize(receivables_sorted), 'items': receivables_sorted},
+        'payables': {**summarize(payables_sorted), 'items': payables_sorted},
     }
 
 
