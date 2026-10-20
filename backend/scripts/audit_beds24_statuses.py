@@ -13,6 +13,25 @@ FIELDS = ["beds24_booking_id", "accounting_booking_id", "accounting_status", "be
 CANCELLED = {"cancelled", "canceled"}
 
 
+def classify_booking(local, matches):
+    """Classify one Beds24 ID without changing accounting records."""
+    if len(local) > 1:
+        return "DUPLICATE_LINK", ""
+    if not matches:
+        return "MISSING_IN_BEDS24", ""
+    if len(matches) > 1:
+        return "DUPLICATE_REMOTE", ""
+    remote_status = str(matches[0].get("status") or "").strip().lower()
+    local_status = str(local[0]["status"] or "").strip().lower()
+    if not remote_status:
+        return "API_ERROR", ""
+    if remote_status in CANCELLED and local_status not in CANCELLED:
+        return "CANCELLATION_MISMATCH", remote_status
+    if remote_status == local_status or (remote_status in CANCELLED and local_status in CANCELLED):
+        return "MATCHED", remote_status
+    return "OTHER_STATUS_MISMATCH", remote_status
+
+
 def run(output: Path, delay: float, max_requests: int):
     output.parent.mkdir(parents=True, exist_ok=True)
     db = SessionLocal()
@@ -59,19 +78,7 @@ def run(output: Path, delay: float, max_requests: int):
                             payload = _api_get(base_url, "/bookings", headers={"token": token}, params={"id": bid, "includeInvoiceItems": "false"})
                             bookings = extract_bookings_from_payload(payload)
                             matches = [b for b in bookings if str(b.get("id") or b.get("bookingId") or "") == bid]
-                            if not matches:
-                                classification, remote_status = "MISSING_IN_BEDS24", ""
-                            elif len(matches) > 1:
-                                classification, remote_status = "DUPLICATE_REMOTE", ""
-                            else:
-                                remote_status = str(matches[0].get("status") or "").strip().lower()
-                                local_status = str(local[0]["status"] or "").strip().lower()
-                                if remote_status in CANCELLED and local_status not in CANCELLED:
-                                    classification = "CANCELLATION_MISMATCH"
-                                elif remote_status == local_status:
-                                    classification = "MATCHED"
-                                else:
-                                    classification = "OTHER_STATUS_MISMATCH"
+                            classification, remote_status = classify_booking(local, matches)
                             break
                         except Beds24ApiError as exc:
                             db.rollback()
