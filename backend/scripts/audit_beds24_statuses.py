@@ -38,6 +38,9 @@ def classify_booking(local, matches):
         return "DUPLICATE_REMOTE", ""
     remote = matches[0]
     raw_status = str(remote.get("status") or "").strip().lower()
+    # Beds24 can convey its effective cancellation in subStatus or statusCode
+    # even when the top-level status is blank. Retain a reviewable raw token.
+    status_token = raw_status or str(remote.get("subStatus") or remote.get("statusCode") or "").strip().lower()
     return (
         classify_status_pair(
             local[0]["status"],
@@ -45,7 +48,7 @@ def classify_booking(local, matches):
             remote.get("subStatus"),
             remote.get("statusCode"),
         ),
-        raw_status,
+        status_token,
     )
 
 
