@@ -86,7 +86,9 @@ def test_profit_and_loss_separates_cogs_from_operating_expenses():
         {'family': 'expenses', 'account_code': '5100', 'account_name': 'Kitchen inventory used',
          'account_type': 'expense', 'account_subtype': 'Cost of Goods Sold', 'balance': 400},
         {'family': 'expenses', 'account_code': '5300', 'account_name': 'Payroll Expense',
-         'account_type': 'expense', 'balance': 150},
+         'account_type': 'expense', 'balance': 125},
+        {'family': 'expenses', 'account_code': '5310', 'account_name': 'Indirect Costs',
+         'account_type': 'expense', 'balance': 25},
         {'family': 'expenses', 'account_code': '5400', 'account_name': 'Cost of Services',
          'account_type': 'expense', 'balance': 50},
     ]
@@ -96,6 +98,7 @@ def test_profit_and_loss_separates_cogs_from_operating_expenses():
         'expenses': 600, 'gross_profit': 550, 'net_income': 400,
     }
     assert len(pnl['cost_of_sales']) == 2
+    assert len(pnl['operating_expenses']) == 2
     assert pnl['cost_of_sales_identified'] is True
     assert pnl['totals']['gross_profit'] - pnl['totals']['operating_expenses'] == pnl['totals']['net_income']
     assert _account_family('7600', 'cogs') == 'expenses'
