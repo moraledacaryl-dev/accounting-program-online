@@ -7,7 +7,7 @@ from pathlib import Path
 
 from sqlalchemy import text
 from app.db.database import SessionLocal
-from app.services.beds24_service import Beds24ApiError, fetch_beds24_bookings, load_beds24_settings, _api_get
+from app.services.beds24_service import Beds24ApiError, load_beds24_settings, _api_get, extract_bookings_from_payload
 
 FIELDS = ["beds24_booking_id", "accounting_booking_id", "accounting_status", "beds24_status", "classification"]
 CANCELLED = {"cancelled", "canceled"}
@@ -29,9 +29,11 @@ def run(output: Path, delay: float, max_requests: int):
             if bid:
                 grouped.setdefault(bid, []).append(row)
         completed = {}
+        existing_rows = {}
         if output.exists():
             with output.open(newline="") as file:
                 for row in csv.DictReader(file):
+                    existing_rows[row["beds24_booking_id"]] = row
                     if row["classification"] != "API_ERROR":
                         completed[row["beds24_booking_id"]] = row
         settings = load_beds24_settings(db)
@@ -56,7 +58,6 @@ def run(output: Path, delay: float, max_requests: int):
                 else:
                     for attempt in range(5):
                         try:
-                            from app.services.beds24_service import extract_bookings_from_payload
                             payload = _api_get(base_url, "/bookings", headers={"token": token}, params={"id": bid, "includeInvoiceItems": "false"})
                             bookings = extract_bookings_from_payload(payload)
                             matches = [b for b in bookings if str(b.get("id") or b.get("bookingId") or "") == bid]
@@ -86,7 +87,7 @@ def run(output: Path, delay: float, max_requests: int):
                             print(f"API error for {bid}: {type(exc).__name__} (HTTP {exc.status_code})", flush=True)
                             if exc.status_code == 429:
                                 print("Stopping batch: Beds24 rate limit persists after retries.", flush=True)
-                                return 3
+                                break
                             break
                         except Exception as exc:
                             db.rollback()
@@ -105,6 +106,9 @@ def run(output: Path, delay: float, max_requests: int):
                 count += 1
                 if count % 25 == 0:
                     print(f"Processed {count} new IDs", flush=True)
+                if classification == "API_ERROR":
+                    print("Stopping batch on API error; rerun to retry this booking.", flush=True)
+                    break
                 time.sleep(delay)
         latest = {}
         with output.open(newline="") as file:
