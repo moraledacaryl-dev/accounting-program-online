@@ -154,6 +154,8 @@ def test_cross_app_reconciliation_matches_exact_source_and_never_allocates_amoun
                    for r in report["candidate_accounting_context"]}
         assert set(context) == {200, 501, 502}
         assert report["candidate_accounting_context_is_not_settlement_proof"] is True
+        assert report["candidate_accounting_context_count"] == 3
+        assert report["candidate_accounting_context_truncated"] is False
         assert context[200]["category"] == "Employee Cash Advance"
         assert context[200]["financial_account_type"] == "cash_drawer"
         assert context[200]["journal_entry_id"] == 88
@@ -182,10 +184,10 @@ def test_summary_only_keeps_counts_and_does_not_expose_cases():
         assert report["exact_source_identity_count"] == 3
         assert report["worklist_sample"] == []
         assert report["sample_truncated"] is True
-        # The diagnostic remains explicit about potentially shared candidate
-        # transactions even if repayment-level output is limited.
-        assert {x["money_transaction_id"] for x in
-                report["candidate_accounting_context"]} == {200, 501, 502}
+        # --limit=0 must not reveal candidate-level classification metadata.
+        assert report["candidate_accounting_context_count"] == 3
+        assert report["candidate_accounting_context"] == []
+        assert report["candidate_accounting_context_truncated"] is True
 
 
 def test_missing_accounting_schema_fails_closed():
