@@ -179,6 +179,49 @@ def test_append_only_reviews_do_not_mutate_money_or_post_journals(client_and_db)
     assert db.query(JournalEntry).count() == 0
 
 
+
+def test_idempotent_retry_rejects_different_evidence_or_reviewer(client_and_db):
+    client, db, actor = client_and_db
+    original = _decision(
+        decision='cashflow_only_documented',
+        reference=' Receipt book page 21 ',
+        key='idempotency-evidence-guard-001',
+    )
+    original['notes'] = ' Original receipt and source cashbook verified. '
+    saved = client.post('/reports/journal-linkage-review/1/decisions', json=original)
+    assert saved.status_code == 200, saved.text
+    saved_id = saved.json()['id']
+
+    # Harmless whitespace normalization must not break a legitimate network retry.
+    same = dict(original, supporting_reference='Receipt book page 21',
+                notes='Original receipt and source cashbook verified.')
+    retry = client.post('/reports/journal-linkage-review/1/decisions', json=same)
+    assert retry.status_code == 200
+    assert retry.json()['id'] == saved_id
+
+    different_payloads = (
+        dict(same, decision='requires_accounting_review'),
+        dict(same, supporting_reference='Different physical receipt'),
+        dict(same, notes='A different review rationale requiring separate history.'),
+        dict(same, suggested_journal_entry_id=25),
+    )
+    for changed in different_payloads:
+        response = client.post('/reports/journal-linkage-review/1/decisions', json=changed)
+        assert response.status_code == 409, response.text
+        assert 'different review evidence' in response.json()['detail']
+
+    actor.username = 'another-owner'
+    changed_reviewer = client.post('/reports/journal-linkage-review/1/decisions', json=same)
+    assert changed_reviewer.status_code == 409
+    actor.username = 'owner'
+
+    reused_other_transaction = client.post('/reports/journal-linkage-review/2/decisions', json=same)
+    assert reused_other_transaction.status_code == 409
+    assert db.query(JournalLinkageReview).count() == 1
+    assert db.query(JournalLinkageReview).one().id == saved_id
+    assert db.query(JournalEntry).count() == 0
+    assert all(row.journal_entry_id is None for row in db.query(MoneyTransaction))
+
 def test_evidence_policy_and_journal_candidate_must_reference_existing_posted_journal(client_and_db):
     client, db, _ = client_and_db
     assert client.post('/reports/journal-linkage-review/1/decisions',
