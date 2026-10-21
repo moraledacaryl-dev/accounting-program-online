@@ -226,6 +226,13 @@ export const fetchFinancialStatements = ({ startDate = '', endDate = '', asOfDat
   return request(`/reports/financial-statements${query ? `?${query}` : ''}`);
 };
 export const fetchAgingReport = (asOfDate = '') => request(`/reports/ar-ap-aging${asOfDate ? `?as_of_date=${encodeURIComponent(asOfDate)}` : ''}`);
+export const fetchJournalLinkageHistory = (transactionId) =>
+  request(`/reports/journal-linkage-review/${encodeURIComponent(transactionId)}/history`);
+export const submitJournalLinkageEvidence = (transactionId, payload) =>
+  request(`/reports/journal-linkage-review/${encodeURIComponent(transactionId)}/decisions`, {
+    method: 'POST', body: JSON.stringify(payload),
+  });
+
 export const fetchJournalLinkageReview = ({ year = '', source = '', page = 1, limit = 25 } = {}) => {
   const params = new URLSearchParams({ page: String(page), limit: String(limit) });
   if (year) params.set('year', year);
