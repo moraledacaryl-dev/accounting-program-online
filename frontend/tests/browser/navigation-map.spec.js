@@ -18,7 +18,7 @@ async function fixture(page, permissions = ['*']) {
 // Explicit route ownership, including aliases and detail pages. Keep every route
 // in this inventory so a new page cannot silently lose its sidebar location.
 const routeGroups = {
-  overview: ['/dashboard', '/start-of-day', '/review-inbox', '/approvals', '/'],
+  overview: ['/dashboard', '/start-of-day', '/review-inbox', '/reconciliation-center', '/approvals', '/'],
   money: ['/cashflow', '/cashflow/ledger', '/cashflow/settings', '/cashflow/money-in', '/cashflow/money-out', '/cashflow/transfers', '/cashflow/daily-cash', '/cashflow/reconciliation', '/cashflow/accounts', '/cashflow/templates', '/cashflow/1', '/treasury'],
   sales: ['/cashflow/receivables', '/bookings', '/bookings/calendar', '/bookings/1', '/guests', '/guests/1', '/room-folios', '/room-folios/1', '/channel-payouts', '/events', '/events/calendar'],
   purchases: ['/cashflow/payables', '/suppliers', '/purchase-requests', '/purchase-orders', '/receiving'],
