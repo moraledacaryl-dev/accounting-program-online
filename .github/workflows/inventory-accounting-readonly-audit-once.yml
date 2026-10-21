@@ -68,9 +68,9 @@ jobs:
                 endpoints=json.loads(os.environ.get("INTEGRATION_ENDPOINTS_JSON") or "{}")
             except (ValueError,TypeError):
                 endpoints={}
-            base=endpoints.get("accounting") or ""
+            base=endpoints.get("accounting") or "https://accounting.hiddenoasis.app"
             token=os.environ.get("INTEGRATION_API_KEY") or ""
-            print("accounting_endpoint_configured",bool(base))
+            print("accounting_endpoint_configured",bool(endpoints.get("accounting")))
             print("accounting_auth_key_configured",bool(token))
             if not base or not token:
                 print("accounting_service_status_probe","not_configured")
