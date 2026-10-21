@@ -58,7 +58,6 @@ def test_production_smoke_is_read_only_and_does_not_leak_money_or_references():
     assert "SET TRANSACTION READ ONLY" in source
     assert "db.rollback()" in source
     assert "db.commit()" not in source
-    assert "status not in (401, 403)" not in source
     assert "if status not in (401, 403)" in source
     assert "journal-linkage-review/export.csv?queue=unreviewed" in source
     assert "reviewed_unlinked_transaction_count" in source
