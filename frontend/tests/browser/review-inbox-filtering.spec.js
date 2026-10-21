@@ -99,6 +99,13 @@ test('per-source intake counts filter review events without claiming source conn
   });
   await page.setViewportSize({ width: 390, height: 844 });
   await page.goto('/review-inbox');
+  const hero = page.locator('.review-inbox-hero');
+  await expect(hero.getByText('Review each external financial event once.', { exact: false })).toBeVisible();
+  const heroBounds = await hero.boundingBox();
+  expect(heroBounds).toBeTruthy();
+  expect(heroBounds.height).toBeLessThan(290);
+  const heroCopyColor = await hero.locator('.muted').evaluate((el) => getComputedStyle(el).color);
+  expect(heroCopyColor).toBe('rgb(76, 98, 86)');
   const coverage = page.getByRole('region', { name: 'Received integration events by source' });
   await expect(coverage).toBeVisible();
   await expect(coverage.getByText('not a live connectivity or delivery guarantee.', { exact: false })).toBeVisible();
