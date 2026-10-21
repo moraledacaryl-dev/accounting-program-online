@@ -30,6 +30,19 @@ async function mockOwnerReports(page, role = 'owner') {
       const source = url.searchParams.get('source') || '';
       payload = {
         count: source ? 1 : 26,
+        review_summary: {
+          missing_journal_links: source ? 1 : 26,
+          never_reviewed: source ? (latestReview ? 0 : 1) : (latestReview ? 25 : 26),
+          evidence_recorded: latestReview ? 1 : 0,
+          classifications: {
+            needs_evidence: 0,
+            cashflow_only_documented: latestReview ? 1 : 0,
+            journal_candidate_identified: 0,
+            requires_accounting_review: 0,
+          },
+          journal_links_resolved_by_review: 0,
+          is_financially_reconciled: false,
+        },
         page: pageNumber, page_size: 25,
         total_pages: source ? 1 : 2,
         source_counts: [{ source: 'beds24', count: 1 }, { source: 'cashbook', count: 25 }],
@@ -64,12 +77,15 @@ test('owner can review paginated journal linkage evidence without changing balan
   const reviewTable = page.getByRole('table', { name: 'Unverified journal linkage records' });
   await expect(reviewTable).toContainText('REF-001');
   await expect(reviewTable).toContainText('1,234.56');
-  await expect(page.getByText('Unverified records: 26')).toBeVisible();
+  await expect(page.getByText('Missing journal links')).toBeVisible();
+  await expect(page.getByText('26', { exact: true })).toBeVisible();
+  await expect(page.getByRole('progressbar', { name: 'Evidence review coverage' })).toHaveAttribute('aria-valuenow', '0');
   await page.getByRole('button', { name: 'Next', exact: true }).click();
   await expect(reviewTable).toContainText('36');
   await expect(page.getByText('Page 2 of 2')).toBeVisible();
   await page.getByLabel('External Source').selectOption('beds24');
-  await expect(page.getByText('Unverified records: 1')).toBeVisible();
+  await expect(page.getByText('Evidence recorded')).toBeVisible();
+  await expect(page.getByRole('progressbar', { name: 'Evidence review coverage' })).toHaveAttribute('aria-valuemax', '1');
   await expect(page.getByRole('button', { name: 'Next', exact: true })).toBeDisabled();
   const widths = await page.evaluate(() => ({
     page: document.documentElement.scrollWidth,
@@ -109,6 +125,8 @@ test('owner can record evidence without creating or linking a journal', async ({
   await expect(page.getByRole('status')).toContainText('Evidence recorded. No accounting journal or cash balance was modified.');
   await expect(page.getByText('cashflow only documented', { exact: false })).toBeVisible();
   await expect(page.getByRole('button', { name: 'Review again' })).toBeVisible();
+  await expect(page.getByRole('progressbar', { name: 'Evidence review coverage' })).toHaveAttribute('aria-valuenow', '1');
+  await expect(page.getByText('Evidence recorded is not the same as a journal link verified, reconciled or posted.')).toBeVisible();
   const payload = session.submitted();
   expect(payload.decision).toBe('cashflow_only_documented');
   expect(payload.supporting_reference).toBe('Receipt book page 21');
