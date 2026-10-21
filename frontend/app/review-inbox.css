@@ -241,6 +241,19 @@
     gap: 12px;
     padding: 16px;
   }
+  /* A shared layout rule gives the hero's first content column an oversized
+     intrinsic block size even though the hero itself has min-height: 0.
+     Size that column to its actual text so the action follows immediately. */
+  .main[data-route="/review-inbox"] .review-inbox-page .review-inbox-hero > div:first-child {
+    flex: 0 0 auto;
+    min-height: 0 !important;
+    min-block-size: 0 !important;
+    height: auto !important;
+    block-size: auto !important;
+    margin: 0;
+    padding: 0;
+    width: 100%;
+  }
   .main[data-route="/review-inbox"] .review-inbox-page .review-inbox-hero button {
     flex: none;
     min-height: 40px;
