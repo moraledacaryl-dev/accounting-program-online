@@ -51,6 +51,49 @@ def review_journal_linkage(db: Session, *, year=None, source=None, page=1, limit
             base = base.filter(MoneyTransaction.external_source == source)
 
     count = base.count()
+    # Count latest review classifications across the *filtered population*,
+    # not just this page. Recording evidence is not financial reconciliation.
+    latest_review = (
+        db.query(
+            JournalLinkageReview.money_transaction_id.label('transaction_id'),
+            func.max(JournalLinkageReview.id).label('review_id'),
+        )
+        .group_by(JournalLinkageReview.money_transaction_id)
+        .subquery()
+    )
+    review_group_rows = (
+        base.with_entities(
+            JournalLinkageReview.decision,
+            func.count(MoneyTransaction.id),
+        )
+        .outerjoin(
+            latest_review,
+            latest_review.c.transaction_id == MoneyTransaction.id,
+        )
+        .outerjoin(
+            JournalLinkageReview,
+            JournalLinkageReview.id == latest_review.c.review_id,
+        )
+        .group_by(JournalLinkageReview.decision)
+        .all()
+    )
+    review_counts = {
+        'never_reviewed': 0,
+        'needs_evidence': 0,
+        'cashflow_only_documented': 0,
+        'journal_candidate_identified': 0,
+        'requires_accounting_review': 0,
+    }
+    for decision, total in review_group_rows:
+        key = decision if decision is not None else 'never_reviewed'
+        if key in review_counts:
+            review_counts[key] = int(total)
+        else:
+            # Keep any future classification visible in overall review coverage
+            # without wrongly treating it as reconciled.
+            review_counts['requires_accounting_review'] += int(total)
+    evidence_recorded = count - review_counts['never_reviewed']
+
     rows = (
         base.order_by(MoneyTransaction.transaction_date.asc(), MoneyTransaction.id.asc())
         .offset((page - 1) * limit)
@@ -71,6 +114,17 @@ def review_journal_linkage(db: Session, *, year=None, source=None, page=1, limit
 
     return {
         'count': int(count),
+        'review_summary': {
+            'missing_journal_links': int(count),
+            'never_reviewed': review_counts['never_reviewed'],
+            'evidence_recorded': evidence_recorded,
+            'classifications': {
+                key: value for key, value in review_counts.items()
+                if key != 'never_reviewed'
+            },
+            'journal_links_resolved_by_review': 0,
+            'is_financially_reconciled': False,
+        },
         'page': page,
         'page_size': limit,
         'total_pages': (count + limit - 1) // limit,
