@@ -3,9 +3,18 @@ const { test, expect } = require('@playwright/test');
 async function mockOwnerReports(page, role = 'owner') {
   let latestReview = null;
   let postedPayload = null;
+  let exportQuery = null;
   await page.route('**/api/**', async (route) => {
     const url = new URL(route.request().url());
     const path = url.pathname;
+    if (path === '/api/reports/journal-linkage-review/export.csv') {
+      exportQuery = url.searchParams.toString();
+      await route.fulfill({
+        status: 200, contentType: 'text/csv',
+        body: 'money_transaction_id,review_status\n11,never_reviewed\n36,never_reviewed\n',
+      });
+      return;
+    }
     let payload = [];
     if (path === '/api/auth/me') payload = {
       id: 101, username: 'review-user', full_name: 'Audit Reviewer',
@@ -70,7 +79,7 @@ async function mockOwnerReports(page, role = 'owner') {
     if (path === '/api/reports/ar-ap-aging') payload = { receivables: { items: [] }, payables: { items: [] } };
     await route.fulfill({ status: 200, contentType: 'application/json', body: JSON.stringify(payload) });
   });
-  return { submitted: () => postedPayload };
+  return { submitted: () => postedPayload, exported: () => exportQuery };
 }
 
 test('owner can review paginated journal linkage evidence without changing balances', async ({ page }) => {
@@ -135,6 +144,7 @@ test('owner can record evidence without creating or linking a journal', async ({
   await expect(page.getByText('cashflow only documented', { exact: false })).toBeVisible();
   await expect(page.getByRole('button', { name: 'Review again' })).toBeVisible();
   await expect(page.getByRole('progressbar', { name: 'Evidence review coverage' })).toHaveAttribute('aria-valuenow', '1');
+  await expect(page.getByRole('progressbar', { name: 'Evidence review coverage' })).toHaveAttribute('aria-valuemax', '26');
   await expect(page.getByText('Evidence recorded is not the same as a journal link verified, reconciled or posted.')).toBeVisible();
   const payload = session.submitted();
   expect(payload.decision).toBe('cashflow_only_documented');
@@ -158,4 +168,32 @@ test('review queue filters the worklist without changing the missing journal tot
   await queue.selectOption('all');
   await expect(page.getByText('Showing 26 records in this queue')).toBeVisible();
   await expect(page.getByRole('table', { name: 'Unverified journal linkage records' })).toContainText('REF-001');
+});
+
+
+test('private review CSV exports all filtered queue rows without implying reconciliation', async ({ page }) => {
+  const session = await mockOwnerReports(page);
+  await page.setViewportSize({ width: 390, height: 844 });
+  await page.goto('/reports');
+  await page.getByRole('button', { name: 'Journal Review', exact: true }).click();
+  const bar = page.getByRole('progressbar', { name: 'Evidence review coverage' });
+  await expect(bar).toHaveAttribute('aria-valuemax', '26');
+  await page.getByLabel('Review Queue').selectOption('reviewed');
+  await expect(bar).toHaveAttribute('aria-valuemax', '26');
+  await expect(page.getByRole('button', { name: 'Export private CSV' })).toBeDisabled();
+  await page.getByLabel('Review Queue').selectOption('all');
+  await page.getByLabel('Transaction Year').selectOption('2025');
+  await page.getByLabel('External Source').selectOption('cashbook');
+  const exportButton = page.getByRole('button', { name: 'Export private CSV' });
+  await expect(exportButton).toBeEnabled();
+  await expect(page.getByText('Private download includes all rows in the selected queue and filters', { exact: false })).toBeVisible();
+  const downloadEvent = page.waitForEvent('download');
+  await exportButton.click();
+  const download = await downloadEvent;
+  expect(download.suggestedFilename()).toBe('journal-review-private-2025-all.csv');
+  expect(new URLSearchParams(session.exported()).get('year')).toBe('2025');
+  expect(new URLSearchParams(session.exported()).get('source')).toBe('cashbook');
+  expect(new URLSearchParams(session.exported()).get('queue')).toBe(null);
+  await expect(bar).toHaveAttribute('aria-valuemax', '1');
+  expect(await page.evaluate(() => document.documentElement.scrollWidth <= document.documentElement.clientWidth + 1)).toBe(true);
 });

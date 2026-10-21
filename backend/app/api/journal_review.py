@@ -5,6 +5,10 @@ Decisions append private review history only; monetary data and journals remain 
 """
 from __future__ import annotations
 
+import csv
+from decimal import Decimal
+from io import StringIO
+
 from fastapi import APIRouter, Depends, HTTPException, Query, Response
 from pydantic import BaseModel, Field
 from typing import Literal
@@ -20,12 +24,96 @@ from app.services.audit_service import record_audit
 
 router = APIRouter()
 
+# A private CSV is a finite, owner/admin-only worklist, never a public CI artifact.
+JOURNAL_REVIEW_EXPORT_MAX_ROWS = 10000
+
 
 def _unlinked(db: Session):
     return db.query(MoneyTransaction).filter(
         MoneyTransaction.status == 'posted',
         MoneyTransaction.journal_entry_id.is_(None),
     )
+
+
+def _filtered_unlinked(db: Session, *, year=None, source=None):
+    """Same date/source selection as the private review UI, without pagination."""
+    base = _unlinked(db)
+    if year:
+        base = base.filter(MoneyTransaction.transaction_date.like(f'{year}-%'))
+    if source:
+        if source == '(unspecified)':
+            base = base.filter(
+                (MoneyTransaction.external_source.is_(None)) |
+                (MoneyTransaction.external_source == '')
+            )
+        else:
+            base = base.filter(MoneyTransaction.external_source == source)
+    return base
+
+
+def _protect_csv_text(value):
+    """Avoid spreadsheet formula execution from untrusted external references or notes."""
+    if value is None:
+        return ''
+    raw = str(value)
+    if raw.lstrip().startswith(('=', '+', '-', '@')) and not isinstance(value, (int, float, Decimal)):
+        return "'" + raw
+    return raw
+
+
+def journal_review_csv(db: Session, *, year=None, source=None, queue='all'):
+    """Build an evidence worklist without altering journal or transaction records."""
+    base = _filtered_unlinked(db, year=year, source=source)
+    latest_review = (
+        db.query(
+            JournalLinkageReview.money_transaction_id.label('transaction_id'),
+            func.max(JournalLinkageReview.id).label('review_id'),
+        )
+        .group_by(JournalLinkageReview.money_transaction_id)
+        .subquery()
+    )
+    query = (
+        base.outerjoin(latest_review, latest_review.c.transaction_id == MoneyTransaction.id)
+        .outerjoin(JournalLinkageReview, JournalLinkageReview.id == latest_review.c.review_id)
+    )
+    if queue == 'unreviewed':
+        query = query.filter(latest_review.c.review_id.is_(None))
+    elif queue == 'reviewed':
+        query = query.filter(latest_review.c.review_id.isnot(None))
+    rows = (
+        query.with_entities(MoneyTransaction, JournalLinkageReview)
+        .order_by(MoneyTransaction.transaction_date.asc(), MoneyTransaction.id.asc())
+        .limit(JOURNAL_REVIEW_EXPORT_MAX_ROWS + 1)
+        .all()
+    )
+    if len(rows) > JOURNAL_REVIEW_EXPORT_MAX_ROWS:
+        raise HTTPException(status_code=413, detail='Review worklist exceeds the private export row limit.')
+
+    header = [
+        'money_transaction_id', 'transaction_date', 'financial_account_id',
+        'direction', 'amount_php', 'payment_method', 'module', 'category',
+        'external_source', 'external_event_id', 'payment_reference',
+        'linked_record_id', 'journal_link_status', 'latest_review_classification',
+        'evidence_reference', 'review_rationale', 'suggested_journal_entry_id',
+        'reviewed_by', 'reviewed_at',
+    ]
+    output = StringIO(newline='')
+    writer = csv.writer(output)
+    writer.writerow(header)
+    for tx, review in rows:
+        writer.writerow([_protect_csv_text(cell) for cell in (
+            tx.id, tx.transaction_date, tx.financial_account_id,
+            tx.direction, tx.amount, tx.payment_method, tx.module, tx.category,
+            tx.external_source, tx.external_id, tx.reference_no,
+            tx.linked_record_id, 'missing_direct_journal_link',
+            review.decision if review else 'never_reviewed',
+            review.supporting_reference if review else None,
+            review.notes if review else None,
+            review.suggested_journal_entry_id if review else None,
+            review.reviewed_by if review else None,
+            review.created_at.isoformat() if review and review.created_at else None,
+        )])
+    return output.getvalue()
 
 
 def review_journal_linkage(db: Session, *, year=None, source=None, queue='all', page=1, limit=25):
@@ -189,6 +277,28 @@ def journal_linkage_review(
 ):
     response.headers['Cache-Control'] = 'private, no-store'
     return review_journal_linkage(db, year=year, source=source, queue=queue, page=page, limit=limit)
+
+
+@router.get('/journal-linkage-review/export.csv')
+def export_journal_linkage_review(
+    year: str | None = Query(None, pattern=r'^\d{4}$'),
+    source: str | None = Query(None, max_length=40),
+    queue: Literal['all', 'unreviewed', 'reviewed'] = Query('all'),
+    db: Session = Depends(get_db),
+    user=Depends(require_roles('owner', 'admin')),
+):
+    # Do not emit any private review references or amounts into public workflow logs.
+    content = journal_review_csv(db, year=year, source=source, queue=queue)
+    filename = f"journal-review-private-{year or 'all'}-{queue}.csv"
+    return Response(
+        content=content,
+        media_type='text/csv; charset=utf-8',
+        headers={
+            'Cache-Control': 'private, no-store',
+            'X-Content-Type-Options': 'nosniff',
+            'Content-Disposition': f'attachment; filename="{filename}"',
+        },
+    )
 
 
 class JournalLinkageReviewCreate(BaseModel):

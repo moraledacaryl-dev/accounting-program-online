@@ -241,6 +241,27 @@ export const fetchJournalLinkageReview = ({ year = '', source = '', queue = 'all
   return request(`/reports/journal-linkage-review?${params.toString()}`);
 };
 
+export async function fetchJournalLinkageReviewCsv({ year = '', source = '', queue = 'all' } = {}) {
+  const params = new URLSearchParams();
+  if (year) params.set('year', year);
+  if (source) params.set('source', source);
+  if (queue !== 'all') params.set('queue', queue);
+  const suffix = params.toString();
+  const res = await fetch(
+    `${API_BASE}/reports/journal-linkage-review/export.csv${suffix ? `?${suffix}` : ''}`,
+    { cache: 'no-store', credentials: 'include' },
+  );
+  if (res.status === 401 && typeof window !== 'undefined') {
+    window.dispatchEvent(new Event('accounting:session-expired'));
+  }
+  if (!res.ok) {
+    let data = null;
+    try { data = await res.json(); } catch { data = null; }
+    throw new Error(readApiMessage(data?.detail || data?.message || data?.error || data) || 'Failed to export private journal review CSV');
+  }
+  return res.text();
+}
+
 export const fetchSettlements = ({ recordId = null, limit = 200 } = {}) => request(`/reports/settlements?limit=${encodeURIComponent(limit)}${recordId ? `&record_id=${encodeURIComponent(recordId)}` : ''}`);
 export const createSettlement = (payload, { idempotencyKey } = {}) => request('/reports/settlements', { method: 'POST', headers: idempotencyKey ? { 'Idempotency-Key': idempotencyKey } : {}, body: JSON.stringify(payload) });
 

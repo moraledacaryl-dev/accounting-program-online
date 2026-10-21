@@ -12,6 +12,7 @@ import {
   fetchManagementReport,
   fetchSettlements,
   fetchJournalLinkageReview,
+  fetchJournalLinkageReviewCsv,
   fetchJournalLinkageHistory,
   submitJournalLinkageEvidence,
 } from '../../lib/api';
@@ -83,6 +84,8 @@ export default function ReportsPage() {
   const [journalReviewQueue, setJournalReviewQueue] = useState('unreviewed');
   const [journalReviewYear, setJournalReviewYear] = useState('');
   const [journalReviewLoading, setJournalReviewLoading] = useState(false);
+  const [journalReviewExporting, setJournalReviewExporting] = useState(false);
+  const [journalReviewExportError, setJournalReviewExportError] = useState('');
   const [journalReviewError, setJournalReviewError] = useState('');
   const [journalReviewRefresh, setJournalReviewRefresh] = useState(0);
   const [selectedJournalTx, setSelectedJournalTx] = useState(null);
@@ -204,6 +207,32 @@ export default function ReportsPage() {
       setJournalEvidenceFeedback(failure?.message || 'Unable to save evidence. You may retry safely.');
     } finally {
       setJournalReviewSaving(false);
+    }
+  }
+
+  async function exportJournalReviewWorklist() {
+    if (journalReviewExporting || !journalReview?.count) return;
+    setJournalReviewExporting(true);
+    setJournalReviewExportError('');
+    try {
+      const csv = await fetchJournalLinkageReviewCsv({
+        year: journalReviewYear,
+        source: journalReviewSource,
+        queue: journalReviewQueue,
+      });
+      const blob = new Blob([csv], { type: 'text/csv;charset=utf-8;' });
+      const url = URL.createObjectURL(blob);
+      const link = document.createElement('a');
+      link.href = url;
+      link.download = `journal-review-private-${journalReviewYear || 'all'}-${journalReviewQueue}.csv`;
+      document.body.appendChild(link);
+      link.click();
+      document.body.removeChild(link);
+      URL.revokeObjectURL(url);
+    } catch (failure) {
+      setJournalReviewExportError(failure?.message || 'Could not export the private review worklist.');
+    } finally {
+      setJournalReviewExporting(false);
     }
   }
 
@@ -887,10 +916,10 @@ export default function ReportsPage() {
                 <div><span>Evidence recorded</span><strong>{number(journalReview?.review_summary?.evidence_recorded ?? 0)}</strong></div>
               </div>
               <div className="journal-review-progress-track" role="progressbar" aria-label="Evidence review coverage"
-                aria-valuemin={0} aria-valuemax={journalReview?.count || 0}
+                aria-valuemin={0} aria-valuemax={journalReview?.review_summary?.missing_journal_links ?? journalReview?.scope_count ?? 0}
                 aria-valuenow={journalReview?.review_summary?.evidence_recorded || 0}>
                 <div className="journal-review-progress-fill" style={{
-                  width: `${journalReview?.count ? Math.min(100, 100 * (journalReview?.review_summary?.evidence_recorded || 0) / journalReview.count) : 0}%`,
+                  width: `${journalReview?.review_summary?.missing_journal_links ? Math.min(100, 100 * (journalReview?.review_summary?.evidence_recorded || 0) / journalReview.review_summary.missing_journal_links) : 0}%`,
                 }} />
               </div>
               <p className="muted">Evidence recorded is not the same as a journal link verified, reconciled or posted.</p>
@@ -898,9 +927,16 @@ export default function ReportsPage() {
             <div className="row wrap journal-review-summary">
               <span className="badge">Showing {number(journalReview?.count)} records in this queue</span>
               <span className="badge">Page {journalReviewPage} of {journalReview?.total_pages || 1}</span>
+              <button type="button" className="secondary"
+                onClick={exportJournalReviewWorklist}
+                disabled={journalReviewLoading || journalReviewExporting || !journalReview?.count}>
+                {journalReviewExporting ? 'Exporting private CSV…' : 'Export private CSV'}
+              </button>
               {journalReviewLoading && <span role="status" className="muted">Loading review…</span>}
             </div>
             {!!journalReviewError && <p role="alert" className="error-text">{journalReviewError}</p>}
+            {!!journalReviewExportError && <p role="alert" className="error-text">{journalReviewExportError}</p>}
+            <p className="muted">Private download includes all rows in the selected queue and filters, not only this page. Store it securely; no ledger posting or matching is performed.</p>
             <p className="muted">
               Match each item against its external receipt, source cashbook, folio, and existing ledger
               before approving any correction. No automatic matching or posting is performed.
