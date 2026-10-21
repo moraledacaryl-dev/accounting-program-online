@@ -92,6 +92,7 @@ export default function ReportsPage() {
   const [journalReviewCandidateId, setJournalReviewCandidateId] = useState('');
   const [journalReviewSaving, setJournalReviewSaving] = useState(false);
   const [journalEvidenceFeedback, setJournalEvidenceFeedback] = useState('');
+  const [journalEvidenceSaved, setJournalEvidenceSaved] = useState(false);
   const journalEvidenceSubmissionKey = useRef(null);
   const submissionInFlight = useRef(false);
   const lastSettlementSubmission = useRef(null);
@@ -156,6 +157,7 @@ export default function ReportsPage() {
 
   async function openJournalEvidence(row) {
     journalEvidenceSubmissionKey.current = null;
+    setJournalEvidenceSaved(false);
     setSelectedJournalTx(row);
     setJournalReviewDecision('needs_evidence');
     setJournalReviewEvidenceRef('');
@@ -191,6 +193,7 @@ export default function ReportsPage() {
         idempotency_key: journalEvidenceSubmissionKey.current,
       });
       journalEvidenceSubmissionKey.current = null;
+      setJournalEvidenceSaved(true);
       setSelectedJournalTx((old) => ({ ...old, latest_review: evidence, review_status: 'evidence_recorded' }));
       setJournalReviewHistory((old) => old.some((item) => item.id === evidence.id) ? old : [evidence, ...old]);
       setJournalReviewRefresh((n) => n + 1);
@@ -204,6 +207,7 @@ export default function ReportsPage() {
 
   function updateJournalEvidence(field, value) {
     journalEvidenceSubmissionKey.current = null;
+    setJournalEvidenceSaved(false);
     if (field === 'decision') setJournalReviewDecision(value);
     else if (field === 'reference') setJournalReviewEvidenceRef(value);
     else if (field === 'notes') setJournalReviewNotes(value);
@@ -938,10 +942,10 @@ export default function ReportsPage() {
                       onChange={(e) => updateJournalEvidence('notes', e.target.value)}
                       placeholder="Explain the evidence and why this classification is appropriate." />
                   </label>
-                  <button type="submit" disabled={journalReviewSaving || journalReviewNotes.trim().length < 10 ||
+                  <button type="submit" disabled={journalReviewSaving || journalEvidenceSaved || journalReviewNotes.trim().length < 10 ||
                     (journalReviewDecision !== 'needs_evidence' && !journalReviewEvidenceRef.trim()) ||
                     (journalReviewDecision === 'journal_candidate_identified' && !(Number(journalReviewCandidateId) > 0))}>
-                    {journalReviewSaving ? 'Saving…' : 'Save review evidence'}
+                    {journalReviewSaving ? 'Saving…' : journalEvidenceSaved ? 'Saved — edit to add another review' : 'Save review evidence'}
                   </button>
                 </form>
                 {!!journalEvidenceFeedback && <p role="status" aria-live="polite">{journalEvidenceFeedback}</p>}
