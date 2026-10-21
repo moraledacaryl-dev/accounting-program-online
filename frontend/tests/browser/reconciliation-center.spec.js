@@ -55,7 +55,7 @@ test('reconciliation center does not leak owner-only evidence to authorized non-
   const requests = await mockReconciliationCenter(page, { role: 'accounting_admin' });
   await page.goto('/reconciliation-center');
   await expect(page.getByRole('heading', { name: 'Reconciliation Control Center' })).toBeVisible();
-  await expect(page.getByText('1', { exact: true }).first()).toBeVisible();
+  await expect(page.getByText('2 / 2')).toBeVisible();
   await expect(page.getByRole('article').filter({ hasText: 'Investigate historical journal links' }).getByText('—')).toBeVisible();
   expect(requests).not.toContain('/api/reports/journal-linkage-review');
   expect(requests).not.toContain('/api/integration-review/summary');
@@ -64,11 +64,11 @@ test('reconciliation center does not leak owner-only evidence to authorized non-
 test('failed control source is never presented as zero exceptions and refresh recovers', async ({ page }) => {
   const broken = '/api/cashflow/summary';
   let fail = true;
+  await mockReconciliationCenter(page);
   await page.route('**/api/cashflow/summary*', async (route) => {
     if (fail) return route.fulfill({ status: 503, contentType: 'application/json', body: JSON.stringify({ detail: 'Unavailable' }) });
     return route.fulfill({ status: 200, contentType: 'application/json', body: JSON.stringify({ summary_cards: { unreconciled_accounts: 2 } }) });
   });
-  await mockReconciliationCenter(page);
   await page.goto('/reconciliation-center');
   const cash = page.getByRole('article').filter({ hasText: 'Complete cash and account reconciliation' });
   await expect(cash.getByText('Unavailable')).toBeVisible();
