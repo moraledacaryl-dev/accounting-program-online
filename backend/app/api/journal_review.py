@@ -119,14 +119,6 @@ def journal_linkage_review(
     return review_journal_linkage(db, year=year, source=source, page=page, limit=limit)
 
 
-DECISIONS = {
-    'needs_evidence',
-    'cashflow_only_documented',
-    'journal_candidate_identified',
-    'requires_accounting_review',
-}
-
-
 class JournalLinkageReviewCreate(BaseModel):
     decision: Literal[
         'needs_evidence', 'cashflow_only_documented',
@@ -193,13 +185,16 @@ def record_review_decision(db: Session, transaction_id: int, payload: JournalLin
     elif payload.suggested_journal_entry_id is not None:
         raise HTTPException(status_code=422, detail='Journal ID only allowed for journal candidate review.')
 
+    reviewer = getattr(user, 'username', None)
+    if not reviewer:
+        raise HTTPException(status_code=403, detail='Reviewer identity unavailable.')
     row = JournalLinkageReview(
         money_transaction_id=transaction_id,
         decision=payload.decision,
         supporting_reference=reference,
         notes=notes,
         suggested_journal_entry_id=journal.id if journal else None,
-        reviewed_by=getattr(user, 'username', None) or 'authenticated_reviewer',
+        reviewed_by=reviewer,
         idempotency_key=payload.idempotency_key,
     )
     db.add(row)
