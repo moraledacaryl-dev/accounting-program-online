@@ -82,7 +82,7 @@ def test_reference_only_acceptance_does_not_manufacture_journal_proof():
             idempotency_key="reference-only-1",
         )
         item = create_review_item(db, payload)
-        accept_item(db, item["id"], IntegrationReviewDecision(), "reviewer")
+        accept_item(db, item["id"], IntegrationReviewDecision(transaction_date="2026-10-21"), "reviewer")
         proof = inventory_journal_proof(db, "opening-ref")
         assert proof["review_status"] == "accepted"
         assert proof["accepted_journal_entry_id"] is None
