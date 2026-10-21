@@ -75,13 +75,6 @@ def test_unauthenticated_production_routes_are_checked_without_fetching_response
     from urllib.request import Request
 
     seen = []
-    class FakeConnection:
-        status = 200
-        def __enter__(self):
-            return self
-        def __exit__(self, *args):
-            return False
-
     def deny(req, timeout):
         assert isinstance(req, Request)
         seen.append(req.full_url)
