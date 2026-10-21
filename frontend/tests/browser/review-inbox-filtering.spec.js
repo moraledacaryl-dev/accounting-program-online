@@ -116,6 +116,16 @@ test('per-source intake counts filter review events without claiming source conn
           tag: child.tagName, className: child.className,
           height: child.getBoundingClientRect().height,
           offsetTop: child.getBoundingClientRect().top - element.getBoundingClientRect().top,
+          style: (() => {
+            const st = getComputedStyle(child);
+            return { height: st.height, minHeight: st.minHeight, blockSize: st.blockSize,
+              display: st.display, flex: st.flex, padding: st.padding, margin: st.margin,
+              overflow: st.overflow, justifyContent: st.justifyContent, alignItems: st.alignItems };
+          })(),
+          inner: Array.from(child.children).map((el) => ({
+            tag: el.tagName, height: el.getBoundingClientRect().height,
+            top: el.getBoundingClientRect().top - child.getBoundingClientRect().top,
+          })),
         })),
       };
     });
