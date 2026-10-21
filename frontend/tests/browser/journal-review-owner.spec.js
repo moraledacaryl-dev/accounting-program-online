@@ -78,7 +78,7 @@ test('owner can review paginated journal linkage evidence without changing balan
   await expect(reviewTable).toContainText('REF-001');
   await expect(reviewTable).toContainText('1,234.56');
   await expect(page.getByText('Missing journal links')).toBeVisible();
-  await expect(page.getByText('26', { exact: true })).toBeVisible();
+  await expect(page.getByText('Missing journal links').locator('..')).toContainText('26');
   await expect(page.getByRole('progressbar', { name: 'Evidence review coverage' })).toHaveAttribute('aria-valuenow', '0');
   await page.getByRole('button', { name: 'Next', exact: true }).click();
   await expect(reviewTable).toContainText('36');
