@@ -866,8 +866,22 @@ export default function ReportsPage() {
                 </select>
               </label>
             </div>
+            <div className="journal-review-progress" aria-label="Journal review progress">
+              <div className="journal-review-progress-metrics">
+                <div><span>Missing journal links</span><strong>{number(journalReview?.review_summary?.missing_journal_links ?? journalReview?.count)}</strong></div>
+                <div><span>Awaiting first review</span><strong>{number(journalReview?.review_summary?.never_reviewed ?? journalReview?.count)}</strong></div>
+                <div><span>Evidence recorded</span><strong>{number(journalReview?.review_summary?.evidence_recorded ?? 0)}</strong></div>
+              </div>
+              <div className="journal-review-progress-track" role="progressbar" aria-label="Evidence review coverage"
+                aria-valuemin={0} aria-valuemax={journalReview?.count || 0}
+                aria-valuenow={journalReview?.review_summary?.evidence_recorded || 0}>
+                <div className="journal-review-progress-fill" style={{
+                  width: `${journalReview?.count ? Math.min(100, 100 * (journalReview?.review_summary?.evidence_recorded || 0) / journalReview.count) : 0}%`,
+                }} />
+              </div>
+              <p className="muted">Evidence recorded is not the same as a journal link verified, reconciled or posted.</p>
+            </div>
             <div className="row wrap journal-review-summary">
-              <span className="badge">Unverified records: {number(journalReview?.count)}</span>
               <span className="badge">Page {journalReviewPage} of {journalReview?.total_pages || 1}</span>
               {journalReviewLoading && <span role="status" className="muted">Loading review…</span>}
             </div>
