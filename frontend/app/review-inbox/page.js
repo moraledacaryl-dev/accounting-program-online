@@ -162,6 +162,27 @@ export default function ReviewInboxPage() {
         <div className="metric-card"><span>Rejected</span><strong>{counts.rejected || 0}</strong></div>
       </section>
 
+      {summary?.by_source && Object.keys(summary.by_source).length > 0 && (
+        <section className="section review-source-coverage" aria-label="Received integration events by source">
+          <div className="section-title-row">
+            <div><h2>Received events by application</h2>
+              <p className="small muted">{summary.source_coverage_note || 'Counts reflect retained Accounting review items only, not live connection health.'}</p>
+            </div>
+          </div>
+          <div className="review-source-coverage-grid">
+            {Object.entries(summary.by_source).map(([source, values]) => (
+              <button type="button" key={source} className="review-source-coverage-card"
+                disabled={loading}
+                onClick={() => { const next = { ...filters, source_app: source }; setFilters(next); applyFilters(next); }}>
+                <strong>{source.replaceAll('_', ' ')}</strong>
+                <span>{Number(values.needs_review || 0).toLocaleString()} needs review</span>
+                <small>{Number(values.validation_failed || 0).toLocaleString()} failed · {Number(values.accepted || 0).toLocaleString()} accepted · {Number(values.total || 0).toLocaleString()} retained</small>
+              </button>
+            ))}
+          </div>
+        </section>
+      )}
+
       <section className="section">
         <div className="section-title-row">
           <div>
