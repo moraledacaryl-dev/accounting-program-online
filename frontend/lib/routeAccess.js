@@ -2,6 +2,7 @@ export const PERMISSION_RULES = [
   { prefix: '/dashboard', any: ['dashboard.view'] },
   { prefix: '/start-of-day', any: ['dashboard.view', 'cashflow.view'] },
   { prefix: '/review-inbox', any: ['approvals.view', 'integrations.view'] },
+  { prefix: '/reconciliation-center', any: ['reports.view'] },
   { prefix: '/staff-guide', any: ['dashboard.view', 'cashflow.view', 'bookings.view', 'guests.view', 'folios.view', 'inventory.view', 'receiving.view', 'payroll_periods.view', 'restaurant.view'] },
   { prefix: '/events', any: ['events.view', 'bookings.view', 'cashflow.view'] },
   { prefix: '/bookings', any: ['bookings.view'] },
