@@ -189,6 +189,13 @@ manifest.push({ name: 'reports-journal-review', route: '/reports', viewport: '39
 // Fixture-only evidence form screenshot. Synthetic data stays inside the visual test;
 // no live transaction details or review submissions are captured in CI artifacts.
 const mockJournalRoute = '**/api/reports/journal-linkage-review**';
+const mockJournalHistoryRoute = /\\/api\\/reports\\/journal-linkage-review\\/909\\/history(?:\\?|$)/;
+await page.route(mockJournalHistoryRoute, async (route) => {
+  await route.fulfill({
+    status: 200, contentType: 'application/json',
+    body: JSON.stringify({ transaction_id: 909, items: [] }),
+  });
+});
 await page.route(mockJournalRoute, async (route) => {
   const url = new URL(route.request().url());
   const response = url.pathname.endsWith('/history') ? { transaction_id: 909, items: [] } : {
@@ -205,12 +212,19 @@ await page.route(mockJournalRoute, async (route) => {
 });
 await page.reload({ waitUntil: 'networkidle' });
 await page.getByRole('button', { name: 'Journal Review', exact: true }).click();
+const historyResponsePromise = page.waitForResponse(
+  (response) => new URL(response.url()).pathname.endsWith('/909/history') && response.status() === 200,
+  { timeout: 10000 },
+);
 await page.getByRole('button', { name: 'Record evidence' }).click();
+await historyResponsePromise;
 await page.getByLabel('Review rationale (at least 10 characters)').fill('Reviewing synthetic example: inspect receipt and folio first.');
+await page.evaluate(() => document.activeElement?.blur());
 const evidenceFilename = 'reports-journal-evidence-fixture--mobile.png';
 await page.screenshot({ path: path.join(OUT, evidenceFilename), fullPage: true });
 manifest.push({ name: 'reports-journal-evidence-fixture', route: '/reports', viewport: '390x844', file: evidenceFilename, status: 'ok', state: true, title: await page.title() });
 await page.unroute(mockJournalRoute);
+await page.unroute(mockJournalHistoryRoute);
 
 // Chromium emits a generic console error for expected 401 /auth/me probes on
 // the public login screen. Match those known responses 1:1, and fail the audit
