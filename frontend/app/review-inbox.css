@@ -187,3 +187,11 @@
   .review-detail-summary { grid-template-columns: 1fr; }
   .review-detail-amount { font-size: 1.2rem; }
 }
+
+/* Received event counts are bookkeeping visibility, not connectivity status. */
+.review-source-coverage-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(min(100%, 230px), 1fr)); gap: 12px; }
+.review-source-coverage-card { display: flex; flex-direction: column; align-items: start; gap: 7px; min-width: 0; min-height: 100px; text-align: left; border: 1px solid #dce7e1; border-radius: 12px; padding: 14px; background: #f8fbf9; color: #1e4233; }
+.review-source-coverage-card:hover { border-color: #79a58a; background: #eef6f1; }
+.review-source-coverage-card strong { text-transform: capitalize; }
+.review-source-coverage-card span { font-weight: 650; }
+.review-source-coverage-card small { color: #52695a; line-height: 1.4; }
