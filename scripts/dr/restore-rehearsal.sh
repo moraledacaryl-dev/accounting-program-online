@@ -38,17 +38,9 @@ fi
 [[ "$UPLOADS_NAME" != */* ]] || exit 1
 EVIDENCE_ARCHIVE="$(dirname "$DUMP")/$UPLOADS_NAME"
 test "$(sha256sum "$EVIDENCE_ARCHIVE" | awk '{print $1}')" = "$UPLOADS_SHA"
-# Use Python's data filter to reject traversal, links outside the destination, and devices.
-python3 - "$EVIDENCE_ARCHIVE" "$EVIDENCE_DIR" <<'PYTHON'
-import sys, tarfile
-with tarfile.open(sys.argv[1], 'r:gz') as archive:
-    for member in archive.getmembers():
-        if not (member.isfile() or member.isdir()):
-            raise SystemExit('Evidence archive must contain only regular files and directories.')
-        if member.name.startswith('/') or '..' in member.name.split('/'):
-            raise SystemExit('Unsafe evidence archive path.')
-    archive.extractall(sys.argv[2], filter='data')
-PYTHON
+# Validate the full evidence archive and expanded-disk headroom before creating
+# any temporary PostgreSQL database. Unsafe members fail closed.
+python3 "$(dirname "$0")/verify-restore-archive.py" "$EVIDENCE_ARCHIVE" "$EVIDENCE_DIR"
 
 sudo -u postgres createdb "$REHEARSAL_DB"
 sudo -u postgres pg_restore --exit-on-error --no-owner --no-privileges --dbname "$REHEARSAL_DB" < "$DUMP"
