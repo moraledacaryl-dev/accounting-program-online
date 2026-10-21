@@ -181,6 +181,12 @@ export default function DashboardPage() {
   ];
 
   const actionItems = [
+    ...(financeView ? [{
+      href: '/reconciliation-center',
+      title: 'Review reconciliation workstreams',
+      note: 'Journal evidence, cash close, integration intake, and period-close checks',
+      tone: 'info', label: 'Open',
+    }] : []),
     ...(financeView ? [{ href: '/approvals', title: 'Review pending approvals', note: `${plain(summary?.pending_approvals || 0)} items awaiting approval`, tone: summary?.pending_approvals ? 'warn' : 'ok', label: summary?.pending_approvals ? 'Review' : 'Clear' }] : []),
     {
       href: '/review-inbox',
