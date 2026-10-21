@@ -9,6 +9,7 @@ export const navigationGroups = [
       { href: '/dashboard', label: 'Dashboard', icon: 'dashboard' },
       { href: '/start-of-day', label: 'Start of Day', icon: 'sun' },
       { href: '/review-inbox', label: 'Review Inbox', icon: 'review' },
+      { href: '/reconciliation-center', label: 'Reconciliation Center', icon: 'review' },
       { href: '/approvals', label: 'Approvals', icon: 'shield' },
     ],
   },
