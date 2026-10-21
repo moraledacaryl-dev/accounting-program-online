@@ -210,7 +210,7 @@ export default function ReportsPage() {
     }
   }
 
-  async function exportJournalReviewWorklist() {
+  async function exportJournalReviewWorklist(displayedPageOnly = false) {
     if (journalReviewExporting || !journalReview?.count) return;
     setJournalReviewExporting(true);
     setJournalReviewExportError('');
@@ -219,12 +219,13 @@ export default function ReportsPage() {
         year: journalReviewYear,
         source: journalReviewSource,
         queue: journalReviewQueue,
+        ...(displayedPageOnly ? { page: journalReviewPage, limit: 25 } : {}),
       });
       const blob = new Blob([csv], { type: 'text/csv;charset=utf-8;' });
       const url = URL.createObjectURL(blob);
       const link = document.createElement('a');
       link.href = url;
-      link.download = `journal-review-private-${journalReviewYear || 'all'}-${journalReviewQueue}.csv`;
+      link.download = `journal-review-private-${journalReviewYear || 'all'}-${journalReviewQueue}${displayedPageOnly ? `-page-${journalReviewPage}` : ''}.csv`;
       document.body.appendChild(link);
       link.click();
       document.body.removeChild(link);
@@ -928,7 +929,12 @@ export default function ReportsPage() {
               <span className="badge">Showing {number(journalReview?.count)} records in this queue</span>
               <span className="badge">Page {journalReviewPage} of {journalReview?.total_pages || 1}</span>
               <button type="button" className="secondary"
-                onClick={exportJournalReviewWorklist}
+                onClick={() => exportJournalReviewWorklist(true)}
+                disabled={journalReviewLoading || journalReviewExporting || !(journalReview?.items || []).length}>
+                Export displayed page
+              </button>
+              <button type="button" className="secondary"
+                onClick={() => exportJournalReviewWorklist(false)}
                 disabled={journalReviewLoading || journalReviewExporting || !journalReview?.count}>
                 {journalReviewExporting ? 'Exporting private CSV…' : 'Export private CSV'}
               </button>
@@ -936,7 +942,7 @@ export default function ReportsPage() {
             </div>
             {!!journalReviewError && <p role="alert" className="error-text">{journalReviewError}</p>}
             {!!journalReviewExportError && <p role="alert" className="error-text">{journalReviewExportError}</p>}
-            <p className="muted">Private download includes all rows in the selected queue and filters, not only this page. Store it securely; no ledger posting or matching is performed.</p>
+            <p className="muted">Export displayed page downloads only the ordered transactions shown here (up to 25). Export private CSV downloads all matching rows. Both retain source and reversal references for manual verification. Store securely; no ledger posting or matching is performed.</p>
             <p className="muted">
               Match each item against its external receipt, source cashbook, folio, and existing ledger
               before approving any correction. No automatic matching or posting is performed.

@@ -61,7 +61,7 @@ def _protect_csv_text(value):
     return raw
 
 
-def journal_review_csv(db: Session, *, year=None, source=None, queue='all'):
+def journal_review_csv(db: Session, *, year=None, source=None, queue='all', page=None, limit=25):
     """Build an evidence worklist without altering journal or transaction records."""
     base = _filtered_unlinked(db, year=year, source=source)
     latest_review = (
@@ -80,14 +80,18 @@ def journal_review_csv(db: Session, *, year=None, source=None, queue='all'):
         query = query.filter(latest_review.c.review_id.is_(None))
     elif queue == 'reviewed':
         query = query.filter(latest_review.c.review_id.isnot(None))
-    rows = (
+    query = (
         query.with_entities(MoneyTransaction, JournalLinkageReview)
         .order_by(MoneyTransaction.transaction_date.asc(), MoneyTransaction.id.asc())
-        .limit(JOURNAL_REVIEW_EXPORT_MAX_ROWS + 1)
-        .all()
     )
-    if len(rows) > JOURNAL_REVIEW_EXPORT_MAX_ROWS:
-        raise HTTPException(status_code=413, detail='Review worklist exceeds the private export row limit.')
+    if page is None:
+        # Refuse truncation for an entire filtered worklist.
+        rows = query.limit(JOURNAL_REVIEW_EXPORT_MAX_ROWS + 1).all()
+        if len(rows) > JOURNAL_REVIEW_EXPORT_MAX_ROWS:
+            raise HTTPException(status_code=413, detail='Review worklist exceeds the private export row limit.')
+    else:
+        # Precisely mirror the on-screen review queue's ordered page.
+        rows = query.offset((page - 1) * limit).limit(limit).all()
 
     header = [
         'money_transaction_id', 'transaction_date', 'financial_account_id',
@@ -96,6 +100,8 @@ def journal_review_csv(db: Session, *, year=None, source=None, queue='all'):
         'linked_record_id', 'journal_link_status', 'latest_review_classification',
         'evidence_reference', 'review_rationale', 'suggested_journal_entry_id',
         'reviewed_by', 'reviewed_at',
+        'subcategory', 'linked_record_type', 'receivable_id', 'payable_id',
+        'reversed_from_id', 'is_reversed', 'posted_at', 'bir_include',
     ]
     output = StringIO(newline='')
     writer = csv.writer(output)
@@ -112,6 +118,8 @@ def journal_review_csv(db: Session, *, year=None, source=None, queue='all'):
             review.suggested_journal_entry_id if review else None,
             review.reviewed_by if review else None,
             review.created_at.isoformat() if review and review.created_at else None,
+            tx.subcategory, tx.linked_record_type, tx.receivable_id, tx.payable_id,
+            tx.reversed_from_id, tx.is_reversed, tx.posted_at, tx.bir_include,
         )])
     return output.getvalue()
 
@@ -284,12 +292,17 @@ def export_journal_linkage_review(
     year: str | None = Query(None, pattern=r'^\d{4}$'),
     source: str | None = Query(None, max_length=40),
     queue: Literal['all', 'unreviewed', 'reviewed'] = Query('all'),
+    page: int | None = Query(None, ge=1, le=10000),
+    limit: int = Query(25, ge=1, le=100),
     db: Session = Depends(get_db),
     user=Depends(require_roles('owner', 'admin')),
 ):
     # Do not emit any private review references or amounts into public workflow logs.
-    content = journal_review_csv(db, year=year, source=source, queue=queue)
-    filename = f"journal-review-private-{year or 'all'}-{queue}.csv"
+    content = journal_review_csv(db, year=year, source=source, queue=queue, page=page, limit=limit)
+    filename = (
+        f"journal-review-private-{year or 'all'}-{queue}"
+        f"{f'-page-{page}' if page is not None else ''}.csv"
+    )
     return Response(
         content=content,
         media_type='text/csv; charset=utf-8',

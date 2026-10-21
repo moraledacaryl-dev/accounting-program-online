@@ -265,6 +265,55 @@ def test_private_journal_csv_uses_scope_filters_latest_review_and_all_pages(clie
     assert db.query(JournalEntry).count() == 0
 
 
+def test_private_csv_exact_displayed_page_and_source_trace_fields(client_and_db):
+    client, db, _ = client_and_db
+    tx = db.query(MoneyTransaction).filter_by(id=1).one()
+    tx.subcategory = 'guest room deposit'
+    tx.linked_record_type = 'folio'
+    tx.linked_record_id = 121
+    tx.posted_at = '2025-01-11T01:00:00Z'
+    tx.bir_include = True
+    db.commit()
+    before = [(x.id, x.amount, x.journal_entry_id) for x in db.query(MoneyTransaction).order_by(MoneyTransaction.id)]
+
+    first_response = client.get('/reports/journal-linkage-review/export.csv?page=1&limit=2')
+    first = _csv_rows(first_response)
+    assert first_response.headers['content-disposition'].endswith('journal-review-private-all-all-page-1.csv"')
+    assert [int(row['money_transaction_id']) for row in first] == [1, 5]
+    assert first[0]['subcategory'] == 'guest room deposit'
+    assert first[0]['linked_record_type'] == 'folio'
+    assert first[0]['linked_record_id'] == '121'
+    assert first[0]['posted_at'] == '2025-01-11T01:00:00Z'
+    assert first[0]['bir_include'] == 'True'
+    assert first[0]['is_reversed'] == 'False'
+    assert 'receivable_id' in first[0] and 'payable_id' in first[0]
+    assert 'reversed_from_id' in first[0]
+
+    second = _csv_rows(client.get('/reports/journal-linkage-review/export.csv?page=2&limit=2'))
+    assert [int(row['money_transaction_id']) for row in second] == [2, 3]
+    final = _csv_rows(client.get('/reports/journal-linkage-review/export.csv?page=3&limit=2'))
+    assert [int(row['money_transaction_id']) for row in final] == [4]
+    assert _csv_rows(client.get('/reports/journal-linkage-review/export.csv?page=4&limit=2')) == []
+    assert [int(row['money_transaction_id']) for row in _csv_rows(client.get(
+        '/reports/journal-linkage-review/export.csv?year=2025&source=legacy_import&page=2&limit=2'
+    ))] == [2]
+
+    saved = client.post('/reports/journal-linkage-review/1/decisions', json=_decision(
+        key='private-csv-page-review-0001', decision='cashflow_only_documented',
+        reference='Source cashbook page 12',
+    ))
+    assert saved.status_code == 200, saved.text
+    assert [int(row['money_transaction_id']) for row in _csv_rows(client.get(
+        '/reports/journal-linkage-review/export.csv?queue=unreviewed&page=1&limit=2'
+    ))] == [5, 2]
+    assert [int(row['money_transaction_id']) for row in _csv_rows(client.get(
+        '/reports/journal-linkage-review/export.csv?queue=reviewed&page=1&limit=2'
+    ))] == [1]
+    after = [(x.id, x.amount, x.journal_entry_id) for x in db.query(MoneyTransaction).order_by(MoneyTransaction.id)]
+    assert before == after
+    assert db.query(JournalEntry).count() == 0
+
+
 def test_private_journal_csv_formula_guard_auth_and_row_limit(client_and_db, monkeypatch):
     client, db, actor = client_and_db
     tx = db.query(MoneyTransaction).filter_by(id=1).one()
@@ -285,10 +334,12 @@ def test_private_journal_csv_formula_guard_auth_and_row_limit(client_and_db, mon
     assert client.get('/reports/journal-linkage-review/export.csv').status_code == 200
     actor.role = 'owner'
 
-    for bad in ['year=20x5', 'queue=cleared']:
+    for bad in ['year=20x5', 'queue=cleared', 'page=0', 'page=-1', 'page=10001',
+                'limit=0', 'limit=101']:
         assert client.get('/reports/journal-linkage-review/export.csv?' + bad).status_code == 422
     monkeypatch.setattr(journal_review, 'JOURNAL_REVIEW_EXPORT_MAX_ROWS', 1)
     assert client.get('/reports/journal-linkage-review/export.csv').status_code == 413
+    assert len(_csv_rows(client.get('/reports/journal-linkage-review/export.csv?page=1&limit=2'))) == 2
     assert db.query(JournalLinkageReview).count() == 0
     assert db.query(MoneyTransaction).filter(MoneyTransaction.journal_entry_id.isnot(None)).count() == 0
 

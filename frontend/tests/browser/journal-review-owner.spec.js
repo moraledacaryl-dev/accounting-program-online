@@ -186,7 +186,7 @@ test('private review CSV exports all filtered queue rows without implying reconc
   await page.getByLabel('External Source').selectOption('cashbook');
   const exportButton = page.getByRole('button', { name: 'Export private CSV' });
   await expect(exportButton).toBeEnabled();
-  await expect(page.getByText('Private download includes all rows in the selected queue and filters', { exact: false })).toBeVisible();
+  await expect(page.getByText('Export private CSV downloads all matching rows', { exact: false })).toBeVisible();
   const downloadEvent = page.waitForEvent('download');
   await exportButton.click();
   const download = await downloadEvent;
@@ -195,5 +195,54 @@ test('private review CSV exports all filtered queue rows without implying reconc
   expect(new URLSearchParams(session.exported()).get('source')).toBe('cashbook');
   expect(new URLSearchParams(session.exported()).get('queue')).toBe(null);
   await expect(bar).toHaveAttribute('aria-valuemax', '1');
+  expect(await page.evaluate(() => document.documentElement.scrollWidth <= document.documentElement.clientWidth + 1)).toBe(true);
+});
+
+
+test('owner exports exactly the displayed journal review page with stable filters', async ({ page }) => {
+  const session = await mockOwnerReports(page);
+  await page.setViewportSize({ width: 390, height: 844 });
+  await page.goto('/reports');
+  await page.getByRole('button', { name: 'Journal Review', exact: true }).click();
+  await expect(page.getByText('Page 1 of 2')).toBeVisible();
+  const button = page.getByRole('button', { name: 'Export displayed page' });
+  await expect(button).toBeEnabled();
+  let event = page.waitForEvent('download');
+  await button.click();
+  let download = await event;
+  expect(download.suggestedFilename()).toBe('journal-review-private-all-unreviewed-page-1.csv');
+  let params = new URLSearchParams(session.exported());
+  expect(params.get('page')).toBe('1');
+  expect(params.get('limit')).toBe('25');
+  expect(params.get('queue')).toBe('unreviewed');
+
+  await page.getByRole('button', { name: 'Next', exact: true }).click();
+  await expect(page.getByText('Page 2 of 2')).toBeVisible();
+  event = page.waitForEvent('download');
+  await button.click();
+  download = await event;
+  expect(download.suggestedFilename()).toBe('journal-review-private-all-unreviewed-page-2.csv');
+  params = new URLSearchParams(session.exported());
+  expect(params.get('page')).toBe('2');
+  expect(params.get('limit')).toBe('25');
+
+  await page.getByLabel('External Source').selectOption('beds24');
+  await expect(page.getByText('Page 1 of 1')).toBeVisible();
+  event = page.waitForEvent('download');
+  await button.click();
+  download = await event;
+  expect(download.suggestedFilename()).toBe('journal-review-private-all-unreviewed-page-1.csv');
+  params = new URLSearchParams(session.exported());
+  expect(params.get('source')).toBe('beds24');
+  expect(params.get('page')).toBe('1');
+
+  const allButton = page.getByRole('button', { name: 'Export private CSV' });
+  event = page.waitForEvent('download');
+  await allButton.click();
+  download = await event;
+  expect(download.suggestedFilename()).toBe('journal-review-private-all-unreviewed.csv');
+  params = new URLSearchParams(session.exported());
+  expect(params.get('page')).toBeNull();
+  expect(params.get('source')).toBe('beds24');
   expect(await page.evaluate(() => document.documentElement.scrollWidth <= document.documentElement.clientWidth + 1)).toBe(true);
 });
