@@ -84,8 +84,8 @@ test('owner can review paginated journal linkage evidence without changing balan
   const reviewTable = page.getByRole('table', { name: 'Unverified journal linkage records' });
   await expect(reviewTable).toContainText('REF-001');
   await expect(reviewTable).toContainText('1,234.56');
-  await expect(page.getByText('Missing journal links')).toBeVisible();
-  await expect(page.getByText('Missing journal links').locator('..')).toContainText('26');
+  await expect(page.getByText('Missing journal links', { exact: true })).toBeVisible();
+  await expect(page.getByText('Missing journal links', { exact: true }).locator('..')).toContainText('26');
   await expect(page.getByRole('progressbar', { name: 'Evidence review coverage' })).toHaveAttribute('aria-valuenow', '0');
   await expect(page.getByLabel('Review Queue')).toHaveValue('unreviewed');
   await page.getByRole('button', { name: 'Next', exact: true }).click();
@@ -154,7 +154,7 @@ test('review queue filters the worklist without changing the missing journal tot
   await queue.selectOption('reviewed');
   await expect(page.getByText('Showing 0 records in this queue')).toBeVisible();
   await expect(page.getByText('No matching records in this queue.', { exact: false })).toBeVisible();
-  await expect(page.getByText('Missing journal links').locator('..')).toContainText('26');
+  await expect(page.getByText('Missing journal links', { exact: true }).locator('..')).toContainText('26');
   await queue.selectOption('all');
   await expect(page.getByText('Showing 26 records in this queue')).toBeVisible();
   await expect(page.getByRole('table', { name: 'Unverified journal linkage records' })).toContainText('REF-001');
