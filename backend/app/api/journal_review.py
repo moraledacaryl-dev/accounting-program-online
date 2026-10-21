@@ -1,7 +1,7 @@
-"""Owner-only, read-only review of posted money movements lacking journal links.
+"""Owner-only journal linkage evidence review with append-only review decisions.
 
 A missing journal foreign key is not evidence that money or revenue is missing.
-No endpoint in this module creates journals, updates links, or writes decisions.
+Decisions append private review history only; monetary data and journals remain unchanged.
 """
 from __future__ import annotations
 
@@ -28,7 +28,7 @@ def _unlinked(db: Session):
     )
 
 
-def review_journal_linkage(db: Session, *, year=None, source=None, page=1, limit=25):
+def review_journal_linkage(db: Session, *, year=None, source=None, queue='all', page=1, limit=25):
     """Read at most one page of transaction-level evidence; never mutate rows."""
     base = _unlinked(db)
     if year:
@@ -50,7 +50,7 @@ def review_journal_linkage(db: Session, *, year=None, source=None, page=1, limit
         else:
             base = base.filter(MoneyTransaction.external_source == source)
 
-    count = base.count()
+    scope_count = base.count()
     # Count latest review classifications across the *filtered population*,
     # not just this page. Recording evidence is not financial reconciliation.
     latest_review = (
@@ -92,7 +92,22 @@ def review_journal_linkage(db: Session, *, year=None, source=None, page=1, limit
             # Keep any future classification visible in overall review coverage
             # without wrongly treating it as reconciled.
             review_counts['requires_accounting_review'] += int(total)
-    evidence_recorded = count - review_counts['never_reviewed']
+    evidence_recorded = scope_count - review_counts['never_reviewed']
+
+    # The work queue filters rows, never the scope-wide review progress.
+    # Otherwise choosing "awaiting review" would make pending journals appear
+    # to disappear from the financial exception summary.
+    if queue == 'unreviewed':
+        base = base.outerjoin(
+            latest_review,
+            latest_review.c.transaction_id == MoneyTransaction.id,
+        ).filter(latest_review.c.review_id.is_(None))
+    elif queue == 'reviewed':
+        base = base.join(
+            latest_review,
+            latest_review.c.transaction_id == MoneyTransaction.id,
+        )
+    count = base.count()
 
     rows = (
         base.order_by(MoneyTransaction.transaction_date.asc(), MoneyTransaction.id.asc())
@@ -115,7 +130,7 @@ def review_journal_linkage(db: Session, *, year=None, source=None, page=1, limit
     return {
         'count': int(count),
         'review_summary': {
-            'missing_journal_links': int(count),
+            'missing_journal_links': int(scope_count),
             'never_reviewed': review_counts['never_reviewed'],
             'evidence_recorded': evidence_recorded,
             'classifications': {
@@ -126,6 +141,8 @@ def review_journal_linkage(db: Session, *, year=None, source=None, page=1, limit
             'is_financially_reconciled': False,
         },
         'page': page,
+        'queue': queue,
+        'scope_count': int(scope_count),
         'page_size': limit,
         'total_pages': (count + limit - 1) // limit,
         'source_counts': source_counts,
@@ -164,13 +181,14 @@ def journal_linkage_review(
     response: Response,
     year: str | None = Query(None, pattern=r'^\d{4}$'),
     source: str | None = Query(None, max_length=40),
+    queue: Literal['all', 'unreviewed', 'reviewed'] = Query('all'),
     page: int = Query(1, ge=1, le=10000),
     limit: int = Query(25, ge=1, le=100),
     db: Session = Depends(get_db),
     user=Depends(require_roles('owner', 'admin')),
 ):
     response.headers['Cache-Control'] = 'private, no-store'
-    return review_journal_linkage(db, year=year, source=source, page=page, limit=limit)
+    return review_journal_linkage(db, year=year, source=source, queue=queue, page=page, limit=limit)
 
 
 class JournalLinkageReviewCreate(BaseModel):
