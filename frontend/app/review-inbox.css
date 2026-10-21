@@ -195,3 +195,42 @@
 .review-source-coverage-card strong { text-transform: capitalize; }
 .review-source-coverage-card span { font-weight: 650; }
 .review-source-coverage-card small { color: #52695a; line-height: 1.4; }
+
+/* Post-visual-audit: later shell styles neutralized the dark hero gradient,
+   leaving its white description invisible and excessive blank space. Use the
+   same compact, light treatment as other Accounting workspace headers. */
+.main[data-route="/review-inbox"] .review-inbox-page .review-inbox-hero {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  flex-wrap: wrap;
+  gap: 16px;
+  min-height: 0;
+  height: auto;
+  padding: clamp(18px, 2.5vw, 28px);
+  color: #1d3a2d;
+  background: linear-gradient(135deg, #f3f9f5, #fff);
+  border: 1px solid #dce8df;
+  box-shadow: none;
+}
+.main[data-route="/review-inbox"] .review-inbox-page .review-inbox-hero h1,
+.main[data-route="/review-inbox"] .review-inbox-page .review-inbox-hero .eyebrow {
+  color: #193b2e;
+}
+.main[data-route="/review-inbox"] .review-inbox-page .review-inbox-hero .muted {
+  color: #4c6256;
+  line-height: 1.5;
+  max-width: 760px;
+}
+.main[data-route="/review-inbox"] .review-inbox-page .review-inbox-hero button {
+  color: #1b4432;
+  background: #fff;
+  border: 1px solid #cbded0;
+  box-shadow: none;
+}
+@media (max-width: 680px) {
+  .main[data-route="/review-inbox"] .review-inbox-page .review-inbox-hero {
+    align-items: stretch;
+    flex-direction: column;
+  }
+}
