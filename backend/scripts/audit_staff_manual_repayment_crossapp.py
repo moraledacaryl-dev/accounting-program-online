@@ -239,6 +239,73 @@ def reconcile(
             "needs_manual_reconciliation": True,
         })
 
+    # A transaction appearing on the candidate list may actually belong to
+    # POS, rooms, guest deposits or another application. Query its Accounting
+    # classification and ledger links, without leaking financial account names,
+    # counterparty identities, notes or literal payment references.
+    candidate_ids = sorted({
+        int(candidate["id"])
+        for item in output
+        for field in (
+            "same_date_amount_cash_candidates",
+            "nearby_date_amount_cash_candidates",
+            "receipt_reference_cash_candidates",
+        )
+        for candidate in item[field]
+    })
+    candidate_context: list[dict] = []
+    for candidate_id in candidate_ids:
+        row = accounting_db.execute(text("""
+            SELECT t.id, t.direction, t.status, t.is_reversed,
+                   t.module, t.category, t.subcategory, t.payment_method,
+                   t.reference_no, t.counterparty_name, t.notes,
+                   t.financial_account_id, t.linked_record_type,
+                   t.linked_record_id, t.receivable_id, t.payable_id,
+                   t.journal_entry_id, t.external_source, t.external_id,
+                   f.account_type AS account_type,
+                   f.currency AS account_currency,
+                   j.status AS journal_status,
+                   j.is_reversed AS journal_is_reversed
+            FROM money_transactions t
+            LEFT JOIN financial_accounts f
+              ON f.id = t.financial_account_id
+            LEFT JOIN journal_entries j
+              ON j.id = t.journal_entry_id
+            WHERE t.id = :candidate_id
+        """), {"candidate_id": candidate_id}).mappings().first()
+        if row is None:
+            raise RuntimeError(
+                f"Candidate transaction {candidate_id} disappeared during audit"
+            )
+        candidate_context.append({
+            "money_transaction_id": candidate_id,
+            "direction": row["direction"],
+            "status": row["status"],
+            "is_reversed": bool(row["is_reversed"]),
+            "module": row["module"],
+            "category": row["category"],
+            "subcategory": row["subcategory"],
+            "payment_method": row["payment_method"],
+            "financial_account_id": row["financial_account_id"],
+            "financial_account_type": row["account_type"],
+            "financial_account_currency": row["account_currency"],
+            "linked_record_type": row["linked_record_type"],
+            "linked_record_id": row["linked_record_id"],
+            "receivable_id": row["receivable_id"],
+            "payable_id": row["payable_id"],
+            "journal_entry_id": row["journal_entry_id"],
+            "journal_status": row["journal_status"],
+            "journal_is_reversed": (
+                bool(row["journal_is_reversed"])
+                if row["journal_is_reversed"] is not None else None
+            ),
+            "external_source": row["external_source"],
+            "has_external_id": bool(row["external_id"]),
+            "has_reference_no": bool(str(row["reference_no"] or "").strip()),
+            "has_counterparty": bool(str(row["counterparty_name"] or "").strip()),
+            "has_notes": bool(str(row["notes"] or "").strip()),
+        })
+
     return {
         "read_only": True,
         "scope": "active manual Staff repayments missing a Staff Accounting outbox event",
@@ -256,6 +323,8 @@ def reconcile(
         "shared_receipt_reference_candidate_ids": sorted(
             key for key, count in reused_references.items() if count > 1
         ),
+        "candidate_accounting_context": candidate_context,
+        "candidate_accounting_context_is_not_settlement_proof": True,
         "nearby_search_days": lookaround_days,
         "receipt_reference_matching_is_not_proof_of_cash_receipt": True,
         "worklist_sample": output[:sample_limit],
@@ -263,8 +332,9 @@ def reconcile(
         "instruction": (
             "Do not auto-replay or post. Neither same-date amount, nearby-date "
             "amount, nor matching receipt-reference text proves cash receipt "
-            "or uniquely identifies a repayment. Confirm actual statements, "
-            "cash custody, Staff advance ledgers and Accounting posting separately."
+            "or uniquely identifies a repayment. Accounting category, source "
+            "module, account type and journal links are context, not settlement "
+            "proof. Confirm original receipts, cash custody and posting separately."
         ),
     }
 
