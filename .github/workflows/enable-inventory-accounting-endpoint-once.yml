@@ -32,8 +32,7 @@ jobs:
             set +a
             python3 - <<'PY'
             import json,os,urllib.request,urllib.error
-            current=json.loads(os.environ.get("INTEGRATION_ENDPOINTS_JSON") or "{}")
-            assert isinstance(current,dict), "Integration endpoints must be a mapping"
+            # Source may strip JSON quotes; validate token here, parse raw file below.
             assert os.environ.get("INTEGRATION_API_KEY"), "Accounting integration key missing"
             req=urllib.request.Request(
               "https://accounting.hiddenoasis.app/api/integration-review/service-status?source_event_id=integration-preflight-nonexistent",
@@ -57,18 +56,30 @@ jobs:
             from pathlib import Path
             target="https://accounting.hiddenoasis.app"
             path=Path("/etc/hiddenoasis/inventory-backend.env")
-            old=json.loads(os.environ.get("INTEGRATION_ENDPOINTS_JSON") or "{}")
-            assert isinstance(old,dict)
+            content=path.read_text()
+            # Parse raw EnvironmentFile JSON rather than bash-expanded JSON.
+            # Preserve all other configured endpoints.
+            pattern=r"(?m)^(?:export[ \\t]+)?INTEGRATION_ENDPOINTS_JSON[ \\t]*=.*$"
+            matches=re.findall(pattern,content)
+            if len(matches)>1:
+                raise RuntimeError("Multiple endpoint declarations are ambiguous")
+            raw_line=matches[0] if matches else None
+            if raw_line:
+                raw_value=raw_line.split("=",1)[1].strip()
+                if raw_value and raw_value[0] == raw_value[-1] and raw_value[0] in ("'", '"'):
+                    raw_value=raw_value[1:-1]
+                old=json.loads(raw_value)
+            else:
+                old={}
+            if not isinstance(old,dict):
+                raise RuntimeError("Existing endpoints must be a JSON mapping")
             updated=dict(old)
             updated["accounting"]=target
             value=shlex.quote(json.dumps(updated,separators=(",",":")))
-            content=path.read_text()
             line=f"INTEGRATION_ENDPOINTS_JSON={value}"
-            pattern=r"(?m)^(?:export[ \t]+)?INTEGRATION_ENDPOINTS_JSON[ \t]*=.*$"
             new,count=re.subn(pattern,lambda _:line,content)
-            if count>1: raise RuntimeError("Multiple endpoint declarations: refusing ambiguous configuration")
             if not count:
-                new=content.rstrip("\n")+"\n"+line+"\n"
+                new=content.rstrip("\\n")+"\\n"+line+"\\n"
             st=path.stat()
             fd,tmp=tempfile.mkstemp(prefix=".inventory-backend-accounting-",dir=str(path.parent))
             try:
