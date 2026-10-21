@@ -103,34 +103,6 @@ test('per-source intake counts filter review events without claiming source conn
   await expect(hero.getByText('Review each external financial event once.', { exact: false })).toBeVisible();
   const heroBounds = await hero.boundingBox();
   expect(heroBounds).toBeTruthy();
-  // Capture computed layout details when this regression fails in CI.
-  if (heroBounds.height >= 290) {
-    const debugLayout = await hero.evaluate((element) => {
-      const c = getComputedStyle(element);
-      return {
-        height: c.height, minHeight: c.minHeight, minBlockSize: c.minBlockSize,
-        display: c.display, flexDirection: c.flexDirection,
-        justifyContent: c.justifyContent, alignItems: c.alignItems,
-        padding: c.padding, margin: c.margin, aspectRatio: c.aspectRatio,
-        children: Array.from(element.children).map((child) => ({
-          tag: child.tagName, className: child.className,
-          height: child.getBoundingClientRect().height,
-          offsetTop: child.getBoundingClientRect().top - element.getBoundingClientRect().top,
-          style: (() => {
-            const st = getComputedStyle(child);
-            return { height: st.height, minHeight: st.minHeight, blockSize: st.blockSize,
-              display: st.display, flex: st.flex, padding: st.padding, margin: st.margin,
-              overflow: st.overflow, justifyContent: st.justifyContent, alignItems: st.alignItems };
-          })(),
-          inner: Array.from(child.children).map((el) => ({
-            tag: el.tagName, height: el.getBoundingClientRect().height,
-            top: el.getBoundingClientRect().top - child.getBoundingClientRect().top,
-          })),
-        })),
-      };
-    });
-    console.log('REVIEW INBOX MOBILE HEADER DEBUG', JSON.stringify(debugLayout));
-  }
   expect(heroBounds.height).toBeLessThan(290);
   const heroCopyColor = await hero.locator('.muted').evaluate((el) => getComputedStyle(el).color);
   expect(heroCopyColor).toBe('rgb(76, 98, 86)');
