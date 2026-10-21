@@ -220,6 +220,17 @@ def _serialize_review(row: JournalLinkageReview | None):
     }
 
 
+def _same_review_retry(row: JournalLinkageReview, payload: JournalLinkageReviewCreate, user) -> bool:
+    """Only return an existing decision for an identical retry by its original reviewer."""
+    return (
+        row.decision == payload.decision
+        and row.supporting_reference == ((payload.supporting_reference or '').strip() or None)
+        and row.notes == payload.notes.strip()
+        and row.suggested_journal_entry_id == payload.suggested_journal_entry_id
+        and row.reviewed_by == getattr(user, 'username', None)
+    )
+
+
 def record_review_decision(db: Session, transaction_id: int, payload: JournalLinkageReviewCreate, user):
     """Append decision evidence only; lock the money row to prevent review races."""
     prior_key = db.query(JournalLinkageReview).filter(
@@ -228,6 +239,8 @@ def record_review_decision(db: Session, transaction_id: int, payload: JournalLin
     if prior_key:
         if prior_key.money_transaction_id != transaction_id:
             raise HTTPException(status_code=409, detail='Idempotency key already used on another transaction.')
+        if not _same_review_retry(prior_key, payload, user):
+            raise HTTPException(status_code=409, detail='Idempotency key already used with different review evidence or reviewer.')
         return _serialize_review(prior_key)
     tx = _unlinked(db).filter(MoneyTransaction.id == transaction_id).with_for_update().one_or_none()
     if tx is None:
