@@ -186,7 +186,7 @@ test('private review CSV exports all filtered queue rows without implying reconc
   await page.getByLabel('External Source').selectOption('cashbook');
   const exportButton = page.getByRole('button', { name: 'Export private CSV' });
   await expect(exportButton).toBeEnabled();
-  await expect(page.getByText('Private download includes all rows in the selected queue and filters', { exact: false })).toBeVisible();
+  await expect(page.getByText('Export private CSV downloads all matching rows', { exact: false })).toBeVisible();
   const downloadEvent = page.waitForEvent('download');
   await exportButton.click();
   const download = await downloadEvent;
