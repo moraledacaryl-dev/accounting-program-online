@@ -61,7 +61,7 @@ def _protect_csv_text(value):
     return raw
 
 
-def journal_review_csv(db: Session, *, year=None, source=None, queue='all', page=None, limit=25):
+def journal_review_csv(db: Session, *, year=None, source=None, queue='all', page=None, limit=25, expected_page_ids=None):
     """Build an evidence worklist without altering journal or transaction records."""
     base = _filtered_unlinked(db, year=year, source=source)
     latest_review = (
@@ -92,6 +92,20 @@ def journal_review_csv(db: Session, *, year=None, source=None, queue='all', page
     else:
         # Precisely mirror the on-screen review queue's ordered page.
         rows = query.offset((page - 1) * limit).limit(limit).all()
+
+    # If the queue changed since the reviewer viewed the page, refuse to
+    # substitute other transactions in an apparently identical batch export.
+    if expected_page_ids is not None:
+        if page is None:
+            raise HTTPException(status_code=422, detail='Page IDs require a specific page.')
+        expected = [int(value) for value in expected_page_ids.split(',')]
+        if len(expected) > limit or len(expected) != len(set(expected)):
+            raise HTTPException(status_code=422, detail='Invalid displayed-page transaction IDs.')
+        if [tx.id for tx, _ in rows] != expected:
+            raise HTTPException(
+                status_code=409,
+                detail='Journal review queue changed. Refresh before exporting the displayed page.',
+            )
 
     header = [
         'money_transaction_id', 'transaction_date', 'financial_account_id',
@@ -294,6 +308,164 @@ def export_journal_linkage_review(
     queue: Literal['all', 'unreviewed', 'reviewed'] = Query('all'),
     page: int | None = Query(None, ge=1, le=10000),
     limit: int = Query(25, ge=1, le=100),
+    expected_page_ids: str | None = Query(
+        None, min_length=1, max_length=2100, pattern=r'^[1-9][0-9]*(,[1-9][0-9]*)*
+    user=Depends(require_roles('owner', 'admin')),
+):
+    # Do not emit any private review references or amounts into public workflow logs.
+    content = journal_review_csv(
+        db, year=year, source=source, queue=queue, page=page, limit=limit,
+        expected_page_ids=expected_page_ids,
+    )
+    filename = (
+        f"journal-review-private-{year or 'all'}-{queue}"
+        f"{f'-page-{page}' if page is not None else ''}.csv"
+    )
+    return Response(
+        content=content,
+        media_type='text/csv; charset=utf-8',
+        headers={
+            'Cache-Control': 'private, no-store',
+            'X-Content-Type-Options': 'nosniff',
+            'Content-Disposition': f'attachment; filename="{filename}"',
+        },
+    )
+
+
+class JournalLinkageReviewCreate(BaseModel):
+    decision: Literal[
+        'needs_evidence', 'cashflow_only_documented',
+        'journal_candidate_identified', 'requires_accounting_review',
+    ]
+    supporting_reference: str | None = Field(default=None, max_length=255)
+    notes: str = Field(min_length=10, max_length=2000)
+    suggested_journal_entry_id: int | None = Field(default=None, gt=0)
+    expected_latest_review_id: int | None = Field(default=None, gt=0)
+    idempotency_key: str = Field(min_length=16, max_length=128)
+
+
+def _serialize_review(row: JournalLinkageReview | None):
+    if row is None:
+        return None
+    return {
+        'id': row.id,
+        'transaction_id': row.money_transaction_id,
+        'decision': row.decision,
+        'supporting_reference': row.supporting_reference,
+        'notes': row.notes,
+        'suggested_journal_entry_id': row.suggested_journal_entry_id,
+        'reviewed_by': row.reviewed_by,
+        'reviewed_at': row.created_at.isoformat() if row.created_at else None,
+        'accounting_posting_created': False,
+        'journal_link_changed': False,
+    }
+
+
+def _same_review_retry(row: JournalLinkageReview, payload: JournalLinkageReviewCreate, user) -> bool:
+    """Only return an existing decision for an identical retry by its original reviewer."""
+    return (
+        row.decision == payload.decision
+        and row.supporting_reference == ((payload.supporting_reference or '').strip() or None)
+        and row.notes == payload.notes.strip()
+        and row.suggested_journal_entry_id == payload.suggested_journal_entry_id
+        and row.reviewed_by == getattr(user, 'username', None)
+    )
+
+
+def record_review_decision(db: Session, transaction_id: int, payload: JournalLinkageReviewCreate, user):
+    """Append decision evidence only; lock the money row to prevent review races."""
+    prior_key = db.query(JournalLinkageReview).filter(
+        JournalLinkageReview.idempotency_key == payload.idempotency_key
+    ).one_or_none()
+    if prior_key:
+        if prior_key.money_transaction_id != transaction_id:
+            raise HTTPException(status_code=409, detail='Idempotency key already used on another transaction.')
+        if not _same_review_retry(prior_key, payload, user):
+            raise HTTPException(status_code=409, detail='Idempotency key already used with different review evidence or reviewer.')
+        return _serialize_review(prior_key)
+    tx = _unlinked(db).filter(MoneyTransaction.id == transaction_id).with_for_update().one_or_none()
+    if tx is None:
+        raise HTTPException(status_code=409, detail='Transaction no longer qualifies for unlinked journal review.')
+    previous = db.query(JournalLinkageReview).filter(
+        JournalLinkageReview.money_transaction_id == transaction_id
+    ).order_by(JournalLinkageReview.id.desc()).first()
+    if (previous.id if previous else None) != payload.expected_latest_review_id:
+        raise HTTPException(status_code=409, detail='Review history changed. Refresh before submitting.')
+
+    reference = (payload.supporting_reference or '').strip() or None
+    notes = payload.notes.strip()
+    if len(notes) < 10:
+        raise HTTPException(status_code=422, detail='A specific review rationale is required.')
+    if payload.decision != 'needs_evidence' and not reference:
+        raise HTTPException(status_code=422, detail='Evidence reference is required for this classification.')
+    journal = None
+    if payload.decision == 'journal_candidate_identified':
+        if not payload.suggested_journal_entry_id:
+            raise HTTPException(status_code=422, detail='An existing posted journal ID is required.')
+        journal = db.query(JournalEntry).filter(
+            JournalEntry.id == payload.suggested_journal_entry_id,
+            JournalEntry.status == 'posted',
+        ).one_or_none()
+        if journal is None:
+            raise HTTPException(status_code=422, detail='Suggested journal must already be posted.')
+    elif payload.suggested_journal_entry_id is not None:
+        raise HTTPException(status_code=422, detail='Journal ID only allowed for journal candidate review.')
+
+    reviewer = getattr(user, 'username', None)
+    if not reviewer:
+        raise HTTPException(status_code=403, detail='Reviewer identity unavailable.')
+    row = JournalLinkageReview(
+        money_transaction_id=transaction_id,
+        decision=payload.decision,
+        supporting_reference=reference,
+        notes=notes,
+        suggested_journal_entry_id=journal.id if journal else None,
+        reviewed_by=reviewer,
+        idempotency_key=payload.idempotency_key,
+    )
+    db.add(row)
+    db.flush()
+    record_audit(db, entity_type='journal_linkage_review', entity_id=row.id,
+                 action='evidence_classified', user=user, after={
+                     'money_transaction_id': transaction_id,
+                     'decision': row.decision,
+                     'suggested_journal_entry_id': row.suggested_journal_entry_id,
+                     'supporting_reference': row.supporting_reference,
+                 })
+    db.commit()
+    db.refresh(row)
+    return _serialize_review(row)
+
+
+@router.get('/journal-linkage-review/{transaction_id}/history')
+def journal_linkage_review_history(
+    transaction_id: int,
+    response: Response,
+    db: Session = Depends(get_db),
+    user=Depends(require_roles('owner', 'admin')),
+):
+    response.headers['Cache-Control'] = 'private, no-store'
+    tx = db.query(MoneyTransaction.id).filter(MoneyTransaction.id == transaction_id).one_or_none()
+    if tx is None:
+        raise HTTPException(status_code=404, detail='Money transaction not found.')
+    rows = db.query(JournalLinkageReview).filter(
+        JournalLinkageReview.money_transaction_id == transaction_id,
+    ).order_by(JournalLinkageReview.id.desc()).limit(100).all()
+    return {'transaction_id': transaction_id, 'items': [_serialize_review(r) for r in rows]}
+
+
+@router.post('/journal-linkage-review/{transaction_id}/decisions')
+def journal_linkage_record_review(
+    transaction_id: int,
+    payload: JournalLinkageReviewCreate,
+    response: Response,
+    db: Session = Depends(get_db),
+    user=Depends(require_roles('owner', 'admin')),
+):
+    response.headers['Cache-Control'] = 'private, no-store'
+    return record_review_decision(db, transaction_id, payload, user)
+
+    ),
     db: Session = Depends(get_db),
     user=Depends(require_roles('owner', 'admin')),
 ):
