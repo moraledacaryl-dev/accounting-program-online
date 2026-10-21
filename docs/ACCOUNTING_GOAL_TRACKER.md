@@ -57,7 +57,7 @@ The first five implementation groups should not be scored as five-sixths of *fin
 
 ## Next operational checkpoints
 
-- Export the **private** Journal Review list from owner/admin Reports UI; review an evidence-supported first batch. The goal is reducing **166 awaiting first review**, not hiding the exceptions via queue filters.
+- Export the **private** Journal Review list from owner/admin Reports UI. Use **Export displayed page** to create a controlled first batch of up to 25 transactions, or **Export private CSV** for the entire selected queue. Both preserve the year/source/review filters; downloads are confidential. Verify source, linkage, receivable/payable, reversal and posted-date fields against original evidence. The goal is reducing **166 awaiting first review**, not hiding the exceptions via queue filters.
 - Investigate all 12 Beds24 status mismatches as of the latest audit; retain mismatches marked REVIEW_REQUIRED until current state is confirmed.
 - Cross-check the five Staff repayment candidates against source receipts and receiving ledger before any replay.
 - Record separate trial balance/AR/AP and physical cash/bank sign-offs.
