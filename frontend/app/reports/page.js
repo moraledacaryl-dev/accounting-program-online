@@ -219,7 +219,11 @@ export default function ReportsPage() {
         year: journalReviewYear,
         source: journalReviewSource,
         queue: journalReviewQueue,
-        ...(displayedPageOnly ? { page: journalReviewPage, limit: 25 } : {}),
+        ...(displayedPageOnly ? {
+          page: journalReviewPage,
+          limit: journalReview?.page_size || 25,
+          expectedPageIds: (journalReview?.items || []).map((item) => item.id),
+        } : {}),
       });
       const blob = new Blob([csv], { type: 'text/csv;charset=utf-8;' });
       const url = URL.createObjectURL(blob);
