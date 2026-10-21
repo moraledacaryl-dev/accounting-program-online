@@ -84,7 +84,7 @@ test('owner can review paginated journal linkage evidence without changing balan
   await expect(reviewTable).toContainText('36');
   await expect(page.getByText('Page 2 of 2')).toBeVisible();
   await page.getByLabel('External Source').selectOption('beds24');
-  await expect(page.getByText('Evidence recorded')).toBeVisible();
+  await expect(page.getByText('Evidence recorded', { exact: true })).toBeVisible();
   await expect(page.getByRole('progressbar', { name: 'Evidence review coverage' })).toHaveAttribute('aria-valuemax', '1');
   await expect(page.getByRole('button', { name: 'Next', exact: true })).toBeDisabled();
   const widths = await page.evaluate(() => ({
