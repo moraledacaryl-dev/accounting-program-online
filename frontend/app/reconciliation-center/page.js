@@ -1,0 +1,148 @@
+'use client';
+
+import Link from 'next/link';
+import { useEffect, useMemo, useState } from 'react';
+import { useAppShell } from '../../components/app-shell/AppShellContext';
+import { canAccess } from '../../lib/permissions';
+import { fetchIntegrationReviewSummary, fetchJournalLinkageReview, fetchManagementReport } from '../../lib/api';
+import { fetchCashflowSummary } from '../../lib/cashflowApi';
+import { businessDateISO } from '../../lib/businessDate';
+
+const SOURCES = [
+  { key: 'journals', label: 'Historical journal linkage', permission: 'reports.view', ownerOnly: true },
+  { key: 'cash', label: 'Cash and account reconciliation', permission: 'cashflow.view' },
+  { key: 'integrations', label: 'Connected-app intake', permission: 'integrations.view', alternate: 'approvals.view' },
+  { key: 'close', label: 'Period close readiness', permission: 'reports.view' },
+];
+const number = (n) => Number(n || 0).toLocaleString('en-PH');
+const count = (source, get) => source?.state === 'ready' ? number(get(source.value)) : '—';
+
+function SourceStatus({ source }) {
+  const labels = { ready: 'Checked', restricted: 'Restricted', error: 'Unavailable', loading: 'Checking…' };
+  return <span className={'control-source-status ' + (source?.state || 'loading')}>{labels[source?.state] || labels.loading}</span>;
+}
+
+export default function ReconciliationCenterPage() {
+  const { user } = useAppShell();
+  const [refresh, setRefresh] = useState(0);
+  const [sources, setSources] = useState({});
+  const [checkedAt, setCheckedAt] = useState('');
+
+  useEffect(() => {
+    if (!user) return undefined;
+    let alive = true;
+    const allowed = (item) => (!item.ownerOnly || ['owner', 'admin'].includes(user.role)) &&
+      (canAccess(user, item.permission) || (item.alternate && canAccess(user, item.alternate)));
+    const initial = Object.fromEntries(SOURCES.map((item) => [
+      item.key, allowed(item) ? { state: 'loading' } : { state: 'restricted' },
+    ]));
+    setSources(initial);
+    const calls = {
+      journals: () => fetchJournalLinkageReview({ queue: 'all', page: 1, limit: 1 }),
+      cash: () => fetchCashflowSummary({ date: businessDateISO() }),
+      integrations: fetchIntegrationReviewSummary,
+      close: fetchManagementReport,
+    };
+    const active = SOURCES.filter(allowed);
+    Promise.allSettled(active.map((item) => calls[item.key]())).then((results) => {
+      if (!alive) return;
+      const next = { ...initial };
+      active.forEach((item, index) => {
+        const result = results[index];
+        next[item.key] = result.status === 'fulfilled'
+          ? { state: 'ready', value: result.value }
+          : { state: 'error' };
+      });
+      setSources(next);
+      setCheckedAt(new Date().toLocaleString('en-PH'));
+    });
+    return () => { alive = false; };
+  }, [user, refresh]);
+
+  const journal = sources.journals;
+  const cash = sources.cash;
+  const integrations = sources.integrations;
+  const close = sources.close;
+  const checks = close?.state === 'ready' ? (close.value.close_readiness?.checks || []) : [];
+  const criticalCategories = checks.filter((c) => c.severity === 'critical' && !c.passed).length;
+  const work = useMemo(() => [
+    {
+      id: 'journal', title: 'Investigate historical journal links',
+      value: count(journal, (v) => v.review_summary?.never_reviewed),
+      unit: 'transactions awaiting first evidence review',
+      description: journal?.state === 'ready'
+        ? number(journal.value.review_summary?.missing_journal_links) + ' still lack a direct journal link; ' +
+          number(journal.value.review_summary?.evidence_recorded) + ' have evidence recorded, not necessarily resolved.'
+        : 'Inspect historical source documents and existing journal records before proposing corrections.',
+      href: '/reports?view=journal-review', link: 'Open Journal Review', source: journal,
+    },
+    {
+      id: 'cash', title: 'Complete cash and account reconciliation',
+      value: count(cash, (v) => v.summary_cards?.unreconciled_accounts),
+      unit: 'accounts requiring reconciliation',
+      description: 'Count physical cash and verify bank and GCash statements against transaction evidence.',
+      href: '/cashflow?tab=close', link: 'Open daily close', source: cash,
+    },
+    {
+      id: 'integrations', title: 'Review connected financial events',
+      value: count(integrations, (v) => v.needs_review),
+      unit: 'incoming events needing review',
+      description: 'Review POS, Inventory, Payroll and other proposed accounting effects before acceptance.',
+      href: '/review-inbox', link: 'Open Review Inbox', source: integrations,
+    },
+    {
+      id: 'close', title: 'Clear period-close blockers',
+      value: close?.state === 'ready' ? number(criticalCategories) : '—',
+      unit: 'critical close-check categories',
+      description: close?.state === 'ready'
+        ? number(checks.filter((c) => !c.passed).length) + ' categories contain findings; passing checks do not certify financial balances.'
+        : 'Check approvals, unreconciled accounts, aging balances and payroll.',
+      href: '/reports', link: 'Open close-readiness report', source: close,
+    },
+  ], [journal, cash, integrations, close, criticalCategories, checks]);
+  const visible = SOURCES.filter((item) => sources[item.key]?.state !== 'restricted');
+  const checked = visible.filter((item) => sources[item.key]?.state === 'ready').length;
+  const failed = visible.filter((item) => sources[item.key]?.state === 'error').length;
+
+  return <div className="stack control-center-page">
+    <section className="section control-center-hero">
+      <div><div className="eyebrow">Accounting · Read-only control view</div>
+        <h1>Reconciliation Control Center</h1>
+        <p>See outstanding accounting checks in one place. This view does not classify, reconcile, post, or adjust transactions.</p>
+      </div>
+      <div className="control-center-toolbar">
+        <button type="button" className="secondary" onClick={() => setRefresh((n) => n + 1)}>Refresh checks</button>
+        <span className="small muted" role="status">{checkedAt ? 'Last checked ' + checkedAt : 'Checking available sources…'}</span>
+      </div>
+    </section>
+    <section className="section control-center-coverage" aria-label="Control coverage">
+      <div><strong>{checked} / {visible.length}</strong><span>Accessible sources checked</span></div>
+      <div><strong>{failed}</strong><span>Sources unavailable</span></div>
+      <div><strong>{SOURCES.length - visible.length}</strong><span>Role-restricted sources</span></div>
+      <p className="muted">Unavailable and restricted sources never count as zero exceptions. These are separate controls, not amounts to sum.</p>
+    </section>
+    <section className="control-center-list" aria-label="Reconciliation workstreams">
+      {work.map((item, index) => <article className="section control-center-work" key={item.id}>
+        <div className="control-center-work-head">
+          <div><div className="eyebrow">Priority {index + 1}</div><h2>{item.title}</h2></div>
+          <SourceStatus source={item.source} />
+        </div>
+        <div className="control-center-count"><strong>{item.value}</strong><span>{item.unit}</span></div>
+        <p className="muted">{item.description}</p>
+        {item.source?.state === 'error' && <p className="error-text" role="alert">This source could not be checked. Refresh or open its original workspace.</p>}
+        {item.source?.state === 'restricted'
+          ? <span className="small muted">An authorized Accounting reviewer must open this source.</span>
+          : <Link href={item.href} className="button-link secondary-link">{item.link} →</Link>}
+      </article>)}
+    </section>
+    {close?.state === 'ready' && checks.length > 0 && <section className="section">
+      <div className="section-title-row"><h2>Period-close checklist</h2><Link href="/reports">Full reports</Link></div>
+      <div className="control-center-check-grid">{checks.map((item) => <div className="control-center-check" key={item.key}>
+        <span className={item.passed ? 'control-check-clear' : 'control-check-open'}>{item.passed ? 'No findings' : 'Needs attention'}</span>
+        <strong>{item.label}</strong><span>{number(item.value)} flagged</span>
+        {!item.passed && <small>{item.action}</small>}
+      </div>)}</div>
+    </section>}
+    <p className="small muted">Counts are from the last successful source check. Missing journal links do not prove missing money; saved review evidence does not automatically resolve a linkage. Separate bank, cash and ledger sign-off remains required.</p>
+  </div>;
+}

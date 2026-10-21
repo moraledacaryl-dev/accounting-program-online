@@ -82,6 +82,7 @@ const routes = [
   ['cashflow-templates', '/cashflow/templates'],
   ['journals', '/journals'],
   ['reports', '/reports'],
+  ['reconciliation-center', '/reconciliation-center'],
   ['assets', '/assets'],
   ['bir', '/bir'],
   ['bookings', '/bookings'],
@@ -150,6 +151,7 @@ for (const [name, route] of [
   ['cashflow-ledger', '/cashflow/ledger'],
   ...(firstAccountId ? [['cashflow-account-history', `/cashflow/${firstAccountId}`]] : []),
   ['reports', '/reports'],
+  ['reconciliation-center', '/reconciliation-center'],
 ]) {
   let status = 'ok';
   let error = '';

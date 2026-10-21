@@ -68,6 +68,14 @@ export default function ReportsPage() {
   const { user } = useAppShell();
   const canReviewJournalLinks = user?.role === 'owner' || user?.role === 'admin';
   const [activeView, setActiveView] = useState('overview');
+  useEffect(() => {
+    // Allow direct links from the reconciliation worklist; do not expose
+    // the private journal review tab to non-owner/non-admin roles.
+    const requested = new URLSearchParams(window.location.search).get('view');
+    if (requested === 'journal-review' && (user?.role === 'owner' || user?.role === 'admin')) {
+      setActiveView('journal-review');
+    }
+  }, [user?.role]);
   const [filters, setFilters] = useState({
     start_date: monthStartISO(),
     end_date: todayISO(),
