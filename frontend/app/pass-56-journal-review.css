@@ -129,3 +129,54 @@
   .main[data-route="/reports"] .journal-evidence-form { grid-template-columns: minmax(0, 1fr); }
   .main[data-route="/reports"] .journal-evidence-panel { padding: 14px; }
 }
+
+/* Group 6: evidence collection progress is not financial resolution. */
+.main[data-route="/reports"] .journal-review-progress {
+  display: grid;
+  gap: 9px;
+  padding: clamp(12px, 2vw, 18px);
+  background: #f8fbf8;
+  border: 1px solid #e0ebe3;
+  border-radius: 12px;
+}
+.main[data-route="/reports"] .journal-review-progress-metrics {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 14px;
+}
+.main[data-route="/reports"] .journal-review-progress-metrics > div {
+  display: grid;
+  min-width: 0;
+  gap: 4px;
+}
+.main[data-route="/reports"] .journal-review-progress-metrics span {
+  color: #51665a;
+  font-size: .83rem;
+  line-height: 1.3;
+}
+.main[data-route="/reports"] .journal-review-progress-metrics strong {
+  font-size: clamp(1.3rem, 2.5vw, 1.7rem);
+  font-variant-numeric: tabular-nums;
+  line-height: 1.1;
+}
+.main[data-route="/reports"] .journal-review-progress-track {
+  width: 100%;
+  overflow: hidden;
+  height: 8px;
+  background: #e1e9e3;
+  border-radius: 999px;
+}
+.main[data-route="/reports"] .journal-review-progress-fill {
+  background: #478363;
+  height: 100%;
+  border-radius: inherit;
+}
+.main[data-route="/reports"] .journal-review-progress p { margin: 0; }
+@media (max-width: 640px) {
+  .main[data-route="/reports"] .journal-review-progress-metrics {
+    gap: 10px;
+  }
+  .main[data-route="/reports"] .journal-review-progress-metrics span {
+    font-size: .78rem;
+  }
+}

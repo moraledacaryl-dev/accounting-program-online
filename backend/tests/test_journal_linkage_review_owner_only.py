@@ -59,6 +59,17 @@ def test_owner_can_page_and_filter_journal_linkage_without_edits(client_and_db):
     assert response.headers['cache-control'] == 'private, no-store'
     body = response.json()
     assert body['count'] == 5
+    assert body['review_summary'] == {
+        'missing_journal_links': 5,
+        'never_reviewed': 5,
+        'evidence_recorded': 0,
+        'classifications': {
+            'needs_evidence': 0, 'cashflow_only_documented': 0,
+            'journal_candidate_identified': 0, 'requires_accounting_review': 0,
+        },
+        'journal_links_resolved_by_review': 0,
+        'is_financially_reconciled': False,
+    }
     assert body['total_pages'] == 3
     assert [row['id'] for row in body['items']] == [1, 5]
     assert {row['source']: row['count'] for row in body['source_counts']} == {
@@ -127,6 +138,13 @@ def test_append_only_reviews_do_not_mutate_money_or_post_journals(client_and_db)
     assert repeated.status_code == 200
     assert repeated.json()['id'] == result['id']
     assert db.query(JournalLinkageReview).count() == 1
+    initial_summary = client.get('/reports/journal-linkage-review').json()['review_summary']
+    assert initial_summary['missing_journal_links'] == 5
+    assert initial_summary['never_reviewed'] == 4
+    assert initial_summary['evidence_recorded'] == 1
+    assert initial_summary['classifications']['needs_evidence'] == 1
+    assert initial_summary['journal_links_resolved_by_review'] == 0
+    assert initial_summary['is_financially_reconciled'] is False
     assert client.get('/reports/journal-linkage-review').json()['items'][0]['review_status'] == 'evidence_recorded'
     history = client.get('/reports/journal-linkage-review/1/history')
     assert history.status_code == 200
@@ -145,6 +163,13 @@ def test_append_only_reviews_do_not_mutate_money_or_post_journals(client_and_db)
     assert second.status_code == 200, second.text
     assert second.json()['id'] > result['id']
     assert db.query(JournalLinkageReview).count() == 2
+    latest_summary = client.get('/reports/journal-linkage-review').json()['review_summary']
+    # Re-reviewing an item never increments the number of reviewed transactions.
+    assert latest_summary['evidence_recorded'] == 1
+    assert latest_summary['never_reviewed'] == 4
+    assert latest_summary['classifications']['needs_evidence'] == 0
+    assert latest_summary['classifications']['requires_accounting_review'] == 1
+    assert latest_summary['journal_links_resolved_by_review'] == 0
     assert [r['id'] for r in client.get('/reports/journal-linkage-review/1/history').json()['items']] == [
         second.json()['id'], result['id'],
     ]
@@ -187,3 +212,39 @@ def test_append_only_review_denied_to_non_owner(client_and_db):
     actor.role = 'admin'
     assert client.post('/reports/journal-linkage-review/1/decisions', json=_decision()).status_code == 200
     assert db.query(JournalLinkageReview).count() == 1
+
+
+def test_review_progress_tracks_latest_decision_across_filtered_sources(client_and_db):
+    client, db, _ = client_and_db
+    review_1 = client.post(
+        '/reports/journal-linkage-review/1/decisions',
+        json=_decision(decision='cashflow_only_documented', reference='Folio receipt #1',
+                       key='evidence-progress-001'),
+    )
+    assert review_1.status_code == 200, review_1.text
+    review_2 = client.post(
+        '/reports/journal-linkage-review/3/decisions',
+        json=_decision(decision='requires_accounting_review', reference='Source B proof',
+                       key='evidence-progress-002'),
+    )
+    assert review_2.status_code == 200, review_2.text
+
+    all_summary = client.get('/reports/journal-linkage-review?limit=2').json()['review_summary']
+    assert all_summary['missing_journal_links'] == 5
+    assert all_summary['evidence_recorded'] == 2
+    assert all_summary['never_reviewed'] == 3
+    assert all_summary['classifications']['cashflow_only_documented'] == 1
+    assert all_summary['classifications']['requires_accounting_review'] == 1
+    assert all_summary['journal_links_resolved_by_review'] == 0
+
+    source_a = client.get('/reports/journal-linkage-review?source=legacy_import').json()
+    assert source_a['count'] == 4
+    assert source_a['review_summary']['evidence_recorded'] == 1
+    assert source_a['review_summary']['never_reviewed'] == 3
+
+    source_b = client.get('/reports/journal-linkage-review?year=2026&source=beds24').json()
+    assert source_b['count'] == 1
+    assert source_b['review_summary']['evidence_recorded'] == 1
+    assert source_b['review_summary']['never_reviewed'] == 0
+    assert source_b['review_summary']['is_financially_reconciled'] is False
+    assert db.query(MoneyTransaction).filter(MoneyTransaction.journal_entry_id.isnot(None)).count() == 0
