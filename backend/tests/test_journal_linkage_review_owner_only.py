@@ -10,7 +10,8 @@ from sqlalchemy.pool import StaticPool
 
 from app.api import deps, journal_review
 from app.db.database import Base, get_db
-from app.models.entities import FinancialAccount, MoneyTransaction
+from app.models.entities import FinancialAccount, MoneyTransaction, JournalEntry
+from app.models.journal_linkage_review import JournalLinkageReview
 
 
 @pytest.fixture
@@ -92,5 +93,97 @@ def test_journal_review_rejects_invalid_queries(client_and_db, query):
     assert client.get('/reports/journal-linkage-review?' + query).status_code == 422
 
 
-def test_review_router_exposes_get_only():
-    assert [route.methods for route in journal_review.router.routes] == [{'GET'}]
+def test_review_router_limits_mutations_to_append_only_evidence():
+    assert [route.methods for route in journal_review.router.routes] == [{'GET'}, {'GET'}, {'POST'}]
+
+
+def _decision(decision='needs_evidence', reference=None, journal_id=None, expected=None, key='idempotency-review-001'):
+    return {
+        'decision': decision,
+        'supporting_reference': reference,
+        'notes': 'Review source receipts and original cashbook before any journal correction.',
+        'suggested_journal_entry_id': journal_id,
+        'expected_latest_review_id': expected,
+        'idempotency_key': key,
+    }
+
+
+def test_append_only_reviews_do_not_mutate_money_or_post_journals(client_and_db):
+    client, db, actor = client_and_db
+    before = [(row.id, row.amount, row.status, row.journal_entry_id)
+              for row in db.query(MoneyTransaction).order_by(MoneyTransaction.id)]
+    response = client.post('/reports/journal-linkage-review/1/decisions',
+                           json=_decision())
+    assert response.status_code == 200, response.text
+    result = response.json()
+    assert result['id'] > 0
+    assert result['accounting_posting_created'] is False
+    assert result['journal_link_changed'] is False
+    assert result['decision'] == 'needs_evidence'
+    assert response.headers['cache-control'] == 'private, no-store'
+
+    repeated = client.post('/reports/journal-linkage-review/1/decisions',
+                           json=_decision())
+    assert repeated.status_code == 200
+    assert repeated.json()['id'] == result['id']
+    assert db.query(JournalLinkageReview).count() == 1
+    assert client.get('/reports/journal-linkage-review').json()['items'][0]['review_status'] == 'evidence_recorded'
+    history = client.get('/reports/journal-linkage-review/1/history')
+    assert history.status_code == 200
+    assert history.json()['items'][0]['id'] == result['id']
+
+    duplicate_without_new_expected = client.post(
+        '/reports/journal-linkage-review/1/decisions',
+        json=_decision(key='idempotency-review-002'),
+    )
+    assert duplicate_without_new_expected.status_code == 409
+    second = client.post(
+        '/reports/journal-linkage-review/1/decisions',
+        json=_decision(decision='requires_accounting_review', reference='Receipt book page 21',
+                       expected=result['id'], key='idempotency-review-003'),
+    )
+    assert second.status_code == 200, second.text
+    assert second.json()['id'] > result['id']
+    assert db.query(JournalLinkageReview).count() == 2
+    assert [r['id'] for r in client.get('/reports/journal-linkage-review/1/history').json()['items']] == [
+        second.json()['id'], result['id'],
+    ]
+    after = [(row.id, row.amount, row.status, row.journal_entry_id)
+             for row in db.query(MoneyTransaction).order_by(MoneyTransaction.id)]
+    assert after == before
+    assert db.query(JournalEntry).count() == 0
+
+
+def test_evidence_policy_and_journal_candidate_must_reference_existing_posted_journal(client_and_db):
+    client, db, _ = client_and_db
+    assert client.post('/reports/journal-linkage-review/1/decisions',
+        json=_decision(decision='cashflow_only_documented')).status_code == 422
+    assert client.post('/reports/journal-linkage-review/1/decisions',
+        json=_decision(decision='journal_candidate_identified', reference='Manual review proof')).status_code == 422
+    assert client.post('/reports/journal-linkage-review/1/decisions',
+        json=_decision(decision='journal_candidate_identified', reference='Manual review proof',
+                       journal_id=444)).status_code == 422
+    assert db.query(JournalLinkageReview).count() == 0
+
+    draft = JournalEntry(entry_date='2026-02-02', status='draft', reference_no='DRAFT')
+    posted = JournalEntry(entry_date='2026-02-02', status='posted', reference_no='POSTED')
+    db.add_all([draft, posted]); db.commit()
+    assert client.post('/reports/journal-linkage-review/1/decisions',
+        json=_decision(decision='journal_candidate_identified', reference='Evidence', 
+                       journal_id=draft.id)).status_code == 422
+    success = client.post('/reports/journal-linkage-review/1/decisions',
+        json=_decision(decision='journal_candidate_identified', reference='Original source and journal reviewed',
+                       journal_id=posted.id, key='idempotency-review-004'))
+    assert success.status_code == 200, success.text
+    assert success.json()['suggested_journal_entry_id'] == posted.id
+    assert db.query(MoneyTransaction).filter_by(id=1).one().journal_entry_id is None
+
+
+def test_append_only_review_denied_to_non_owner(client_and_db):
+    client, db, actor = client_and_db
+    actor.role = 'front_desk'
+    assert client.post('/reports/journal-linkage-review/1/decisions', json=_decision()).status_code == 403
+    assert client.get('/reports/journal-linkage-review/1/history').status_code == 403
+    actor.role = 'admin'
+    assert client.post('/reports/journal-linkage-review/1/decisions', json=_decision()).status_code == 200
+    assert db.query(JournalLinkageReview).count() == 1
