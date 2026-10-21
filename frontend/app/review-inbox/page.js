@@ -55,27 +55,45 @@ export default function ReviewInboxPage() {
   const [selected, setSelected] = useState(null);
   const [error, setError] = useState('');
   const [busy, setBusy] = useState(false);
+  const [loading, setLoading] = useState(false);
   const [filters, setFilters] = useState({ status: 'ready_for_review', source_app: '', financial_effect: '', q: '' });
+  const [appliedFilters, setAppliedFilters] = useState({ status: 'ready_for_review', source_app: '', financial_effect: '', q: '' });
+  const [refreshCount, setRefreshCount] = useState(0);
 
-  async function load() {
+  useEffect(() => {
+    // Ignore out-of-order responses when the reviewer changes filters quickly.
+    let active = true;
+    setLoading(true);
     setError('');
-    try {
-      const [rows, resultSummary, financialAccounts] = await Promise.all([
-        fetchIntegrationReviewItems(filters),
-        fetchIntegrationReviewSummary(),
-        fetchFinancialAccounts(),
-      ]);
+    setItems([]);
+    Promise.all([
+      fetchIntegrationReviewItems(appliedFilters),
+      fetchIntegrationReviewSummary(),
+      fetchFinancialAccounts(),
+    ]).then(([rows, resultSummary, financialAccounts]) => {
+      if (!active) return;
       setItems(Array.isArray(rows) ? rows : []);
       setSummary(resultSummary);
       setAccounts(Array.isArray(financialAccounts) ? financialAccounts : []);
-    } catch (err) {
+    }).catch((err) => {
+      if (!active) return;
+      setItems([]);
       setError(err.message || 'Failed to load Review Inbox.');
-    }
-  }
+    }).finally(() => {
+      if (active) setLoading(false);
+    });
+    return () => { active = false; };
+  }, [appliedFilters, refreshCount]);
 
-  useEffect(() => {
-    load();
-  }, []);
+  function applyFilters(next = filters) {
+    setSelected(null);
+    setAppliedFilters({ ...next });
+  }
+  function refreshInbox() {
+    setSelected(null);
+    setRefreshCount((n) => n + 1);
+  }
+  const dirty = Object.keys(filters).some((key) => filters[key] !== appliedFilters[key]);
 
   const counts = summary?.by_status || {};
 
@@ -89,7 +107,7 @@ export default function ReviewInboxPage() {
         category: item.proposed_links?.category || 'Connected App',
       });
       setSelected(null);
-      await load();
+      refreshInbox();
     } catch (err) {
       setError(err.message || 'Acceptance failed.');
     } finally {
@@ -102,7 +120,7 @@ export default function ReviewInboxPage() {
     try {
       await rejectIntegrationReviewItem(item.id, { reason: 'Rejected during Accounting review' });
       setSelected(null);
-      await load();
+      refreshInbox();
     } catch (err) {
       setError(err.message || 'Rejection failed.');
     } finally {
@@ -115,7 +133,7 @@ export default function ReviewInboxPage() {
     try {
       await retryIntegrationReviewItem(item.id, {});
       setSelected(null);
-      await load();
+      refreshInbox();
     } catch (err) {
       setError(err.message || 'Retry failed.');
     } finally {
@@ -134,7 +152,7 @@ export default function ReviewInboxPage() {
             payables, receivables, folio links, or accounting references.
           </p>
         </div>
-        <button type="button" onClick={load}>Refresh inbox</button>
+        <button type="button" onClick={refreshInbox} disabled={loading}>Refresh inbox</button>
       </section>
 
       <section className="metric-grid">
@@ -148,8 +166,12 @@ export default function ReviewInboxPage() {
         <div className="section-title-row">
           <div>
             <h2>Financial intake queue</h2>
-            <p className="small muted">Filter by source, accounting effect, or processing status.</p>
+            <p className="small muted">Filter by source, effect, or status. Up to 200 events appear per applied query.</p>
           </div>
+          <button type="button" className="secondary" disabled={loading}
+            onClick={() => { const next = { ...filters, status: 'validation_failed' }; setFilters(next); applyFilters(next); }}>
+            Review failed validations
+          </button>
         </div>
 
         <div className="review-inbox-toolbar">
@@ -173,10 +195,12 @@ export default function ReviewInboxPage() {
             {Object.entries(effectLabels).map(([key, label]) => <option key={key} value={key}>{label}</option>)}
           </select>
           <input aria-label="Search review items" placeholder="Search source ID or payload" value={filters.q} onChange={(event) => setFilters({ ...filters, q: event.target.value })} />
-          <button type="button" onClick={load}>Apply filters</button>
+          <button type="button" onClick={() => applyFilters()} disabled={loading}>Apply filters</button>
         </div>
 
-        {error ? <p className="error-text">{error}</p> : null}
+        {dirty && <p className="small muted" role="status">Filters changed. Select Apply filters to update the queue.</p>}
+        {loading && <p className="small muted" role="status">Refreshing the filtered review queue…</p>}
+        {error ? <p className="error-text" role="alert">{error}</p> : null}
 
         <div className="table-wrap">
           <table className="table review-inbox-table">
@@ -200,7 +224,8 @@ export default function ReviewInboxPage() {
                   <td><button type="button" className="secondary" onClick={() => setSelected(item)}>Review</button></td>
                 </tr>
               ))}
-              {!items.length ? <tr><td colSpan="7" className="muted">No items match the filters.</td></tr> : null}
+              {!items.length && !loading && !error ? <tr><td colSpan="7" className="muted">No items match the filters.</td></tr> : null}
+              {loading ? <tr><td colSpan="7" className="muted">Loading review events…</td></tr> : null}
             </tbody>
           </table>
         </div>
