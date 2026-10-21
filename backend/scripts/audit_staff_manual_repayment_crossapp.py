@@ -323,7 +323,9 @@ def reconcile(
         "shared_receipt_reference_candidate_ids": sorted(
             key for key, count in reused_references.items() if count > 1
         ),
-        "candidate_accounting_context": candidate_context,
+        "candidate_accounting_context_count": len(candidate_context),
+        "candidate_accounting_context": candidate_context[:sample_limit],
+        "candidate_accounting_context_truncated": len(candidate_context) > sample_limit,
         "candidate_accounting_context_is_not_settlement_proof": True,
         "nearby_search_days": lookaround_days,
         "receipt_reference_matching_is_not_proof_of_cash_receipt": True,
