@@ -27,6 +27,15 @@ appear as a lead for multiple Staff repayments, and reversed transactions
 are labeled rather than silently dropped.
 
 The script never matches a same-day amount as proof that money was received.
+The `candidate_accounting_context` section exposes Accounting's module,
+category, payment method, financial account **type** (not account name),
+linked-record IDs and journal status for every candidate transaction.
+Its purpose is to help reject unrelated room/POS transactions and identify
+which cash drawer, bank or e-wallet ledger requires documentary review.
+It omits counterparty names, transaction notes, literal receipt references,
+external IDs and financial account names. **Neither a posted transaction nor
+an employee-advance category proves that it settles the Staff repayment.**
+
 A row can appear as a candidate for multiple repayments, especially the two
 ₱3,000 receipts dated September 18. `source_identity_found` is only evidence
 of an intake/linked record—not a posted, legitimate receipt. Even posted
@@ -91,3 +100,19 @@ database credentials private; do not paste environment variable values.
 If the extended searches return no candidates, the next step is tracing
 cash custody and Accounting general-ledger records, not assuming missing
 revenue or recording an additional cash receipt.
+
+## Candidate evidence review after the first extended production audit
+
+The extended audit returned four distinct unverified Accounting candidates:
+
+- Staff #29 (₱500, 2026-08-03): Money In #1538 (July 29) and #1539 (July 30)
+- Staff #30 (₱3,000, 2026-08-15, `Other`): Money In #1125 (August 19)
+- Staff #42 and #43 (₱3,000 each, 2026-09-18): the **same** Money In #940 (September 20)
+- Staff #15 (₱1,000, July 2): no candidate in this time window or by receipt reference
+
+No source-identity matches were found. All candidates have status
+`posted` and are not marked reversed, but this does not establish linkage.
+Use `candidate_accounting_context` to inspect the actual ledger classification
+and receiving account type before manually checking original cash vouchers,
+cash book, bank deposits, and Staff employee advance balances. Do not split or
+reuse #940 for both repayments without independently verified evidence.
