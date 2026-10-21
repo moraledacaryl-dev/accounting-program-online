@@ -29,6 +29,10 @@ Primary deployment guide:
 docs/HIDDENOASIS_LIVE_DEPLOYMENT.md
 ```
 
+## Current audit goals and reconciliation status
+
+For the original six-group audit goals, evidence-backed progress, unresolved historical journal links, Beds24 status review, Staff repayment investigation, and financial sign-off criteria, see [Accounting Goal Tracker](docs/ACCOUNTING_GOAL_TRACKER.md). Statuses are a dated snapshot; green CI does not certify physical cash or bank balances.
+
 ## Backend tests
 
 From the repository root, run the isolated backend suite with:
