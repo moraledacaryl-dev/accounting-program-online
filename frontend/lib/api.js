@@ -241,11 +241,15 @@ export const fetchJournalLinkageReview = ({ year = '', source = '', queue = 'all
   return request(`/reports/journal-linkage-review?${params.toString()}`);
 };
 
-export async function fetchJournalLinkageReviewCsv({ year = '', source = '', queue = 'all' } = {}) {
+export async function fetchJournalLinkageReviewCsv({ year = '', source = '', queue = 'all', page = null, limit = 25 } = {}) {
   const params = new URLSearchParams();
   if (year) params.set('year', year);
   if (source) params.set('source', source);
   if (queue !== 'all') params.set('queue', queue);
+  if (page !== null) {
+    params.set('page', String(page));
+    params.set('limit', String(limit));
+  }
   const suffix = params.toString();
   const res = await fetch(
     `${API_BASE}/reports/journal-linkage-review/export.csv${suffix ? `?${suffix}` : ''}`,
