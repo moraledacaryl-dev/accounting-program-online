@@ -67,6 +67,7 @@ const firstAccountId = accounts?.[0]?.id;
 const routes = [
   ['dashboard', '/dashboard'],
   ['start-of-day', '/start-of-day'],
+  ['review-inbox', '/review-inbox'],
   ['finance-workspace', '/workspace/finance'],
   ['cashflow-overview', '/cashflow'],
   ['cashflow-accounts', '/cashflow/accounts'],
@@ -145,6 +146,7 @@ manifest.push({ name: 'cashflow-settings-bottom', route: '/cashflow?tab=settings
 await page.setViewportSize({ width: 390, height: 844 });
 for (const [name, route] of [
   ['dashboard', '/dashboard'],
+  ['review-inbox', '/review-inbox'],
   ['cashflow-overview', '/cashflow'],
   ['cashflow-accounts', '/cashflow/accounts'],
   ['cashflow-ledger', '/cashflow/ledger'],
