@@ -314,6 +314,39 @@ def test_private_csv_exact_displayed_page_and_source_trace_fields(client_and_db)
     assert db.query(JournalEntry).count() == 0
 
 
+def test_private_page_export_refuses_stale_visible_ids_without_financial_mutation(client_and_db):
+    client, db, _ = client_and_db
+    url = '/reports/journal-linkage-review/export.csv?page=1&limit=2'
+    valid = client.get(url + '&expected_page_ids=1,5')
+    assert [row['money_transaction_id'] for row in _csv_rows(valid)] == ['1', '5']
+    assert client.get(url + '&expected_page_ids=5,1').status_code == 409
+    assert client.get(url + '&expected_page_ids=2,3').status_code == 409
+    assert client.get(url + '&expected_page_ids=1').status_code == 409
+    assert client.get(url + '&expected_page_ids=1,1').status_code == 422
+    assert client.get(url + '&expected_page_ids=1,5,2').status_code == 422
+
+    for bad in ('expected_page_ids=1,5', 'page=1&expected_page_ids=0',
+                'page=1&expected_page_ids=1%2C-5',
+                'page=1&expected_page_ids=1%2Cabc'):
+        assert client.get('/reports/journal-linkage-review/export.csv?' + bad).status_code == 422
+
+    # Another reviewer saves evidence: the unreviewed queue shifts beneath the UI.
+    before = [(tx.id, tx.amount, tx.journal_entry_id) for tx in db.query(MoneyTransaction)]
+    saved = client.post('/reports/journal-linkage-review/1/decisions',
+                        json=_decision(key='page-snapshot-guard-0001'))
+    assert saved.status_code == 200, saved.text
+    shifted = client.get(url + '&queue=unreviewed&expected_page_ids=1,5')
+    assert shifted.status_code == 409
+    assert shifted.json()['detail'] == (
+        'Journal review queue changed. Refresh before exporting the displayed page.'
+    )
+    current = _csv_rows(client.get(url + '&queue=unreviewed&expected_page_ids=5,2'))
+    assert [row['money_transaction_id'] for row in current] == ['5', '2']
+    after = [(tx.id, tx.amount, tx.journal_entry_id) for tx in db.query(MoneyTransaction)]
+    assert before == after
+    assert db.query(JournalEntry).count() == 0
+
+
 def test_private_journal_csv_formula_guard_auth_and_row_limit(client_and_db, monkeypatch):
     client, db, actor = client_and_db
     tx = db.query(MoneyTransaction).filter_by(id=1).one()

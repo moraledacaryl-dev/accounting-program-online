@@ -214,6 +214,7 @@ test('owner exports exactly the displayed journal review page with stable filter
   let params = new URLSearchParams(session.exported());
   expect(params.get('page')).toBe('1');
   expect(params.get('limit')).toBe('25');
+  expect(params.get('expected_page_ids')).toBe('11');
   expect(params.get('queue')).toBe('unreviewed');
 
   await page.getByRole('button', { name: 'Next', exact: true }).click();
@@ -243,6 +244,7 @@ test('owner exports exactly the displayed journal review page with stable filter
   expect(download.suggestedFilename()).toBe('journal-review-private-all-unreviewed.csv');
   params = new URLSearchParams(session.exported());
   expect(params.get('page')).toBeNull();
+  expect(params.get('expected_page_ids')).toBeNull();
   expect(params.get('source')).toBe('beds24');
   expect(await page.evaluate(() => document.documentElement.scrollWidth <= document.documentElement.clientWidth + 1)).toBe(true);
 });

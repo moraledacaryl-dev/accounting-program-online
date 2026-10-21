@@ -61,7 +61,7 @@ def _protect_csv_text(value):
     return raw
 
 
-def journal_review_csv(db: Session, *, year=None, source=None, queue='all', page=None, limit=25):
+def journal_review_csv(db: Session, *, year=None, source=None, queue='all', page=None, limit=25, expected_page_ids=None):
     """Build an evidence worklist without altering journal or transaction records."""
     base = _filtered_unlinked(db, year=year, source=source)
     latest_review = (
@@ -92,6 +92,20 @@ def journal_review_csv(db: Session, *, year=None, source=None, queue='all', page
     else:
         # Precisely mirror the on-screen review queue's ordered page.
         rows = query.offset((page - 1) * limit).limit(limit).all()
+
+    # If the queue changed since the reviewer viewed the page, refuse to
+    # substitute other transactions in an apparently identical batch export.
+    if expected_page_ids is not None:
+        if page is None:
+            raise HTTPException(status_code=422, detail='Page IDs require a specific page.')
+        expected = [int(value) for value in expected_page_ids.split(',')]
+        if len(expected) > limit or len(expected) != len(set(expected)):
+            raise HTTPException(status_code=422, detail='Invalid displayed-page transaction IDs.')
+        if [tx.id for tx, _ in rows] != expected:
+            raise HTTPException(
+                status_code=409,
+                detail='Journal review queue changed. Refresh before exporting the displayed page.',
+            )
 
     header = [
         'money_transaction_id', 'transaction_date', 'financial_account_id',
@@ -294,11 +308,17 @@ def export_journal_linkage_review(
     queue: Literal['all', 'unreviewed', 'reviewed'] = Query('all'),
     page: int | None = Query(None, ge=1, le=10000),
     limit: int = Query(25, ge=1, le=100),
+    expected_page_ids: str | None = Query(
+        None, min_length=1, max_length=2100, pattern=r'^[1-9][0-9]*(,[1-9][0-9]*)*$'
+    ),
     db: Session = Depends(get_db),
     user=Depends(require_roles('owner', 'admin')),
 ):
-    # Do not emit any private review references or amounts into public workflow logs.
-    content = journal_review_csv(db, year=year, source=source, queue=queue, page=page, limit=limit)
+    # Never emit private receipt references or amounts into public build logs.
+    content = journal_review_csv(
+        db, year=year, source=source, queue=queue, page=page, limit=limit,
+        expected_page_ids=expected_page_ids,
+    )
     filename = (
         f"journal-review-private-{year or 'all'}-{queue}"
         f"{f'-page-{page}' if page is not None else ''}.csv"
