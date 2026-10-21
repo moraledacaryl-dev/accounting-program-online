@@ -309,10 +309,12 @@ def export_journal_linkage_review(
     page: int | None = Query(None, ge=1, le=10000),
     limit: int = Query(25, ge=1, le=100),
     expected_page_ids: str | None = Query(
-        None, min_length=1, max_length=2100, pattern=r'^[1-9][0-9]*(,[1-9][0-9]*)*
+        None, min_length=1, max_length=2100, pattern=r'^[1-9][0-9]*(,[1-9][0-9]*)*$'
+    ),
+    db: Session = Depends(get_db),
     user=Depends(require_roles('owner', 'admin')),
 ):
-    # Do not emit any private review references or amounts into public workflow logs.
+    # Never emit private receipt references or amounts into public build logs.
     content = journal_review_csv(
         db, year=year, source=source, queue=queue, page=page, limit=limit,
         expected_page_ids=expected_page_ids,
