@@ -1,6 +1,6 @@
 const { test, expect } = require('@playwright/test');
 
-async function mockOwnerReports(page, role = 'owner') {
+async function mockOwnerReports(page, role = 'owner', { fullPage = false } = {}) {
   let latestReview = null;
   let postedPayload = null;
   let exportQuery = null;
@@ -74,6 +74,14 @@ async function mockOwnerReports(page, role = 'owner') {
         ] : [],
       };
     }
+    if (path === '/api/reports/journal-linkage-review' && fullPage && payload?.items?.length && Number(url.searchParams.get('page') || 1) === 1) {
+      payload.items = Array.from({ length: 25 }, (_, index) => ({
+        ...payload.items[0], id: 11 + index,
+        external_id: `source-${String(index + 1).padStart(3, '0')}`,
+        reference_no: `REF-${String(index + 1).padStart(3, '0')}`,
+        latest_review: index === 0 ? latestReview : null,
+      }));
+    }
     if (path === '/api/reports/management') payload = { kpis: {}, close_readiness: {} };
     if (path === '/api/reports/financial-statements') payload = {};
     if (path === '/api/reports/ar-ap-aging') payload = { receivables: { items: [] }, payables: { items: [] } };
@@ -120,6 +128,36 @@ test('non-owner cannot see sensitive journal review tab', async ({ page }) => {
   await page.goto('/reports');
   await expect(page.getByRole('heading', { name: 'Reports & Reconciliation' })).toBeVisible();
   await expect(page.getByRole('button', { name: 'Journal Review' })).toHaveCount(0);
+});
+
+test('Record evidence opens a visible focused editor even with 25 transactions', async ({ page }) => {
+  await mockOwnerReports(page, 'owner', { fullPage: true });
+  await page.setViewportSize({ width: 390, height: 700 });
+  await page.goto('/reports');
+  await page.getByRole('button', { name: 'Journal Review', exact: true }).click();
+  await expect(page.getByRole('row')).toHaveCount(26);
+  const table = page.getByRole('table', { name: 'Unverified journal linkage records' });
+  const firstRow = table.getByRole('row').nth(1);
+  const open = firstRow.getByRole('button', { name: 'Record evidence' });
+  await open.click();
+  const editor = page.getByRole('region', { name: 'Record journal evidence' });
+  await expect(editor).toBeVisible();
+  await expect(editor.getByRole('heading', { name: 'Evidence for transaction #11' })).toBeVisible();
+  await expect(editor).toBeFocused();
+  await expect(open).toHaveAttribute('aria-expanded', 'true');
+  await expect(firstRow).toHaveClass(/journal-review-row-selected/);
+  const bounds = await editor.boundingBox();
+  expect(bounds).toBeTruthy();
+  expect(bounds.y).toBeGreaterThanOrEqual(-5);
+  expect(bounds.y).toBeLessThan(700);
+
+  // It must be usable immediately, not buried below the long table.
+  await editor.getByLabel('Review rationale (at least 10 characters)').fill('Cashbook line requires verification against original receipt.');
+  await expect(editor.getByRole('button', { name: 'Save review evidence' })).toBeEnabled();
+  await editor.getByRole('button', { name: 'Close' }).click();
+  await expect(editor).toHaveCount(0);
+  await expect(open).toBeFocused();
+  await expect(open).toHaveAttribute('aria-expanded', 'false');
 });
 
 test('owner can record evidence without creating or linking a journal', async ({ page }) => {
