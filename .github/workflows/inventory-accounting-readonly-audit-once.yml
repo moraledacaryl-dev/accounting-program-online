@@ -49,8 +49,46 @@ jobs:
             SELECT 'outbox_type',event_type,count(*)
              FROM integration_events WHERE destination_system='accounting'
              GROUP BY event_type ORDER BY count(*) DESC, event_type LIMIT 20;
+            SELECT 'inventory_master_items',COUNT(*) FROM items;
+            SELECT 'inventory_stock_documents',COUNT(*) FROM stock_documents;
+            SELECT 'inventory_stock_movements',COUNT(*) FROM stock_movements;
+            SELECT 'inventory_purchase_orders',COUNT(*) FROM purchase_orders;
+            SELECT 'inventory_goods_receipts',COUNT(*) FROM goods_receipts;
+            SELECT 'all_integrations',destination_system,status,COUNT(*)
+             FROM integration_events GROUP BY destination_system,status ORDER BY destination_system,status;
             COMMIT;
             SQL
+            echo "=== INVENTORY SERVICE CONFIGURATION (NO SECRETS) ==="
+            set -a
+            source /etc/hiddenoasis/inventory-backend.env
+            set +a
+            python3 - <<'PY'
+            import json,os,urllib.request,urllib.error
+            try:
+                endpoints=json.loads(os.environ.get("INTEGRATION_ENDPOINTS_JSON") or "{}")
+            except (ValueError,TypeError):
+                endpoints={}
+            base=endpoints.get("accounting") or ""
+            token=os.environ.get("INTEGRATION_API_KEY") or ""
+            print("accounting_endpoint_configured",bool(base))
+            print("accounting_auth_key_configured",bool(token))
+            if not base or not token:
+                print("accounting_service_status_probe","not_configured")
+            else:
+                clean=base.rstrip("/")
+                suffix="/api/integration-review/service-intake"
+                if clean.endswith(suffix):
+                    clean=clean[:-len(suffix)]
+                url=clean+"/api/integration-review/service-status?source_event_id=inventory-readonly-audit-no-match"
+                req=urllib.request.Request(url,headers={"X-Integration-Api-Key":token})
+                try:
+                    with urllib.request.urlopen(req,timeout=10) as res:
+                        print("accounting_service_status_probe",res.status)
+                except urllib.error.HTTPError as e:
+                    print("accounting_service_status_probe",e.code)
+                except Exception as e:
+                    print("accounting_service_status_probe","transport_unavailable",type(e).__name__)
+            PY
             echo "=== ACCOUNTING SOURCE RECONCILIATION ==="
             accounting_db=""
             while IFS= read -r db_name; do
