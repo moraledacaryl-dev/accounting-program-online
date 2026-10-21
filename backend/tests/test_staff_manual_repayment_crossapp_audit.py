@@ -64,6 +64,7 @@ def _fixture(root: Path):
                 (501,NULL,NULL,'in','2026-09-18',3000,'posted',0),
                 (502,NULL,NULL,'in','2026-08-03',500,'posted',0),
                 (503,NULL,NULL,'out','2026-08-15',3000,'posted',0);
+            ALTER TABLE money_transactions ADD COLUMN reference_no TEXT;
         """)
     return staff_path, accounting_path
 
@@ -124,3 +125,69 @@ def test_missing_accounting_schema_fails_closed():
             db.execute("DROP TABLE integration_receipts")
         with pytest.raises(Exception, match="integration_receipts"):
             _run(staff, accounting)
+
+
+def test_reference_and_nearby_date_leads_are_unverified_and_do_not_expose_references():
+    with TemporaryDirectory() as folder:
+        staff, accounting = _fixture(Path(folder))
+        with sqlite3.connect(accounting) as db:
+            db.executemany(
+                """INSERT INTO money_transactions(
+                    id, external_source, external_id, direction, transaction_date,
+                    amount, status, is_reversed, reference_no
+                ) VALUES (?,?,?,?,?,?,?,?,?)""",
+                [
+                    (601,None,None,"in","2026-07-04",1000,"posted",0," SECRET-REFERENCE "),
+                    (602,None,None,"in","2026-08-18",3000,"posted",0,"private-bank-ref"),
+                    (603,None,None,"in","2026-09-20",3000,"posted",0,None),
+                    (604,None,None,"out","2026-08-04",500,"posted",0,None),
+                    (605,None,None,"in","2026-08-13",500,"posted",0,None),
+                    (606,None,None,"in","2026-07-03",999,"posted",0,"secret-reference"),
+                ],
+            )
+        before_staff, before_accounting = staff.read_bytes(), accounting.read_bytes()
+        result = _run(staff, accounting)
+        records = {r["repayment_id"]: r for r in result["worklist_sample"]}
+        # Text reference equality and date/amount nearby leads are never
+        # promoted to proven Accounting source identity.
+        assert result["exact_source_identity_count"] == 3
+        assert result["without_exact_source_identity_count"] == 2
+        assert result["nearby_search_days"] == 7
+        assert result["receipt_reference_matching_is_not_proof_of_cash_receipt"]
+        assert records[15]["receipt_reference_match_eligible"] is True
+        reference_candidates = records[15]["receipt_reference_cash_candidates"]
+        assert {r["id"] for r in reference_candidates} == {601, 606}
+        assert next(r for r in reference_candidates if r["id"] == 601)["amount_matches"]
+        assert not next(r for r in reference_candidates if r["id"] == 606)["amount_matches"]
+        assert {r["id"] for r in records[15]["nearby_date_amount_cash_candidates"]} == {601}
+        assert records[15]["nearby_date_amount_cash_candidates"][0]["days_from_repayment"] == 2
+        assert {r["id"] for r in records[30]["receipt_reference_cash_candidates"]} == {602}
+        assert {r["id"] for r in records[30]["nearby_date_amount_cash_candidates"]} == {602}
+        # Two different Staff receipts must NEVER consume one Money In as a
+        # confirmed match just because dates and amounts agree.
+        assert 603 in result["shared_nearby_date_candidate_ids"]
+        assert {r["id"] for r in records[42]["nearby_date_amount_cash_candidates"]} == {603}
+        assert {r["id"] for r in records[43]["nearby_date_amount_cash_candidates"]} == {603}
+        # Outflow and outside-window entries are not repayment candidates.
+        assert {r["id"] for r in records[29]["nearby_date_amount_cash_candidates"]} == set()
+        assert "secret-reference" not in str(result).lower()
+        assert "private-bank-ref" not in str(result).lower()
+        assert staff.read_bytes() == before_staff
+        assert accounting.read_bytes() == before_accounting
+
+
+def test_date_window_is_bounded_and_can_be_disabled():
+    with TemporaryDirectory() as folder:
+        staff, accounting = _fixture(Path(folder))
+        engine = create_engine(f"sqlite:///{accounting}")
+        with sqlite3.connect(staff.resolve().as_uri() + "?mode=ro", uri=True) as staff_db:
+            with engine.connect() as account_db:
+                with pytest.raises(ValueError, match="between 0 and 31"):
+                    reconcile(staff_db, account_db, lookaround_days=32)
+                with pytest.raises(ValueError, match="between 0 and 31"):
+                    reconcile(staff_db, account_db, lookaround_days=-1)
+        engine.dispose()
+        summary = _run(staff, accounting, limit=0)
+        assert summary["nearby_search_days"] == 7
+        assert summary["worklist_sample"] == []
+        assert summary["sample_truncated"] is True

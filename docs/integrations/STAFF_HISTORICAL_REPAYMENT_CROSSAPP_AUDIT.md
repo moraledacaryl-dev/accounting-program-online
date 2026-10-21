@@ -14,6 +14,17 @@ The Accounting-side script
    `hidden_oasis_staff_payroll` and the same external ID.
 3. Exact `money_transactions` external IDs with their Staff source identity.
 4. Separately, **unverified** same-day/same-amount Money In candidates.
+5. A bounded ±7-calendar-day search for matching-amount Money In transactions,
+   excluding the date already checked (override using `--lookaround-days 0..31`).
+6. Case-insensitive exact text comparisons between meaningful Staff receipt
+   references and Accounting Money In `reference_no`; generic placeholders
+   are ignored. Literal references are never included in the report.
+
+The script never matches a same-day amount, a nearby-date amount, **or
+a receipt-reference string** as proof that money was received. The receiving
+account and supporting documents still need review. A single transaction may
+appear as a lead for multiple Staff repayments, and reversed transactions
+are labeled rather than silently dropped.
 
 The script never matches a same-day amount as proof that money was received.
 A row can appear as a candidate for multiple repayments, especially the two
@@ -42,7 +53,7 @@ set +a
 cd backend
 umask 077
 .venv/bin/python scripts/audit_staff_manual_repayment_crossapp.py \
-  --staff-db "$STAFF_DB" --limit 30 \
+  --staff-db "$STAFF_DB" --limit 30 --lookaround-days 7 \
   | tee /tmp/staff-accounting-crossapp-reconciliation.json
 ```
 
@@ -64,3 +75,19 @@ but a Cash label alone is not evidence of receipt.
 
 All output omits employee names and literal receipt references. Keep
 database credentials private; do not paste environment variable values.
+
+## Evidence review priorities
+
+- IDs **15** and **30** have receipt-reference values that can be compared
+  privately with Accounting `reference_no` and original receipt or bank evidence.
+- IDs **29**, **42** and **43** have no receipt-reference values in Staff and
+  must be traced through the employee advance ledger, cash-book and any
+  deposited cash. Date-window leads alone cannot prove receipt.
+- **42** and **43** are both ₱3,000 on September 18: one Accounting
+  transaction must not be applied to both without independently verified
+  payment receipts.
+- **30** uses `Other`: do not assume Cash, GCash or bank transfer.
+
+If the extended searches return no candidates, the next step is tracing
+cash custody and Accounting general-ledger records, not assuming missing
+revenue or recording an additional cash receipt.
