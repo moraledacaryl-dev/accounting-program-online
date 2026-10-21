@@ -189,7 +189,7 @@ manifest.push({ name: 'reports-journal-review', route: '/reports', viewport: '39
 // Fixture-only evidence form screenshot. Synthetic data stays inside the visual test;
 // no live transaction details or review submissions are captured in CI artifacts.
 const mockJournalRoute = '**/api/reports/journal-linkage-review**';
-const mockJournalHistoryRoute = /\\/api\\/reports\\/journal-linkage-review\\/909\\/history(?:\\?|$)/;
+const mockJournalHistoryRoute = (url) => url.pathname.endsWith('/api/reports/journal-linkage-review/909/history');
 await page.route(mockJournalHistoryRoute, async (route) => {
   await route.fulfill({
     status: 200, contentType: 'application/json',
