@@ -75,5 +75,5 @@ test('failed control source is never presented as zero exceptions and refresh re
   await expect(cash.getByText('—')).toBeVisible();
   fail = false;
   await page.getByRole('button', { name: 'Refresh checks' }).click();
-  await expect(cash.getByText('2')).toBeVisible();
+  await expect(cash.locator('.control-center-count strong')).toHaveText('2');
 });
