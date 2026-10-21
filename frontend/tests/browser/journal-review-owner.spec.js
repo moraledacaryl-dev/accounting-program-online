@@ -28,15 +28,22 @@ async function mockOwnerReports(page, role = 'owner') {
     if (path === '/api/reports/journal-linkage-review') {
       const pageNumber = Number(url.searchParams.get('page') || 1);
       const source = url.searchParams.get('source') || '';
+      const queue = url.searchParams.get('queue') || 'all';
+      const scopeCount = source ? 1 : 26;
+      const reviewedCount = latestReview && (!source || source === 'cashbook') ? 1 : 0;
+      const count = queue === 'unreviewed' ? scopeCount - reviewedCount
+        : queue === 'reviewed' ? reviewedCount : scopeCount;
       payload = {
-        count: source ? 1 : 26,
+        count,
+        queue,
+        scope_count: scopeCount,
         review_summary: {
-          missing_journal_links: source ? 1 : 26,
-          never_reviewed: source ? (latestReview ? 0 : 1) : (latestReview ? 25 : 26),
-          evidence_recorded: latestReview ? 1 : 0,
+          missing_journal_links: scopeCount,
+          never_reviewed: scopeCount - reviewedCount,
+          evidence_recorded: reviewedCount,
           classifications: {
             needs_evidence: 0,
-            cashflow_only_documented: latestReview ? 1 : 0,
+            cashflow_only_documented: reviewedCount,
             journal_candidate_identified: 0,
             requires_accounting_review: 0,
           },
@@ -44,18 +51,18 @@ async function mockOwnerReports(page, role = 'owner') {
           is_financially_reconciled: false,
         },
         page: pageNumber, page_size: 25,
-        total_pages: source ? 1 : 2,
+        total_pages: Math.ceil(count / 25),
         source_counts: [{ source: 'beds24', count: 1 }, { source: 'cashbook', count: 25 }],
         classification: 'unverified_journal_linkage',
-        items: [
+        items: count > 0 ? [
           {
-            id: pageNumber === 1 ? 11 : 36, transaction_date: '2025-06-20',
+            id: (queue === 'reviewed' || pageNumber === 1) ? 11 : 36, transaction_date: '2025-06-20',
             financial_account_id: 1, external_source: source || 'cashbook',
             external_id: 'source-001', reference_no: 'REF-001',
             amount: 1234.56, review_status: latestReview ? 'evidence_recorded' : 'unverified',
             latest_review: latestReview,
           },
-        ],
+        ] : [],
       };
     }
     if (path === '/api/reports/management') payload = { kpis: {}, close_readiness: {} };
@@ -77,9 +84,10 @@ test('owner can review paginated journal linkage evidence without changing balan
   const reviewTable = page.getByRole('table', { name: 'Unverified journal linkage records' });
   await expect(reviewTable).toContainText('REF-001');
   await expect(reviewTable).toContainText('1,234.56');
-  await expect(page.getByText('Missing journal links')).toBeVisible();
-  await expect(page.getByText('Missing journal links').locator('..')).toContainText('26');
+  await expect(page.getByText('Missing journal links', { exact: true })).toBeVisible();
+  await expect(page.getByText('Missing journal links', { exact: true }).locator('..')).toContainText('26');
   await expect(page.getByRole('progressbar', { name: 'Evidence review coverage' })).toHaveAttribute('aria-valuenow', '0');
+  await expect(page.getByLabel('Review Queue')).toHaveValue('unreviewed');
   await page.getByRole('button', { name: 'Next', exact: true }).click();
   await expect(reviewTable).toContainText('36');
   await expect(page.getByText('Page 2 of 2')).toBeVisible();
@@ -110,6 +118,7 @@ test('owner can record evidence without creating or linking a journal', async ({
   await page.setViewportSize({ width: 390, height: 844 });
   await page.goto('/reports');
   await page.getByRole('button', { name: 'Journal Review', exact: true }).click();
+  await page.getByLabel('Review Queue').selectOption('all');
   await expect(page.getByRole('button', { name: 'Record evidence' })).toBeVisible();
   await page.getByRole('button', { name: 'Record evidence' }).click();
   await expect(page.getByRole('heading', { name: 'Evidence for transaction #11' })).toBeVisible();
@@ -133,4 +142,20 @@ test('owner can record evidence without creating or linking a journal', async ({
   expect(payload.suggested_journal_entry_id).toBe(null);
   expect(payload.idempotency_key.length).toBeGreaterThanOrEqual(16);
   expect(await page.evaluate(() => document.documentElement.scrollWidth <= document.documentElement.clientWidth + 1)).toBe(true);
+});
+
+test('review queue filters the worklist without changing the missing journal total', async ({ page }) => {
+  await mockOwnerReports(page);
+  await page.goto('/reports');
+  await page.getByRole('button', { name: 'Journal Review', exact: true }).click();
+  const queue = page.getByLabel('Review Queue');
+  await expect(queue).toHaveValue('unreviewed');
+  await expect(page.getByText('Showing 26 records in this queue')).toBeVisible();
+  await queue.selectOption('reviewed');
+  await expect(page.getByText('Showing 0 records in this queue')).toBeVisible();
+  await expect(page.getByText('No matching records in this queue.', { exact: false })).toBeVisible();
+  await expect(page.getByText('Missing journal links', { exact: true }).locator('..')).toContainText('26');
+  await queue.selectOption('all');
+  await expect(page.getByText('Showing 26 records in this queue')).toBeVisible();
+  await expect(page.getByRole('table', { name: 'Unverified journal linkage records' })).toContainText('REF-001');
 });

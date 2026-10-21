@@ -233,10 +233,11 @@ export const submitJournalLinkageEvidence = (transactionId, payload) =>
     method: 'POST', body: JSON.stringify(payload),
   });
 
-export const fetchJournalLinkageReview = ({ year = '', source = '', page = 1, limit = 25 } = {}) => {
+export const fetchJournalLinkageReview = ({ year = '', source = '', queue = 'all', page = 1, limit = 25 } = {}) => {
   const params = new URLSearchParams({ page: String(page), limit: String(limit) });
   if (year) params.set('year', year);
   if (source) params.set('source', source);
+  if (queue !== 'all') params.set('queue', queue);
   return request(`/reports/journal-linkage-review?${params.toString()}`);
 };
 

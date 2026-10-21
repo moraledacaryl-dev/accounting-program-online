@@ -98,7 +98,7 @@ def test_review_access_denied_to_non_owner_even_if_reports_view_permission(clien
     assert client.get('/reports/journal-linkage-review').status_code == 200
 
 
-@pytest.mark.parametrize('query', ['year=20x5', 'page=0', 'limit=0', 'limit=101', 'page=10001'])
+@pytest.mark.parametrize('query', ['year=20x5', 'page=0', 'limit=0', 'limit=101', 'page=10001', 'queue=cleared'])
 def test_journal_review_rejects_invalid_queries(client_and_db, query):
     client, _, _ = client_and_db
     assert client.get('/reports/journal-linkage-review?' + query).status_code == 422
@@ -248,3 +248,52 @@ def test_review_progress_tracks_latest_decision_across_filtered_sources(client_a
     assert source_b['review_summary']['never_reviewed'] == 0
     assert source_b['review_summary']['is_financially_reconciled'] is False
     assert db.query(MoneyTransaction).filter(MoneyTransaction.journal_entry_id.isnot(None)).count() == 0
+
+
+def test_work_queue_selection_excludes_reviewed_only_from_list_not_scope(client_and_db):
+    client, db, _ = client_and_db
+    original = client.get('/reports/journal-linkage-review?queue=unreviewed&limit=2').json()
+    assert original['count'] == 5
+    assert original['scope_count'] == 5
+    assert original['review_summary']['missing_journal_links'] == 5
+    assert original['review_summary']['never_reviewed'] == 5
+    assert original['queue'] == 'unreviewed'
+    assert original['total_pages'] == 3
+
+    decision = client.post('/reports/journal-linkage-review/1/decisions',
+        json=_decision(decision='needs_evidence', key='queue-review-idempotency-key-001'))
+    assert decision.status_code == 200, decision.text
+    pending = client.get('/reports/journal-linkage-review?queue=unreviewed&limit=2').json()
+    assert pending['count'] == 4
+    assert pending['scope_count'] == 5
+    assert pending['total_pages'] == 2
+    assert pending['review_summary']['missing_journal_links'] == 5
+    assert pending['review_summary']['never_reviewed'] == 4
+    assert pending['review_summary']['evidence_recorded'] == 1
+    assert all(item['id'] != 1 for item in pending['items'])
+
+    reviewed = client.get('/reports/journal-linkage-review?queue=reviewed&limit=2').json()
+    assert reviewed['count'] == 1
+    assert reviewed['scope_count'] == 5
+    assert [item['id'] for item in reviewed['items']] == [1]
+    assert reviewed['items'][0]['latest_review']['decision'] == 'needs_evidence'
+    assert reviewed['review_summary'] == pending['review_summary']
+
+    updated = client.post('/reports/journal-linkage-review/1/decisions',
+        json=_decision(decision='requires_accounting_review', reference='Source record proof',
+                       expected=decision.json()['id'], key='queue-review-idempotency-key-002'))
+    assert updated.status_code == 200, updated.text
+    rechecked = client.get('/reports/journal-linkage-review?queue=reviewed').json()
+    assert rechecked['count'] == 1
+    assert rechecked['review_summary']['evidence_recorded'] == 1
+    assert rechecked['review_summary']['classifications']['requires_accounting_review'] == 1
+    assert rechecked['review_summary']['classifications']['needs_evidence'] == 0
+
+    year_pending = client.get('/reports/journal-linkage-review?queue=unreviewed&year=2025').json()
+    assert year_pending['count'] == 2
+    assert year_pending['scope_count'] == 3
+    assert year_pending['review_summary']['missing_journal_links'] == 3
+
+    assert client.get('/reports/journal-linkage-review?queue=reviewed&source=beds24').json()['count'] == 0
+    assert db.query(MoneyTransaction).filter(MoneyTransaction.journal_entry_id.isnot(None)).count() == 0
+    assert db.query(JournalEntry).count() == 0

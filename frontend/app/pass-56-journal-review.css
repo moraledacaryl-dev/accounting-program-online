@@ -6,7 +6,7 @@
 .main[data-route="/reports"] .journal-review-section h2 { margin-bottom: 0; }
 .main[data-route="/reports"] .journal-review-section > p { margin: 0; }
 .main[data-route="/reports"] .journal-review-filters {
-  grid-template-columns: repeat(2, minmax(160px, 240px));
+  grid-template-columns: repeat(3, minmax(0, 240px));
   gap: 12px;
 }
 .main[data-route="/reports"] .journal-review-filters label {
