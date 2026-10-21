@@ -12,6 +12,8 @@ import {
   fetchManagementReport,
   fetchSettlements,
   fetchJournalLinkageReview,
+  fetchJournalLinkageHistory,
+  submitJournalLinkageEvidence,
 } from '../../lib/api';
 import { shouldPreventEnterSubmit } from '../../lib/formBehavior';
 
@@ -81,6 +83,16 @@ export default function ReportsPage() {
   const [journalReviewYear, setJournalReviewYear] = useState('');
   const [journalReviewLoading, setJournalReviewLoading] = useState(false);
   const [journalReviewError, setJournalReviewError] = useState('');
+  const [journalReviewRefresh, setJournalReviewRefresh] = useState(0);
+  const [selectedJournalTx, setSelectedJournalTx] = useState(null);
+  const [journalReviewHistory, setJournalReviewHistory] = useState([]);
+  const [journalReviewDecision, setJournalReviewDecision] = useState('needs_evidence');
+  const [journalReviewEvidenceRef, setJournalReviewEvidenceRef] = useState('');
+  const [journalReviewNotes, setJournalReviewNotes] = useState('');
+  const [journalReviewCandidateId, setJournalReviewCandidateId] = useState('');
+  const [journalReviewSaving, setJournalReviewSaving] = useState(false);
+  const [journalEvidenceFeedback, setJournalEvidenceFeedback] = useState('');
+  const journalEvidenceSubmissionKey = useRef(null);
   const submissionInFlight = useRef(false);
   const lastSettlementSubmission = useRef(null);
   const [notice, setNotice] = useState('');
@@ -140,7 +152,63 @@ export default function ReportsPage() {
       if (!cancelled) setJournalReviewLoading(false);
     });
     return () => { cancelled = true; };
-  }, [activeView, canReviewJournalLinks, journalReviewYear, journalReviewSource, journalReviewPage]);
+  }, [activeView, canReviewJournalLinks, journalReviewYear, journalReviewSource, journalReviewPage, journalReviewRefresh]);
+
+  async function openJournalEvidence(row) {
+    journalEvidenceSubmissionKey.current = null;
+    setSelectedJournalTx(row);
+    setJournalReviewDecision('needs_evidence');
+    setJournalReviewEvidenceRef('');
+    setJournalReviewNotes('');
+    setJournalReviewCandidateId('');
+    setJournalEvidenceFeedback('');
+    try {
+      const history = await fetchJournalLinkageHistory(row.id);
+      setJournalReviewHistory(history.items || []);
+    } catch (failure) {
+      setJournalReviewHistory([]);
+      setJournalEvidenceFeedback(failure?.message || 'Could not load review history.');
+    }
+  }
+
+  async function saveJournalEvidence(event) {
+    event.preventDefault();
+    if (!selectedJournalTx || journalReviewSaving) return;
+    setJournalReviewSaving(true);
+    setJournalEvidenceFeedback('');
+    try {
+      // Reuse the same key after network ambiguity; never double-record a review.
+      if (!journalEvidenceSubmissionKey.current) {
+        journalEvidenceSubmissionKey.current = window.crypto.randomUUID();
+      }
+      const evidence = await submitJournalLinkageEvidence(selectedJournalTx.id, {
+        decision: journalReviewDecision,
+        supporting_reference: journalReviewEvidenceRef.trim() || null,
+        notes: journalReviewNotes.trim(),
+        suggested_journal_entry_id:
+          journalReviewDecision === 'journal_candidate_identified' ? Number(journalReviewCandidateId) || null : null,
+        expected_latest_review_id: selectedJournalTx.latest_review?.id || null,
+        idempotency_key: journalEvidenceSubmissionKey.current,
+      });
+      journalEvidenceSubmissionKey.current = null;
+      setSelectedJournalTx((old) => ({ ...old, latest_review: evidence, review_status: 'evidence_recorded' }));
+      setJournalReviewHistory((old) => old.some((item) => item.id === evidence.id) ? old : [evidence, ...old]);
+      setJournalReviewRefresh((n) => n + 1);
+      setJournalEvidenceFeedback('Evidence recorded. No accounting journal or cash balance was modified.');
+    } catch (failure) {
+      setJournalEvidenceFeedback(failure?.message || 'Unable to save evidence. You may retry safely.');
+    } finally {
+      setJournalReviewSaving(false);
+    }
+  }
+
+  function updateJournalEvidence(field, value) {
+    journalEvidenceSubmissionKey.current = null;
+    if (field === 'decision') setJournalReviewDecision(value);
+    else if (field === 'reference') setJournalReviewEvidenceRef(value);
+    else if (field === 'notes') setJournalReviewNotes(value);
+    else if (field === 'candidate') setJournalReviewCandidateId(value);
+  }
 
   const settlementOptions = useMemo(() => {
     const receivables = aging?.receivables?.items || [];
@@ -773,7 +841,8 @@ export default function ReportsPage() {
             <p className="muted">
               Owner/admin-only evidence review of posted cash movements with no direct journal link.
               A missing link does not establish missing revenue or justify posting a new journal.
-              This screen is read-only.
+              Transaction values are read-only; review decisions are saved in a separate evidence history
+              without altering cashflow or general-ledger postings.
             </p>
             <div className="form-grid journal-review-filters">
               <label>
@@ -817,7 +886,14 @@ export default function ReportsPage() {
                       <td>{entry.financial_account_id}</td><td>{entry.external_source || '—'}</td>
                       <td>{entry.external_id || '—'}</td><td>{entry.reference_no || '—'}</td>
                       <td className="numeric">{currency(entry.amount)}</td>
-                      <td><span className="badge">Unverified</span></td>
+                      <td>
+                        <button type="button" className="secondary" onClick={() => openJournalEvidence(entry)}>
+                          {entry.latest_review ? 'Review again' : 'Record evidence'}
+                        </button>
+                        <span className="muted journal-review-row-status">
+                          {entry.latest_review ? 'Evidence recorded · no ledger action' : 'Unverified'}
+                        </span>
+                      </td>
                     </tr>
                   ))}
                   {!journalReviewLoading && !(journalReview?.items || []).length && (
@@ -826,6 +902,62 @@ export default function ReportsPage() {
                 </tbody>
               </table>
             </div>
+            {selectedJournalTx && (
+              <section className="journal-evidence-panel" aria-label="Record journal evidence">
+                <div className="row wrap journal-evidence-head">
+                  <h3>Evidence for transaction #{selectedJournalTx.id}</h3>
+                  <button type="button" className="secondary" onClick={() => setSelectedJournalTx(null)}>Close</button>
+                </div>
+                <p className="muted">
+                  Classifications are preliminary. A suggested journal is not an accounting link or posting.
+                  Financial figures remain unchanged.
+                </p>
+                <form onSubmit={saveJournalEvidence} className="journal-evidence-form">
+                  <label>Review classification
+                    <select value={journalReviewDecision} onChange={(e) => updateJournalEvidence('decision', e.target.value)}>
+                      <option value="needs_evidence">Needs more source evidence</option>
+                      <option value="cashflow_only_documented">Cashflow-only treatment documented</option>
+                      <option value="journal_candidate_identified">Possible existing posted journal identified</option>
+                      <option value="requires_accounting_review">Further accounting review required</option>
+                    </select>
+                  </label>
+                  <label>Evidence reference
+                    <input value={journalReviewEvidenceRef} maxLength={255}
+                      placeholder="Cashbook page, receipt number, folio or controlled file reference"
+                      onChange={(e) => updateJournalEvidence('reference', e.target.value)}
+                      required={journalReviewDecision !== 'needs_evidence'}/>
+                  </label>
+                  {journalReviewDecision === 'journal_candidate_identified' && (
+                    <label>Existing posted journal ID (candidate only)
+                      <input type="number" min="1" value={journalReviewCandidateId} required
+                        onChange={(e) => updateJournalEvidence('candidate', e.target.value)} />
+                    </label>
+                  )}
+                  <label>Review rationale (at least 10 characters)
+                    <textarea value={journalReviewNotes} minLength={10} maxLength={2000} required rows={3}
+                      onChange={(e) => updateJournalEvidence('notes', e.target.value)}
+                      placeholder="Explain the evidence and why this classification is appropriate." />
+                  </label>
+                  <button type="submit" disabled={journalReviewSaving || journalReviewNotes.trim().length < 10 ||
+                    (journalReviewDecision !== 'needs_evidence' && !journalReviewEvidenceRef.trim()) ||
+                    (journalReviewDecision === 'journal_candidate_identified' && !(Number(journalReviewCandidateId) > 0))}>
+                    {journalReviewSaving ? 'Saving…' : 'Save review evidence'}
+                  </button>
+                </form>
+                {!!journalEvidenceFeedback && <p role="status" aria-live="polite">{journalEvidenceFeedback}</p>}
+                <h4>Review history (newest first)</h4>
+                <div className="journal-evidence-history">
+                  {journalReviewHistory.map((entry) => (
+                    <div className="journal-evidence-history-item" key={entry.id}>
+                      <strong>{entry.decision.replaceAll('_', ' ')}</strong>
+                      <span className="muted">{entry.reviewed_by} · {entry.reviewed_at || 'time unavailable'}</span>
+                      <p>{entry.supporting_reference || 'Evidence pending'} — {entry.notes}</p>
+                    </div>
+                  ))}
+                  {!journalReviewHistory.length && <p className="muted">No recorded review evidence yet.</p>}
+                </div>
+              </section>
+            )}
             <div className="row wrap journal-review-pagination">
               <button type="button" className="secondary" disabled={journalReviewLoading || journalReviewPage <= 1}
                 onClick={() => setJournalReviewPage((page) => Math.max(1, page - 1))}>Previous</button>
