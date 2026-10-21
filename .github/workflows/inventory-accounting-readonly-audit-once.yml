@@ -1,0 +1,90 @@
+name: One-time Inventory Accounting Reconciliation Audit
+on:
+  push:
+    branches: [main]
+    paths: ['.github/workflows/inventory-accounting-readonly-audit-once.yml']
+permissions:
+  contents: read
+concurrency:
+  group: inventory-accounting-readonly-audit
+  cancel-in-progress: false
+jobs:
+  audit:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Read-only production event and journal aggregate audit
+        uses: appleboy/ssh-action@029f5b4aeeeb58fdfe1410a5d17f967dacf36262
+        with:
+          host: ${{ secrets.SERVER_HOST }}
+          username: ${{ secrets.SERVER_USER }}
+          key: ${{ secrets.SERVER_SSH_KEY }}
+          port: ${{ secrets.SERVER_PORT }}
+          command_timeout: 6m
+          script: |
+            set -euo pipefail
+            export PATH="/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin"
+            echo "=== SERVER SERVICE HEALTH ==="
+            systemctl is-active hiddenoasis-inventory-backend.service hiddenoasis-inventory-frontend.service hiddenoasis-inventory-worker.service
+            curl -fsS http://127.0.0.1:8300/api/v1/ready
+            echo
+            echo "=== INVENTORY READ-ONLY OUTBOX AUDIT ==="
+            sudo -u postgres psql -X -At -v ON_ERROR_STOP=1 -d hiddenoasis_inventory_live <<'SQL'
+            BEGIN READ ONLY;
+            SELECT 'inventory_outbox_total', count(*) FROM integration_events WHERE destination_system='accounting';
+            SELECT 'outbox_status', status, count(*) FROM integration_events WHERE destination_system='accounting' GROUP BY status ORDER BY status;
+            SELECT 'reconciliation_status',
+             COALESCE(payload #>> '{accounting_reconciliation,review_status}', 'never_checked'),
+             count(*)
+             FROM integration_events WHERE destination_system='accounting' AND status='completed'
+             GROUP BY 2 ORDER BY 2;
+            SELECT 'confirmed_posted',
+             count(*) FILTER (WHERE payload #>> '{accounting_reconciliation,ledger_posting_confirmed}' = 'true'),
+             'completed',
+             count(*),
+             'never_checked',
+             count(*) FILTER (WHERE payload #>> '{accounting_reconciliation,checked_at}' IS NULL)
+             FROM integration_events WHERE destination_system='accounting' AND status='completed';
+            SELECT 'last_reconciliation_checked_at', COALESCE(MAX(payload #>> '{accounting_reconciliation,checked_at}'),'none')
+             FROM integration_events WHERE destination_system='accounting';
+            SELECT 'outbox_type',event_type,count(*)
+             FROM integration_events WHERE destination_system='accounting'
+             GROUP BY event_type ORDER BY count(*) DESC, event_type LIMIT 20;
+            COMMIT;
+            SQL
+            echo "=== ACCOUNTING SOURCE RECONCILIATION ==="
+            accounting_db=""
+            while IFS= read -r db_name; do
+              case "$db_name" in postgres|template0|template1|hiddenoasis_inventory_live) continue;; esac
+              matches="$(sudo -u postgres psql -X -At -d "$db_name" -c "SELECT COALESCE(to_regclass('public.integration_review_items') IS NOT NULL, false)" 2>/dev/null || true)"
+              if [[ "$matches" == "t" ]]; then
+                accounting_db="$db_name"
+                break
+              fi
+            done < <(sudo -u postgres psql -X -At -d postgres -c "SELECT datname FROM pg_database WHERE datallowconn ORDER BY datname")
+            if [[ -z "$accounting_db" ]]; then
+              echo "ACCOUNTING_DB_NOT_FOUND"
+              exit 1
+            fi
+            sudo -u postgres psql -X -At -v ON_ERROR_STOP=1 -d "$accounting_db" <<'SQL'
+            BEGIN READ ONLY;
+            SELECT 'accounting_inventory_reviews_total',count(*) FROM integration_review_items WHERE source_app='inventory';
+            SELECT 'review_status_effect',status,financial_effect,count(*)
+             FROM integration_review_items WHERE source_app='inventory'
+             GROUP BY status,financial_effect ORDER BY status,financial_effect;
+            WITH reviews AS (
+             SELECT r.id,r.status,r.financial_effect,j.id AS journal_id,j.status AS journal_status,j.is_reversed,
+             COUNT(l.id) AS line_count,COALESCE(SUM(l.debit),0) AS debit,COALESCE(SUM(l.credit),0) AS credit
+             FROM integration_review_items r
+             LEFT JOIN journal_entries j ON j.id=r.accepted_journal_entry_id
+             LEFT JOIN journal_lines l ON l.journal_entry_id=j.id
+             WHERE r.source_app='inventory'
+             GROUP BY r.id,j.id
+            )
+            SELECT 'accounting_posted_balanced_nonreversed',
+             COUNT(*) FILTER (WHERE status='accepted' AND journal_status='posted' AND is_reversed IS FALSE AND line_count>=2 AND debit>0 AND debit=credit),
+             'accepted_with_journal',COUNT(*) FILTER (WHERE status='accepted' AND journal_id IS NOT NULL),
+             'accepted_total', COUNT(*) FILTER (WHERE status='accepted')
+             FROM reviews;
+            COMMIT;
+            SQL
+            echo "INVENTORY_ACCOUNTING_READ_ONLY_AUDIT_COMPLETE"
