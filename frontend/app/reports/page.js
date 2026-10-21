@@ -80,6 +80,7 @@ export default function ReportsPage() {
   const [journalReview, setJournalReview] = useState(null);
   const [journalReviewPage, setJournalReviewPage] = useState(1);
   const [journalReviewSource, setJournalReviewSource] = useState('');
+  const [journalReviewQueue, setJournalReviewQueue] = useState('unreviewed');
   const [journalReviewYear, setJournalReviewYear] = useState('');
   const [journalReviewLoading, setJournalReviewLoading] = useState(false);
   const [journalReviewError, setJournalReviewError] = useState('');
@@ -140,6 +141,7 @@ export default function ReportsPage() {
     fetchJournalLinkageReview({
       year: journalReviewYear,
       source: journalReviewSource,
+      queue: journalReviewQueue,
       page: journalReviewPage,
       limit: 25,
     }).then((result) => {
@@ -153,7 +155,7 @@ export default function ReportsPage() {
       if (!cancelled) setJournalReviewLoading(false);
     });
     return () => { cancelled = true; };
-  }, [activeView, canReviewJournalLinks, journalReviewYear, journalReviewSource, journalReviewPage, journalReviewRefresh]);
+  }, [activeView, canReviewJournalLinks, journalReviewYear, journalReviewSource, journalReviewQueue, journalReviewPage, journalReviewRefresh]);
 
   async function openJournalEvidence(row) {
     journalEvidenceSubmissionKey.current = null;
@@ -865,6 +867,18 @@ export default function ReportsPage() {
                   ))}
                 </select>
               </label>
+              <label>
+                Review Queue
+                <select value={journalReviewQueue} onChange={(event) => {
+                  setJournalReviewQueue(event.target.value);
+                  setJournalReviewPage(1);
+                  setSelectedJournalTx(null);
+                }}>
+                  <option value="unreviewed">Awaiting first review</option>
+                  <option value="reviewed">Evidence already recorded</option>
+                  <option value="all">All missing journal links</option>
+                </select>
+              </label>
             </div>
             <div className="journal-review-progress" aria-label="Journal review progress">
               <div className="journal-review-progress-metrics">
@@ -882,6 +896,7 @@ export default function ReportsPage() {
               <p className="muted">Evidence recorded is not the same as a journal link verified, reconciled or posted.</p>
             </div>
             <div className="row wrap journal-review-summary">
+              <span className="badge">Showing {number(journalReview?.count)} records in this queue</span>
               <span className="badge">Page {journalReviewPage} of {journalReview?.total_pages || 1}</span>
               {journalReviewLoading && <span role="status" className="muted">Loading review…</span>}
             </div>
@@ -915,7 +930,7 @@ export default function ReportsPage() {
                     </tr>
                   ))}
                   {!journalReviewLoading && !(journalReview?.items || []).length && (
-                    <tr><td colSpan="8" className="muted">No matching records. Try another year or source.</td></tr>
+                    <tr><td colSpan="8" className="muted">No matching records in this queue. Change the review queue, year, or source.</td></tr>
                   )}
                 </tbody>
               </table>
