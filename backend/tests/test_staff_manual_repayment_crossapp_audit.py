@@ -65,6 +65,52 @@ def _fixture(root: Path):
                 (502,NULL,NULL,'in','2026-08-03',500,'posted',0),
                 (503,NULL,NULL,'out','2026-08-15',3000,'posted',0);
             ALTER TABLE money_transactions ADD COLUMN reference_no TEXT;
+            ALTER TABLE money_transactions ADD COLUMN financial_account_id INTEGER;
+            ALTER TABLE money_transactions ADD COLUMN module TEXT;
+            ALTER TABLE money_transactions ADD COLUMN category TEXT;
+            ALTER TABLE money_transactions ADD COLUMN subcategory TEXT;
+            ALTER TABLE money_transactions ADD COLUMN payment_method TEXT;
+            ALTER TABLE money_transactions ADD COLUMN counterparty_name TEXT;
+            ALTER TABLE money_transactions ADD COLUMN notes TEXT;
+            ALTER TABLE money_transactions ADD COLUMN linked_record_type TEXT;
+            ALTER TABLE money_transactions ADD COLUMN linked_record_id INTEGER;
+            ALTER TABLE money_transactions ADD COLUMN receivable_id INTEGER;
+            ALTER TABLE money_transactions ADD COLUMN payable_id INTEGER;
+            ALTER TABLE money_transactions ADD COLUMN journal_entry_id INTEGER;
+            CREATE TABLE financial_accounts (
+                id INTEGER PRIMARY KEY, account_type TEXT, currency TEXT
+            );
+            CREATE TABLE journal_entries (
+                id INTEGER PRIMARY KEY, status TEXT, is_reversed INTEGER
+            );
+            INSERT INTO financial_accounts VALUES
+                (11,'cash_drawer','PHP'),
+                (12,'bank','PHP');
+            INSERT INTO journal_entries VALUES
+                (88,'posted',0), (89,'draft',0);
+            UPDATE money_transactions SET
+                financial_account_id = 11, module = 'payroll',
+                category = 'Employee Cash Advance',
+                subcategory = 'Repayment',
+                payment_method = 'Cash',
+                linked_record_type = 'StaffRepayment',
+                linked_record_id = 42,
+                journal_entry_id = 88
+            WHERE id = 200;
+            UPDATE money_transactions SET
+                financial_account_id = 12, module = 'rooms',
+                category = 'Room Revenue',
+                subcategory = 'Accommodation',
+                payment_method = 'Bank Transfer',
+                reference_no = 'PRIVATE-REFERENCE-501',
+                counterparty_name = 'PRIVATE GUEST NAME',
+                notes = 'PRIVATE RECORD',
+                journal_entry_id = 89,
+                external_source = 'beds24',
+                external_id = 'PRIVATE-BEDS24-KEY'
+            WHERE id = 501;
+            UPDATE money_transactions SET financial_account_id = 11
+            WHERE id = 502;
         """)
     return staff_path, accounting_path
 
@@ -104,6 +150,28 @@ def test_cross_app_reconciliation_matches_exact_source_and_never_allocates_amoun
         assert all(x["has_receipt_reference"] for x in (rows[15], rows[30]))
         assert "private-bank-ref" not in str(report)
         assert "secret-reference" not in str(report)
+        context = {r["money_transaction_id"]: r
+                   for r in report["candidate_accounting_context"]}
+        assert set(context) == {200, 501, 502}
+        assert report["candidate_accounting_context_is_not_settlement_proof"] is True
+        assert report["candidate_accounting_context_count"] == 3
+        assert report["candidate_accounting_context_truncated"] is False
+        assert context[200]["category"] == "Employee Cash Advance"
+        assert context[200]["financial_account_type"] == "cash_drawer"
+        assert context[200]["journal_entry_id"] == 88
+        assert context[200]["journal_status"] == "posted"
+        assert context[200]["journal_is_reversed"] is False
+        assert context[200]["linked_record_type"] == "StaffRepayment"
+        assert context[501]["module"] == "rooms"
+        assert context[501]["category"] == "Room Revenue"
+        assert context[501]["financial_account_type"] == "bank"
+        assert context[501]["journal_status"] == "draft"
+        assert context[501]["external_source"] == "beds24"
+        assert context[501]["has_external_id"] is True
+        assert context[501]["has_reference_no"] is True
+        assert context[501]["has_counterparty"] is True
+        assert context[501]["has_notes"] is True
+        assert "PRIVATE" not in str(report)
         assert staff.read_bytes() == before_staff
         assert accounting.read_bytes() == before_accounting
 
@@ -116,6 +184,10 @@ def test_summary_only_keeps_counts_and_does_not_expose_cases():
         assert report["exact_source_identity_count"] == 3
         assert report["worklist_sample"] == []
         assert report["sample_truncated"] is True
+        # --limit=0 must not reveal candidate-level classification metadata.
+        assert report["candidate_accounting_context_count"] == 3
+        assert report["candidate_accounting_context"] == []
+        assert report["candidate_accounting_context_truncated"] is True
 
 
 def test_missing_accounting_schema_fails_closed():
