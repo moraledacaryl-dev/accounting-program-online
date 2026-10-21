@@ -1,5 +1,7 @@
 """Owner-only journal exception review: scoped evidence and authorization."""
 from types import SimpleNamespace
+import csv
+from io import StringIO
 
 import pytest
 from fastapi import FastAPI
@@ -105,7 +107,7 @@ def test_journal_review_rejects_invalid_queries(client_and_db, query):
 
 
 def test_review_router_limits_mutations_to_append_only_evidence():
-    assert [route.methods for route in journal_review.router.routes] == [{'GET'}, {'GET'}, {'POST'}]
+    assert [route.methods for route in journal_review.router.routes] == [{'GET'}, {'GET'}, {'GET'}, {'POST'}]
 
 
 def _decision(decision='needs_evidence', reference=None, journal_id=None, expected=None, key='idempotency-review-001'):
@@ -221,6 +223,74 @@ def test_idempotent_retry_rejects_different_evidence_or_reviewer(client_and_db):
     assert db.query(JournalLinkageReview).one().id == saved_id
     assert db.query(JournalEntry).count() == 0
     assert all(row.journal_entry_id is None for row in db.query(MoneyTransaction))
+
+
+
+def _csv_rows(response):
+    assert response.status_code == 200, response.text
+    return list(csv.DictReader(StringIO(response.text)))
+
+
+def test_private_journal_csv_uses_scope_filters_latest_review_and_all_pages(client_and_db):
+    client, db, actor = client_and_db
+    before = [(row.id, row.amount, row.journal_entry_id) for row in db.query(MoneyTransaction)]
+    all_export = client.get('/reports/journal-linkage-review/export.csv')
+    assert all_export.headers['cache-control'] == 'private, no-store'
+    assert all_export.headers['x-content-type-options'] == 'nosniff'
+    assert all_export.headers['content-disposition'] == 'attachment; filename="journal-review-private-all-all.csv"'
+    all_rows = _csv_rows(all_export)
+    assert [int(row['money_transaction_id']) for row in all_rows] == [1, 5, 2, 3, 4]
+    assert all(row['journal_link_status'] == 'missing_direct_journal_link' for row in all_rows)
+    assert all(row['latest_review_classification'] == 'never_reviewed' for row in all_rows)
+
+    review = client.post('/reports/journal-linkage-review/1/decisions',
+        json=_decision(decision='cashflow_only_documented', reference='Signed receipt 1',
+                       key='private-review-export-001'))
+    assert review.status_code == 200, review.text
+    reviewed_rows = _csv_rows(client.get('/reports/journal-linkage-review/export.csv?year=2025&queue=reviewed'))
+    assert len(reviewed_rows) == 1
+    assert reviewed_rows[0]['money_transaction_id'] == '1'
+    assert reviewed_rows[0]['evidence_reference'] == 'Signed receipt 1'
+    assert reviewed_rows[0]['reviewed_by'] == 'owner'
+    assert reviewed_rows[0]['latest_review_classification'] == 'cashflow_only_documented'
+
+    pending = _csv_rows(client.get('/reports/journal-linkage-review/export.csv?year=2025&source=legacy_import&queue=unreviewed'))
+    assert [int(row['money_transaction_id']) for row in pending] == [5, 2]
+    beds24 = _csv_rows(client.get('/reports/journal-linkage-review/export.csv?year=2026&source=beds24'))
+    assert [int(row['money_transaction_id']) for row in beds24] == [3]
+    assert _csv_rows(client.get('/reports/journal-linkage-review/export.csv?year=2024')) == []
+
+    after = [(row.id, row.amount, row.journal_entry_id) for row in db.query(MoneyTransaction)]
+    assert after == before
+    assert db.query(JournalEntry).count() == 0
+
+
+def test_private_journal_csv_formula_guard_auth_and_row_limit(client_and_db, monkeypatch):
+    client, db, actor = client_and_db
+    tx = db.query(MoneyTransaction).filter_by(id=1).one()
+    tx.reference_no = ' =HYPERLINK("http://example.test","click")'
+    tx.external_id = '@SUM(1,2)'
+    db.commit()
+
+    output = _csv_rows(client.get('/reports/journal-linkage-review/export.csv?year=2025'))
+    first = next(row for row in output if row['money_transaction_id'] == '1')
+    assert first['payment_reference'].startswith("' =HYPERLINK")
+    assert first['external_event_id'] == "'@SUM(1,2)"
+
+    actor.role = 'front_desk'
+    assert client.get('/reports/journal-linkage-review/export.csv').status_code == 403
+    actor.role = 'accountant'
+    assert client.get('/reports/journal-linkage-review/export.csv').status_code == 403
+    actor.role = 'admin'
+    assert client.get('/reports/journal-linkage-review/export.csv').status_code == 200
+    actor.role = 'owner'
+
+    for bad in ['year=20x5', 'queue=cleared']:
+        assert client.get('/reports/journal-linkage-review/export.csv?' + bad).status_code == 422
+    monkeypatch.setattr(journal_review, 'JOURNAL_REVIEW_EXPORT_MAX_ROWS', 1)
+    assert client.get('/reports/journal-linkage-review/export.csv').status_code == 413
+    assert db.query(JournalLinkageReview).count() == 0
+    assert db.query(MoneyTransaction).filter(MoneyTransaction.journal_entry_id.isnot(None)).count() == 0
 
 def test_evidence_policy_and_journal_candidate_must_reference_existing_posted_journal(client_and_db):
     client, db, _ = client_and_db
