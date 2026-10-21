@@ -18,6 +18,7 @@ from app.services.integration_review_service import (
     summary,
 )
 from app.services.inventory_integration_adapter import normalize_inventory_review_payload
+from app.services.inventory_journal_proof import inventory_journal_proof
 
 router = APIRouter()
 
@@ -63,6 +64,19 @@ def service_intake(
 ):
     """Canonical machine-to-machine endpoint for POS, Inventory, Staff, Beds24 and Operations."""
     return _create(payload, db)
+
+
+@router.get('/service-status')
+def inventory_service_status(
+    source_event_id: str = Query(..., min_length=1, max_length=180),
+    db: Session = Depends(get_db),
+    _service=Depends(require_service_integration_key),
+):
+    """Authenticated read-only source-event lookup; never post/accept journals."""
+    result = inventory_journal_proof(db, source_event_id)
+    if result is None:
+        raise HTTPException(status_code=404, detail='Inventory source event not found')
+    return result
 
 
 @router.get('')
