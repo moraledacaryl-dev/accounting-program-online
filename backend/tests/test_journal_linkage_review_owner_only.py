@@ -92,5 +92,5 @@ def test_journal_review_rejects_invalid_queries(client_and_db, query):
     assert client.get('/reports/journal-linkage-review?' + query).status_code == 422
 
 
-def test_review_router_exposes_get_only():
-    assert [route.methods for route in journal_review.router.routes] == [{'GET'}]
+def test_review_router_limits_mutations_to_append_only_evidence():
+    assert [route.methods for route in journal_review.router.routes] == [{'GET'}, {'GET'}, {'POST'}]
