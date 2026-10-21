@@ -1,6 +1,8 @@
 const { test, expect } = require('@playwright/test');
 
 async function mockOwnerReports(page, role = 'owner') {
+  let latestReview = null;
+  let postedPayload = null;
   await page.route('**/api/**', async (route) => {
     const url = new URL(route.request().url());
     const path = url.pathname;
@@ -9,6 +11,20 @@ async function mockOwnerReports(page, role = 'owner') {
       id: 101, username: 'review-user', full_name: 'Audit Reviewer',
       role, permissions: ['reports.view'], is_active: true,
     };
+    if (path === '/api/reports/journal-linkage-review/11/history') {
+      payload = { transaction_id: 11, items: latestReview ? [latestReview] : [] };
+    }
+    if (path === '/api/reports/journal-linkage-review/11/decisions' && route.request().method() === 'POST') {
+      postedPayload = route.request().postDataJSON();
+      latestReview = {
+        id: 1, transaction_id: 11, reviewed_at: '2026-10-21T09:00:00Z',
+        reviewed_by: 'review-user', decision: postedPayload.decision,
+        supporting_reference: postedPayload.supporting_reference, notes: postedPayload.notes,
+        suggested_journal_entry_id: postedPayload.suggested_journal_entry_id,
+        accounting_posting_created: false, journal_link_changed: false,
+      };
+      payload = latestReview;
+    }
     if (path === '/api/reports/journal-linkage-review') {
       const pageNumber = Number(url.searchParams.get('page') || 1);
       const source = url.searchParams.get('source') || '';
@@ -23,7 +39,8 @@ async function mockOwnerReports(page, role = 'owner') {
             id: pageNumber === 1 ? 11 : 36, transaction_date: '2025-06-20',
             financial_account_id: 1, external_source: source || 'cashbook',
             external_id: 'source-001', reference_no: 'REF-001',
-            amount: 1234.56, review_status: 'unverified',
+            amount: 1234.56, review_status: latestReview ? 'evidence_recorded' : 'unverified',
+            latest_review: latestReview,
           },
         ],
       };
@@ -33,6 +50,7 @@ async function mockOwnerReports(page, role = 'owner') {
     if (path === '/api/reports/ar-ap-aging') payload = { receivables: { items: [] }, payables: { items: [] } };
     await route.fulfill({ status: 200, contentType: 'application/json', body: JSON.stringify(payload) });
   });
+  return { submitted: () => postedPayload };
 }
 
 test('owner can review paginated journal linkage evidence without changing balances', async ({ page }) => {
@@ -69,4 +87,32 @@ test('non-owner cannot see sensitive journal review tab', async ({ page }) => {
   await page.goto('/reports');
   await expect(page.getByRole('heading', { name: 'Reports & Reconciliation' })).toBeVisible();
   await expect(page.getByRole('button', { name: 'Journal Review' })).toHaveCount(0);
+});
+
+test('owner can record evidence without creating or linking a journal', async ({ page }) => {
+  const session = await mockOwnerReports(page);
+  await page.setViewportSize({ width: 390, height: 844 });
+  await page.goto('/reports');
+  await page.getByRole('button', { name: 'Journal Review', exact: true }).click();
+  await expect(page.getByRole('button', { name: 'Record evidence' })).toBeVisible();
+  await page.getByRole('button', { name: 'Record evidence' }).click();
+  await expect(page.getByRole('heading', { name: 'Evidence for transaction #11' })).toBeVisible();
+  const submit = page.getByRole('button', { name: 'Save review evidence' });
+  await expect(submit).toBeDisabled();
+  await page.getByLabel('Review classification').selectOption('cashflow_only_documented');
+  await page.getByLabel('Evidence reference').fill('Receipt book page 21');
+  await page.getByLabel('Review rationale (at least 10 characters)').fill(
+    'Physical receipt and 2025 cashbook line inspected; still requires Accounting approval.',
+  );
+  await expect(submit).toBeEnabled();
+  await submit.click();
+  await expect(page.getByRole('status')).toContainText('Evidence recorded. No accounting journal or cash balance was modified.');
+  await expect(page.getByText('cashflow only documented', { exact: false })).toBeVisible();
+  await expect(page.getByRole('button', { name: 'Review again' })).toBeVisible();
+  const payload = session.submitted();
+  expect(payload.decision).toBe('cashflow_only_documented');
+  expect(payload.supporting_reference).toBe('Receipt book page 21');
+  expect(payload.suggested_journal_entry_id).toBe(null);
+  expect(payload.idempotency_key.length).toBeGreaterThanOrEqual(16);
+  expect(await page.evaluate(() => document.documentElement.scrollWidth <= document.documentElement.clientWidth + 1)).toBe(true);
 });
