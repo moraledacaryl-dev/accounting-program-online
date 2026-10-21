@@ -79,6 +79,20 @@
   padding: clamp(14px, 3vw, 24px);
   background: #f9fcfa;
 }
+.main[data-route="/reports"] .journal-evidence-panel {
+  scroll-margin-top: 92px;
+}
+.main[data-route="/reports"] .journal-evidence-panel:focus {
+  outline: 2px solid #478363;
+  outline-offset: 3px;
+}
+.main[data-route="/reports"] .journal-review-row-selected {
+  background: #eef7f0;
+}
+.main[data-route="/reports"] .journal-review-row-selected button[aria-expanded="true"] {
+  border-color: #478363;
+}
+
 .main[data-route="/reports"] .journal-evidence-head {
   align-items: center;
   justify-content: space-between;

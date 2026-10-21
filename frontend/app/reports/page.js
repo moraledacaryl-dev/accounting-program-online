@@ -98,6 +98,9 @@ export default function ReportsPage() {
   const [journalEvidenceFeedback, setJournalEvidenceFeedback] = useState('');
   const [journalEvidenceSaved, setJournalEvidenceSaved] = useState(false);
   const journalEvidenceSubmissionKey = useRef(null);
+  const journalEvidencePanelRef = useRef(null);
+  const journalEvidenceReturnFocusRef = useRef(null);
+  const journalHistoryRequestId = useRef(0);
   const submissionInFlight = useRef(false);
   const lastSettlementSubmission = useRef(null);
   const [notice, setNotice] = useState('');
@@ -160,7 +163,9 @@ export default function ReportsPage() {
     return () => { cancelled = true; };
   }, [activeView, canReviewJournalLinks, journalReviewYear, journalReviewSource, journalReviewQueue, journalReviewPage, journalReviewRefresh]);
 
-  async function openJournalEvidence(row) {
+  async function openJournalEvidence(row, trigger) {
+    const requestId = ++journalHistoryRequestId.current;
+    journalEvidenceReturnFocusRef.current = trigger || null;
     journalEvidenceSubmissionKey.current = null;
     setJournalEvidenceSaved(false);
     setSelectedJournalTx(row);
@@ -168,14 +173,37 @@ export default function ReportsPage() {
     setJournalReviewEvidenceRef('');
     setJournalReviewNotes('');
     setJournalReviewCandidateId('');
+    setJournalReviewHistory([]);
     setJournalEvidenceFeedback('');
+
+    // The editor must be brought into view. It previously appeared far below
+    // 25 table rows and made the Record evidence button seem unresponsive.
+    window.requestAnimationFrame(() => {
+      const editor = journalEvidencePanelRef.current;
+      if (!editor) return;
+      editor.scrollIntoView({ behavior: 'auto', block: 'start' });
+      editor.focus({ preventScroll: true });
+    });
+
     try {
       const history = await fetchJournalLinkageHistory(row.id);
-      setJournalReviewHistory(history.items || []);
+      if (journalHistoryRequestId.current === requestId) {
+        setJournalReviewHistory(history.items || []);
+      }
     } catch (failure) {
-      setJournalReviewHistory([]);
-      setJournalEvidenceFeedback(failure?.message || 'Could not load review history.');
+      if (journalHistoryRequestId.current === requestId) {
+        setJournalReviewHistory([]);
+        setJournalEvidenceFeedback(failure?.message || 'Could not load review history.');
+      }
     }
+  }
+
+  function closeJournalEvidence() {
+    journalHistoryRequestId.current += 1;
+    setSelectedJournalTx(null);
+    journalEvidenceSubmissionKey.current = null;
+    const origin = journalEvidenceReturnFocusRef.current;
+    if (origin?.isConnected) origin.focus();
   }
 
   async function saveJournalEvidence(event) {
@@ -951,41 +979,11 @@ export default function ReportsPage() {
               Match each item against its external receipt, source cashbook, folio, and existing ledger
               before approving any correction. No automatic matching or posting is performed.
             </p>
-            <div className="journal-review-table-scroll" tabIndex={0} role="region" aria-label="Journal linkage exception records">
-              <table className="table dense-table journal-review-table" aria-label="Unverified journal linkage records">
-                <thead><tr>
-                  <th scope="col">Transaction</th><th scope="col">Date</th><th scope="col">Account ID</th>
-                  <th scope="col">Source</th><th scope="col">External Event</th><th scope="col">Payment Ref</th>
-                  <th scope="col">Amount (PHP)</th><th scope="col">Review</th>
-                </tr></thead>
-                <tbody>
-                  {(journalReview?.items || []).map((entry) => (
-                    <tr key={entry.id}>
-                      <td>{entry.id}</td><td>{entry.transaction_date || '—'}</td>
-                      <td>{entry.financial_account_id}</td><td>{entry.external_source || '—'}</td>
-                      <td>{entry.external_id || '—'}</td><td>{entry.reference_no || '—'}</td>
-                      <td className="numeric">{currency(entry.amount)}</td>
-                      <td>
-                        <button type="button" className="secondary" onClick={() => openJournalEvidence(entry)}>
-                          {entry.latest_review ? 'Review again' : 'Record evidence'}
-                        </button>
-                        <span className="muted journal-review-row-status">
-                          {entry.latest_review ? 'Evidence recorded · no ledger action' : 'Unverified'}
-                        </span>
-                      </td>
-                    </tr>
-                  ))}
-                  {!journalReviewLoading && !(journalReview?.items || []).length && (
-                    <tr><td colSpan="8" className="muted">No matching records in this queue. Change the review queue, year, or source.</td></tr>
-                  )}
-                </tbody>
-              </table>
-            </div>
             {selectedJournalTx && (
-              <section className="journal-evidence-panel" aria-label="Record journal evidence">
+              <section ref={journalEvidencePanelRef} id="journal-evidence-editor" className="journal-evidence-panel" aria-label="Record journal evidence" tabIndex={-1}>
                 <div className="row wrap journal-evidence-head">
                   <h3>Evidence for transaction #{selectedJournalTx.id}</h3>
-                  <button type="button" className="secondary" onClick={() => setSelectedJournalTx(null)}>Close</button>
+                  <button type="button" className="secondary" onClick={closeJournalEvidence}>Close</button>
                 </div>
                 <p className="muted">
                   Classifications are preliminary. A suggested journal is not an accounting link or posting.
@@ -1037,6 +1035,38 @@ export default function ReportsPage() {
                 </div>
               </section>
             )}
+            <div className="journal-review-table-scroll" tabIndex={0} role="region" aria-label="Journal linkage exception records">
+              <table className="table dense-table journal-review-table" aria-label="Unverified journal linkage records">
+                <thead><tr>
+                  <th scope="col">Transaction</th><th scope="col">Date</th><th scope="col">Account ID</th>
+                  <th scope="col">Source</th><th scope="col">External Event</th><th scope="col">Payment Ref</th>
+                  <th scope="col">Amount (PHP)</th><th scope="col">Review</th>
+                </tr></thead>
+                <tbody>
+                  {(journalReview?.items || []).map((entry) => (
+                    <tr key={entry.id} className={selectedJournalTx?.id === entry.id ? 'journal-review-row-selected' : undefined}>
+                      <td>{entry.id}</td><td>{entry.transaction_date || '—'}</td>
+                      <td>{entry.financial_account_id}</td><td>{entry.external_source || '—'}</td>
+                      <td>{entry.external_id || '—'}</td><td>{entry.reference_no || '—'}</td>
+                      <td className="numeric">{currency(entry.amount)}</td>
+                      <td>
+                        <button type="button" className="secondary" aria-expanded={selectedJournalTx?.id === entry.id}
+                          aria-controls={selectedJournalTx?.id === entry.id ? 'journal-evidence-editor' : undefined}
+                          onClick={(event) => openJournalEvidence(entry, event.currentTarget)}>
+                          {entry.latest_review ? 'Review again' : 'Record evidence'}
+                        </button>
+                        <span className="muted journal-review-row-status">
+                          {entry.latest_review ? 'Evidence recorded · no ledger action' : 'Unverified'}
+                        </span>
+                      </td>
+                    </tr>
+                  ))}
+                  {!journalReviewLoading && !(journalReview?.items || []).length && (
+                    <tr><td colSpan="8" className="muted">No matching records in this queue. Change the review queue, year, or source.</td></tr>
+                  )}
+                </tbody>
+              </table>
+            </div>
             <div className="row wrap journal-review-pagination">
               <button type="button" className="secondary" disabled={journalReviewLoading || journalReviewPage <= 1}
                 onClick={() => setJournalReviewPage((page) => Math.max(1, page - 1))}>Previous</button>
