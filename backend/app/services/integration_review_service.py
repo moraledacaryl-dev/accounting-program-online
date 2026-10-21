@@ -308,12 +308,34 @@ def summary(db: Session):
         )
     ]
     by_status: dict[str, int] = {}
+    by_source: dict[str, dict] = {}
     for row in visible:
-        by_status[row.status] = by_status.get(row.status, 0) + 1
+        source = str(row.source_app or 'unspecified').strip().lower() or 'unspecified'
+        status = str(row.status or 'unknown')
+        by_status[status] = by_status.get(status, 0) + 1
+        group = by_source.setdefault(source, {
+            'total': 0,
+            'needs_review': 0,
+            'validation_failed': 0,
+            'accepted': 0,
+            'by_status': {},
+        })
+        group['total'] += 1
+        group['by_status'][status] = group['by_status'].get(status, 0) + 1
+        if status in {'ready_for_review', 'validation_failed'}:
+            group['needs_review'] += 1
+        if status == 'validation_failed':
+            group['validation_failed'] += 1
+        if status == 'accepted':
+            group['accepted'] += 1
     return {
         'total': sum(by_status.values()),
         'by_status': by_status,
         'needs_review': by_status.get('ready_for_review', 0) + by_status.get('validation_failed', 0),
+        # Intake history only. Zero events is NOT evidence that a source is healthy,
+        # connected or syncing; integration transport health is a separate check.
+        'by_source': dict(sorted(by_source.items())),
+        'source_coverage_note': 'Received Accounting review events only; not a live connectivity or delivery guarantee.',
     }
 
 
