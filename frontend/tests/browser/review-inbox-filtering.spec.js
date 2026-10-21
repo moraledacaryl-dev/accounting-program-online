@@ -66,3 +66,52 @@ test('Review Inbox failed-validation shortcut remains read-only and refresh keep
   await expect(page.getByText('failed-staff-event')).toBeVisible();
   expect(calls.filter((c) => c.path === '/api/integration-review').at(-1).status).toBe('validation_failed');
 });
+
+
+test('per-source intake counts filter review events without claiming source connection health', async ({ page }) => {
+  const requestedSources = [];
+  await page.route('**/api/**', async (route) => {
+    const url = new URL(route.request().url());
+    const path = url.pathname;
+    let data = [];
+    if (path === '/api/auth/me') data = {
+      id: 1, username: 'reviewer', full_name: 'Reviewer', role: 'owner',
+      permissions: ['integrations.view', 'cashflow.view'], is_active: true,
+    };
+    if (path === '/api/integration-review/summary') data = {
+      needs_review: 2, by_status: { ready_for_review: 1, validation_failed: 1 },
+      by_source: {
+        pos: { total: 7, needs_review: 1, accepted: 6, validation_failed: 0 },
+        inventory: { total: 2, needs_review: 1, accepted: 0, validation_failed: 1 },
+      },
+      source_coverage_note: 'Received Accounting review events only; not a live connectivity or delivery guarantee.',
+    };
+    if (path === '/api/integration-review') {
+      const source = url.searchParams.get('source_app') || '';
+      requestedSources.push(source);
+      data = [{ id: source ? 8 : 7, source_app: source || 'pos',
+        source_event_id: source ? 'inventory-movement-8' : 'pos-sale-7',
+        amount: 10, financial_effect: 'journal_only', status: 'ready_for_review',
+        created_at: '2026-10-21T09:00:00Z',
+      }];
+    }
+    await route.fulfill({ status: 200, contentType: 'application/json', body: JSON.stringify(data) });
+  });
+  await page.setViewportSize({ width: 390, height: 844 });
+  await page.goto('/review-inbox');
+  const hero = page.locator('.review-inbox-hero');
+  await expect(hero.getByText('Review each external financial event once.', { exact: false })).toBeVisible();
+  const heroBounds = await hero.boundingBox();
+  expect(heroBounds).toBeTruthy();
+  expect(heroBounds.height).toBeLessThan(290);
+  const heroCopyColor = await hero.locator('.muted').evaluate((el) => getComputedStyle(el).color);
+  expect(heroCopyColor).toBe('rgb(76, 98, 86)');
+  const coverage = page.getByRole('region', { name: 'Received integration events by source' });
+  await expect(coverage).toBeVisible();
+  await expect(coverage.getByText('not a live connectivity or delivery guarantee.', { exact: false })).toBeVisible();
+  await coverage.getByRole('button', { name: /inventory/i }).click();
+  await expect(page.getByLabel('Source application')).toHaveValue('inventory');
+  await expect(page.getByText('inventory-movement-8')).toBeVisible();
+  expect(requestedSources.at(-1)).toBe('inventory');
+  expect(await page.evaluate(() => document.documentElement.scrollWidth <= document.documentElement.clientWidth + 1)).toBe(true);
+});

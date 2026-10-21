@@ -9,6 +9,7 @@ from app.services.integration_review_service import (
     _staff_payroll_revision_of,
     _staff_payroll_superseded_paid_ids,
     validate_review_payload,
+    summary,
 )
 
 
@@ -154,3 +155,37 @@ def test_non_paid_staff_event_does_not_supersede_payment():
         {'run': {'id': 5, 'revision_of_run_id': 4}},
     )
     assert _staff_payroll_revision_of(approved) is None
+
+
+def test_summary_breaks_down_received_events_by_source_without_connectivity_claims():
+    db = MagicMock()
+    rows = [
+        SimpleNamespace(source_app='pos', source_event_id='sale-1', source_entity_id='1', status='ready_for_review'),
+        SimpleNamespace(source_app='pos', source_event_id='sale-2', source_entity_id='2', status='accepted'),
+        SimpleNamespace(source_app='inventory', source_event_id='stock-1', source_entity_id='1', status='validation_failed'),
+        SimpleNamespace(source_app='inventory', source_event_id='stock-2', source_entity_id='2', status='rejected'),
+    ]
+    db.query.return_value.all.return_value = rows
+    result = summary(db)
+    assert result['total'] == 4
+    assert result['needs_review'] == 2
+    assert result['by_source']['pos'] == {
+        'total': 2, 'needs_review': 1, 'validation_failed': 0, 'accepted': 1,
+        'by_status': {'ready_for_review': 1, 'accepted': 1},
+    }
+    assert result['by_source']['inventory']['needs_review'] == 1
+    assert result['by_source']['inventory']['validation_failed'] == 1
+    assert result['by_source']['inventory']['accepted'] == 0
+    assert 'not a live connectivity' in result['source_coverage_note'].lower()
+    assert 'source_event_id' not in result
+    assert db.commit.call_count == 0
+
+
+def test_empty_integration_summary_is_not_described_as_healthy():
+    db = MagicMock()
+    db.query.return_value.all.return_value = []
+    result = summary(db)
+    assert result['total'] == 0
+    assert result['needs_review'] == 0
+    assert result['by_source'] == {}
+    assert 'not a live connectivity' in result['source_coverage_note'].lower()
