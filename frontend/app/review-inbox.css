@@ -229,8 +229,20 @@
   box-shadow: none;
 }
 @media (max-width: 680px) {
-  .main[data-route="/review-inbox"] .review-inbox-page .review-inbox-hero {
+  /* The mobile shell applies a minimum page-header height and bottom-aligns
+     action buttons. Override both so a short review header stays compact. */
+  .main[data-route="/review-inbox"] .review-inbox-page section.section.page-header.review-inbox-hero {
     align-items: stretch;
+    align-content: start;
+    justify-content: flex-start;
     flex-direction: column;
+    min-height: 0 !important;
+    height: auto !important;
+    gap: 12px;
+    padding: 16px;
+  }
+  .main[data-route="/review-inbox"] .review-inbox-page .review-inbox-hero button {
+    flex: none;
+    min-height: 40px;
   }
 }
