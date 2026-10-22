@@ -13,6 +13,7 @@ from app.services.integration_review_service import (
     create_review_item,
     get_item,
     list_review_items,
+    paginated_review_items,
     reject_item,
     retry_item,
     summary,
@@ -96,6 +97,24 @@ def list_items(
         financial_effect=financial_effect,
         q=q,
         limit=limit,
+    )
+
+
+@router.get('/page')
+def list_items_page(
+    status: str | None = None,
+    source_app: str | None = None,
+    financial_effect: str | None = None,
+    q: str | None = Query(default=None, max_length=200),
+    page: int = Query(1, ge=1),
+    page_size: int = Query(25, ge=1, le=100),
+    db: Session = Depends(get_db),
+    user=Depends(require_any_permissions('integrations.view', 'approvals.view')),
+):
+    """Read-only stable page of actionable/review history, with full filtered total."""
+    return paginated_review_items(
+        db, status=status, source_app=source_app, financial_effect=financial_effect,
+        q=q, page=page, page_size=page_size,
     )
 
 

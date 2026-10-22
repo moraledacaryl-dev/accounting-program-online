@@ -4,7 +4,7 @@ import { useEffect, useState } from 'react';
 import Drawer from '../../components/ui/Drawer';
 import {
   acceptIntegrationReviewItem,
-  fetchIntegrationReviewItems,
+  fetchIntegrationReviewPage,
   fetchIntegrationReviewSummary,
   rejectIntegrationReviewItem,
   retryIntegrationReviewItem,
@@ -59,6 +59,8 @@ export default function ReviewInboxPage() {
   const [filters, setFilters] = useState({ status: 'ready_for_review', source_app: '', financial_effect: '', q: '' });
   const [appliedFilters, setAppliedFilters] = useState({ status: 'ready_for_review', source_app: '', financial_effect: '', q: '' });
   const [refreshCount, setRefreshCount] = useState(0);
+  const [page, setPage] = useState(1);
+  const [pageInfo, setPageInfo] = useState({ page: 1, total: 0, total_pages: 0, page_size: 25, has_previous: false, has_next: false });
 
   useEffect(() => {
     // Ignore out-of-order responses when the reviewer changes filters quickly.
@@ -67,26 +69,33 @@ export default function ReviewInboxPage() {
     setError('');
     setItems([]);
     Promise.all([
-      fetchIntegrationReviewItems(appliedFilters),
+      fetchIntegrationReviewPage({ ...appliedFilters, page, page_size: 25 }),
       fetchIntegrationReviewSummary(),
       fetchFinancialAccounts(),
-    ]).then(([rows, resultSummary, financialAccounts]) => {
+    ]).then(([result, resultSummary, financialAccounts]) => {
       if (!active) return;
-      setItems(Array.isArray(rows) ? rows : []);
+      if (!result.items?.length && result.total > 0 && page > 1) {
+        setPage((current) => Math.max(1, Math.min(current - 1, result.total_pages || 1)));
+        return;
+      }
+      setItems(Array.isArray(result.items) ? result.items : []);
+      setPageInfo(result);
       setSummary(resultSummary);
       setAccounts(Array.isArray(financialAccounts) ? financialAccounts : []);
     }).catch((err) => {
       if (!active) return;
       setItems([]);
+      setPageInfo((prev) => ({ ...prev, total: 0, total_pages: 0, has_next: false, has_previous: false }));
       setError(err.message || 'Failed to load Review Inbox.');
     }).finally(() => {
       if (active) setLoading(false);
     });
     return () => { active = false; };
-  }, [appliedFilters, refreshCount]);
+  }, [appliedFilters, refreshCount, page]);
 
   function applyFilters(next = filters) {
     setSelected(null);
+    setPage(1);
     setAppliedFilters({ ...next });
   }
   function refreshInbox() {
@@ -187,7 +196,7 @@ export default function ReviewInboxPage() {
         <div className="section-title-row">
           <div>
             <h2>Financial intake queue</h2>
-            <p className="small muted">Filter by source, effect, or status. Up to 200 events appear per applied query.</p>
+            <p className="small muted">Filter by source, effect, or status. Navigate all matching retained events, 25 per page.</p>
           </div>
           <button type="button" className="secondary" disabled={loading}
             onClick={() => { const next = { ...filters, status: 'validation_failed' }; setFilters(next); applyFilters(next); }}>
@@ -250,6 +259,23 @@ export default function ReviewInboxPage() {
             </tbody>
           </table>
         </div>
+        <nav className="review-pagination" aria-label="Review Inbox pages">
+          <span className="small muted" role="status">
+            {loading ? 'Loading page…' : error ? 'Page unavailable' :
+              pageInfo.total > 0
+                ? 'Showing ' + ((page - 1) * pageInfo.page_size + 1) + '–' +
+                  Math.min(page * pageInfo.page_size, pageInfo.total) + ' of ' +
+                  pageInfo.total.toLocaleString('en-PH') + ' matching events'
+                : 'No matching events'}
+          </span>
+          <div className="row wrap">
+            <button type="button" className="secondary" disabled={loading || busy || !pageInfo.has_previous}
+              onClick={() => setPage((n) => Math.max(1, n - 1))}>Previous</button>
+            <span className="small muted">Page {page} of {Math.max(1, pageInfo.total_pages || 1)}</span>
+            <button type="button" className="secondary" disabled={loading || busy || !pageInfo.has_next}
+              onClick={() => setPage((n) => n + 1)}>Next</button>
+          </div>
+        </nav>
       </section>
 
       <Drawer
