@@ -72,7 +72,7 @@ jobs:
               sudo -n bash "$temp_script" "$RELEASE_SHA"
             fi
             # Read-only postmigration provenance audit; never backfill legacy records.
-            bash -c "cd '$ROOT/backend' && set -a && source /etc/hiddenoasis/inventory-backend.env && set +a && .venv/bin/python scripts/audit_requisition_locations.py"
+            bash -c "cd '$ROOT/backend' && set -a && source /etc/hiddenoasis/inventory-backend.env && set +a && .venv/bin/python -m scripts.audit_requisition_locations"
             curl -fsS http://127.0.0.1:8300/api/v1/ready
             curl -fsS http://127.0.0.1:3300/login >/dev/null
             curl -fsS https://inventory.hiddenoasis.app/login >/dev/null
