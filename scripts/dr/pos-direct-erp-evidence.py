@@ -452,6 +452,8 @@ def render(report):
     print("POS DIRECT PARITY: REGISTER_COUNT_RECEIPT_IS_NOT_APPROVED_CASH_RECONCILIATION=YES")
     print("POS DIRECT PARITY: ACCOUNTING_REVIEW_INBOX_IS_NOT_GENERIC_POS_RECEIVER=YES")
     print("POS DIRECT PARITY: SALE_RECEIPT_DOES_NOT_PROVE_POSTED_REVENUE_COGS_OR_SETTLEMENT=YES")
+    print("POS DIRECT PARITY: REFUND_REVIEW_RECEIPT_IS_NOT_POSTED_REFUND=YES")
+    print("POS DIRECT PARITY: REFUND_RECEIVER_MATCH_IS_NOT_BANK_SETTLEMENT=YES")
 
 
 def main():
@@ -460,17 +462,21 @@ def main():
                       {"events": POS_SQL, "routing": ROUTING_SQL})
         # Load the separate sale/void contract only for this privileged read-only audit.
         from pos_sale_evidence import SALES_SQL, compare_sales
+        from pos_refund_evidence import REFUND_SQL, compare_refunds
         accounting = read_pg(os.environ.get("ACCOUNTING_AUDIT_DATABASE_URL"),
                              {**RECEIPT_QUERIES, "review": REVIEW_SQL,
-                              "register": REGISTER_RECON_SQL, "sales": SALES_SQL})
+                              "register": REGISTER_RECON_SQL, "sales": SALES_SQL,
+                               "refund_details": REFUND_SQL})
         reviews = accounting.pop("review")
         registers = accounting.pop("register")
         sales = accounting.pop("sales")
+        refund_details = accounting.pop("refund_details")
         result = compare(pos["events"], accounting, review_rows=reviews,
                          routing=configured_routes(pos["routing"]))
         result.update(compare_sessions(pos["events"], registers, reviews,
                                        routing_rows=pos["routing"]))
         result.update(compare_sales(pos["events"], sales))
+        result.update(compare_refunds(pos["events"], refund_details, reviews))
         render(result)
         print("POS DIRECT PARITY: EXECUTION PASS")
         return 0
