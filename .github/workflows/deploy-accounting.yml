@@ -46,26 +46,38 @@ jobs:
               ;;
           esac
 
-          mapfile -t matching_runs < <(
-            gh api --paginate "repos/$GH_REPO/actions/workflows/ci.yml/runs?head_sha=$RELEASE_SHA&event=push&per_page=100" \
-              --jq '.workflow_runs[] | [.id, .status, (.conclusion // "")] | @tsv'
-          )
+          # GitHub Actions sometimes returns an empty run list when
+          # head_sha/event are supplied as API filters even though the exact
+          # successful run appears in the normal workflow history. Query
+          # unfiltered CI history, and validate EVERY property ourselves.
+          # Bound traversal to five pages; absence is a hard release block.
+          for page in 1 2 3 4 5; do
+            runs_json="$(gh api "repos/$GH_REPO/actions/workflows/ci.yml/runs?per_page=100&page=$page")"
+            run_ids="$(jq -r --arg sha "$RELEASE_SHA" '
+              .workflow_runs[]
+              | select(.head_sha == $sha
+                  and .event == "push"
+                  and .head_branch == "main"
+                  and .status == "completed"
+                  and .conclusion == "success")
+              | .id
+            ' <<< "$runs_json")"
 
-          if (( ${#matching_runs[@]} == 0 )); then
-            echo "No push-triggered CI run exists for exact release SHA $RELEASE_SHA" >&2
-            exit 1
-          fi
-
-          for row in "${matching_runs[@]}"; do
-            IFS=$'\t' read -r run_id status conclusion <<< "$row"
-            if [[ "$status" == "completed" && "$conclusion" == "success" ]]; then
-              echo "Certified exact release SHA $RELEASE_SHA by successful CI run $run_id"
+            if [[ -n "$run_ids" ]]; then
+              run_id="${run_ids%%$'\n'*}"
+              [[ "$run_id" =~ ^[0-9]+$ ]]
+              echo "Certified exact release SHA $RELEASE_SHA by successful main-branch push CI run $run_id"
               exit 0
+            fi
+
+            count="$(jq -er '.workflow_runs | if type == "array" then length else error("Invalid CI workflow response") end' <<< "$runs_json")"
+            [[ "$count" =~ ^[0-9]+$ ]]
+            if (( count < 100 )); then
+              break
             fi
           done
 
-          echo "Exact release SHA $RELEASE_SHA has no completed successful push-triggered CI run" >&2
-          printf '%s\n' "${matching_runs[@]}" >&2
+          echo "Exact release SHA $RELEASE_SHA has no verified completed successful main push CI run in bounded history" >&2
           exit 1
 
   deploy:
