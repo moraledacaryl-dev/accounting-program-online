@@ -27,7 +27,14 @@ WITH pending AS (
                   AND j.reference_no IS NOT NULL
                   AND lower(trim(j.reference_no)) = lower(trim(t.reference_no))
               )
-         END AS same_reference_journal_count
+         END AS same_reference_journal_count,
+         CASE WHEN trim(coalesce(t.reference_no,'')) = '' THEN 0
+              ELSE (
+                SELECT count(*) FROM money_transactions AS other
+                WHERE other.status = 'posted' AND other.journal_entry_id IS NULL
+                  AND lower(trim(coalesce(other.reference_no,''))) = lower(trim(t.reference_no))
+              )
+         END AS same_reference_unlinked_cash_count
   FROM money_transactions t
   WHERE t.status = 'posted' AND t.journal_entry_id IS NULL
 )
@@ -39,6 +46,11 @@ SELECT count(*) AS unlinked_total,
        sum(CASE WHEN same_reference_journal_count = 0 THEN 1 ELSE 0 END) AS without_reference_candidate,
        sum(CASE WHEN same_reference_journal_count = 1 THEN 1 ELSE 0 END) AS one_reference_candidate,
        sum(CASE WHEN same_reference_journal_count > 1 THEN 1 ELSE 0 END) AS ambiguous_reference_candidates,
+       sum(CASE WHEN same_reference_unlinked_cash_count > 1 THEN 1 ELSE 0 END) AS cash_reference_shared_by_multiple_unlinked,
+       sum(CASE WHEN same_reference_journal_count = 1
+                    AND same_reference_unlinked_cash_count > 1 THEN 1 ELSE 0 END) AS unique_journal_candidate_shared_by_cash,
+       sum(CASE WHEN same_reference_journal_count > 0
+                    AND same_reference_unlinked_cash_count > 1 THEN 1 ELSE 0 END) AS ambiguous_cash_journal_reference_overlap,
        sum(CASE WHEN linked_record_id IS NOT NULL THEN 1 ELSE 0 END) AS with_record_id,
        sum(CASE WHEN trim(coalesce(external_source,'')) <> ''
                      AND trim(coalesce(external_id,'')) <> '' THEN 1 ELSE 0 END) AS with_external_event_identity,
@@ -106,6 +118,7 @@ def report(overall, modules, years, elapsed_ms):
         print(f"JOURNAL_LINKAGE_TRIAGE: year.{name}={years.get(name,0)}")
     print(f"JOURNAL_LINKAGE_TRIAGE: elapsed_ms={elapsed_ms}")
     print("JOURNAL_LINKAGE_TRIAGE: candidate_reference_is_not_proof=true")
+    print("JOURNAL_LINKAGE_TRIAGE: one_journal_to_many_cash_candidates_requires_human_review=true")
     print("JOURNAL_LINKAGE_TRIAGE: amount_and_identity_details=NOT_EXPORTED")
     print("JOURNAL_LINKAGE_TRIAGE: bank_statement_reconciliation=NOT_TESTED")
 
