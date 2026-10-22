@@ -13,6 +13,8 @@ META="${DUMP%.dump}.meta"
 test -f "$DUMP"
 test -f "$META"
 
+python3 "$(dirname "$0")/verify-restore-metadata.py" "$DUMP" "$META"
+
 EXPECTED_SHA="$(awk -F= '$1=="sha256" {print $2}' "$META")"
 EXPECTED_ALEMBIC="$(awk -F= '$1=="alembic_revision" {print $2}' "$META")"
 ACTUAL_SHA="$(sha256sum "$DUMP" | awk '{print $1}')"
