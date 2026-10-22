@@ -217,3 +217,52 @@ a **manual engineering investigation**, not grounds to generate a missing
 payable, copy a journal, or backfill source events. The domain scan and
 outbox scan also have separate database snapshots and are not atomic.
 
+
+
+## POS dedicated ERP endpoints: separate read-only production proof
+
+The `Accounting POS Direct ERP Parity (Read Only)` workflow runs the
+protected `scripts/dr/pos-direct-erp-evidence.py` from the exact merged
+commit. The audit reads POS's `sync_outbox_events` and Accounting's
+`money_transactions`, `account_transfers`, and `receivables`, only
+matching rows with `external_source=dedicated_pos_cloud`. It uses the
+source external-ID mapping from POS's `sync_service.py` (including legacy
+cash movement and transfer identity versions), not the generic Integration
+Review Inbox.
+
+Comparisons with **direct Accounting identities**:
+- `cash_movement.created` -> cash transaction; V2
+  `cash-movement:<cash_event_uuid>` or legacy reference;
+- `transfer.created` -> account transfer; V2
+  `cash-transfer:<cash_event_uuid>` or legacy reference;
+- `payment.collected` / `payment.folio_pending` -> cashflow transaction
+  for non-room-charge tenders only; exact POS payment reference identity;
+- `payment.refunded` -> cashflow outflow for non-room-charge tenders,
+  `refund-payment:<payment ID>`;
+- positive `room_charge.request_created` -> receivable,
+  `room-charge:<posting UUID>`.
+
+The following have **different Accounting contracts** and are excluded
+from one-to-one direct cash/transfer/receivable assertions: order
+finalization into sales, order voids, register-session reconciliation,
+and negative room-charge receivable reversals/adjustments. Room-charge
+payments and refunds intentionally have no duplicate cashflow event.
+Unverifiable source identity is an explicit count, never an invented ID.
+Non-posted/reversed linked cash or transfer rows are counted separately.
+
+**Limits:** The audit reports counts only and never exports guest names,
+source event IDs, amounts, bank references, payload JSON or secrets. It
+runs protected separate read-only PostgreSQL transactions, without a shared
+atomic snapshot. A `synced` outbox event with no matching direct target
+is an investigation lead, **not proof of dropped delivery**, especially if
+configuration changed or historical events were created under a different
+contract. A matching posted money transaction does **not** certify a
+general-ledger journal: POS intentionally sends several direct cashflow
+effects with `auto_post_accounting=false`. No cash drawer reconciliation,
+bank/GCash settlement, booked sale revenue, or tax correctness is certified.
+
+The workflow is path-filtered on its script and workflow file, can be
+re-run by authorized manual dispatch, and never calls POS's sending worker
+or an Accounting posting endpoint. It fails closed as `NOT_CERTIFIED`
+if credentials, tables or data cannot be read. Do not replay or post based
+on its aggregate findings.
