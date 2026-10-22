@@ -130,3 +130,38 @@ def test_shared_reference_with_one_journal_is_not_a_safe_one_to_one_match(capsys
             assert db.exec_driver_sql("SELECT count(*) FROM money_transactions WHERE journal_entry_id IS NOT NULL").scalar_one() == 0
     finally:
         engine.dispose()
+
+
+def test_documentary_review_leads_exclusively_cover_cash_exceptions(capsys):
+    engine = create_engine("sqlite:///:memory:")
+    try:
+        with engine.begin() as db:
+            db.exec_driver_sql("CREATE TABLE journal_entries (id INTEGER PRIMARY KEY, status TEXT, reference_no TEXT)")
+            db.exec_driver_sql("""CREATE TABLE money_transactions (
+                id INTEGER PRIMARY KEY, status TEXT, journal_entry_id INTEGER,
+                transaction_date TEXT, posted_at TEXT, module TEXT,
+                reference_no TEXT, external_source TEXT, external_id TEXT,
+                linked_record_id INTEGER, reversed_from_id INTEGER,
+                is_reversed BOOLEAN, financial_account_id INTEGER)""")
+            db.exec_driver_sql("""INSERT INTO money_transactions VALUES
+                (1,'posted',NULL,'2025-01-12','2025-01-12','rooms','ref-1',NULL,NULL,NULL,99,0,1),
+                (2,'posted',NULL,'2025-01-12','2025-01-12','rooms','ref-2','beds24','source-2',22,NULL,0,1),
+                (3,'posted',NULL,'2025-01-12','2025-01-12','rooms','ref-3','beds24','source-3',NULL,NULL,0,1),
+                (4,'posted',NULL,'2025-01-12','2025-01-12','rooms','ref-4',NULL,NULL,NULL,NULL,0,1),
+                (5,'posted',NULL,'2025-01-12','2025-01-12','rooms',NULL,NULL,NULL,NULL,NULL,0,1),
+                (6,'draft', NULL,'2025-01-12','2025-01-12','rooms',NULL,NULL,NULL,NULL,NULL,0,1)""")
+        with engine.connect() as db:
+            overall, modules, years, elapsed = triage.gather(db)
+            assert overall["unlinked_total"] == 5
+            assert overall["review_lead_reversal_first"] == 1
+            assert overall["review_lead_linked_record"] == 1
+            assert overall["review_lead_external_event"] == 1
+            assert overall["review_lead_reference_only"] == 1
+            assert overall["review_lead_no_structured_identity"] == 1
+            triage.report(overall, modules, years, elapsed)
+            shown = capsys.readouterr().out
+            assert "review_leads_are_exclusive_but_not_financial_matches=true" in shown
+            assert "source-3" not in shown
+            assert "source-2" not in shown
+    finally:
+        engine.dispose()
