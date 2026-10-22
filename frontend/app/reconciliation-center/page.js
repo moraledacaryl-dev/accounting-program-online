@@ -135,6 +135,24 @@ export default function ReconciliationCenterPage() {
           : <Link href={item.href} className="button-link secondary-link">{item.link} →</Link>}
       </article>)}
     </section>
+
+    {integrations?.state === 'ready' && integrations.value?.delivery_evidence && <section className="section" aria-label="Integration delivery evidence">
+      <div className="section-title-row"><div><h2>Source intake evidence</h2>
+        <p className="small muted">Events retained in Accounting, including hidden payroll revision history. This is not a live source connectivity check.</p>
+      </div><Link href="/review-inbox">Open Review Inbox</Link></div>
+      <div className="control-center-check-grid">
+        {integrations.value.delivery_evidence.sources.map((item) => <div className="control-center-check" key={item.source_app}>
+          <strong>{item.source_app.replace(/[_-]/g, ' ').replace(/\b\w/g, (c) => c.toUpperCase())}</strong>
+          <span>{number(item.received_records)} retained intake records</span>
+          <small>Last received: {item.last_received_at ? new Date(item.last_received_at).toLocaleString('en-PH') : 'Not observed'}</small>
+          <small>Needs validation: {number(item.validation_failed)} · Awaiting review: {number(item.ready_for_review)}</small>
+          <small>Accepted with direct link: {number(item.accepted_with_direct_link)} · Without: {number(item.accepted_without_direct_link)}</small>
+          <small>Revised source events: {number(item.multi_revision_events)} · Rejected: {number(item.rejected)}</small>
+          <span className="small muted">Sender connectivity: unverified. Unreceived events: unknown.</span>
+        </div>)}
+      </div>
+      <p className="small muted">An accepted reference-only event may correctly have no direct financial link. Duplicate delivery attempts cannot be counted from a deduplicated inbox. Verify transport and upstream outbox evidence separately.</p>
+    </section>}
     {close?.state === 'ready' && checks.length > 0 && <section className="section">
       <div className="section-title-row"><h2>Period-close checklist</h2><Link href="/reports">Full reports</Link></div>
       <div className="control-center-check-grid">{checks.map((item) => <div className="control-center-check" key={item.key}>

@@ -350,6 +350,81 @@ def list_review_items(db: Session, *, status=None, source_app=None, financial_ef
     )
     return [_serialize(row) for row in rows]
 
+
+# This view describes records RECEIVED by Accounting. Without producer-side
+# watermarks/heartbeats, it cannot diagnose lost or unreceived events.
+EXPECTED_INTEGRATION_SOURCES = ('pos', 'inventory', 'staff', 'operations', 'beds24')
+
+
+def _evidence_timestamp(value):
+    if value is None or value == '':
+        return None
+    if isinstance(value, datetime):
+        aware = value if value.tzinfo else value.replace(tzinfo=timezone.utc)
+        return aware.astimezone(timezone.utc).isoformat()
+    return str(value)
+
+
+def delivery_evidence(rows) -> dict:
+    """Read-only raw intake evidence; includes hidden Staff revision history.
+
+    No source transport health, delivery-attempt or sender-side count is inferred.
+    The records remain distinct from the user-facing filtered review queue.
+    """
+    sources = {name: {
+        'source_app': name, 'received_records': 0, 'distinct_source_events': 0,
+        'multi_revision_events': 0, 'last_received_at': None,
+        'last_reviewed_at': None, 'validation_failed': 0, 'ready_for_review': 0,
+        'rejected': 0, 'accepted': 0, 'accepted_with_direct_link': 0,
+        'accepted_without_direct_link': 0,
+        'sender_connectivity': 'unverified',
+        'unreceived_events': None,
+        'duplicate_delivery_attempts': None,
+    } for name in EXPECTED_INTEGRATION_SOURCES}
+    revisions = {}
+    for row in rows:
+        source = str(getattr(row, 'source_app', None) or 'unspecified').strip().lower() or 'unspecified'
+        group = sources.setdefault(source, {
+            'source_app': source, 'received_records': 0, 'distinct_source_events': 0,
+            'multi_revision_events': 0, 'last_received_at': None,
+            'last_reviewed_at': None, 'validation_failed': 0, 'ready_for_review': 0,
+            'rejected': 0, 'accepted': 0, 'accepted_with_direct_link': 0,
+            'accepted_without_direct_link': 0,
+            'sender_connectivity': 'unverified',
+            'unreceived_events': None, 'duplicate_delivery_attempts': None,
+        })
+        group['received_records'] += 1
+        status = str(getattr(row, 'status', None) or '')
+        if status in ('validation_failed', 'ready_for_review', 'rejected', 'accepted'):
+            group[status] += 1
+        received = _evidence_timestamp(getattr(row, 'created_at', None))
+        reviewed = _evidence_timestamp(getattr(row, 'reviewed_at', None))
+        if received and (not group['last_received_at'] or received > group['last_received_at']):
+            group['last_received_at'] = received
+        if reviewed and (not group['last_reviewed_at'] or reviewed > group['last_reviewed_at']):
+            group['last_reviewed_at'] = reviewed
+        if status == 'accepted':
+            linked = any(getattr(row, name, None) is not None for name in (
+                'accepted_transaction_id', 'accepted_journal_entry_id',
+                'accepted_receivable_id', 'accepted_payable_id',
+            ))
+            group['accepted_with_direct_link' if linked else 'accepted_without_direct_link'] += 1
+        event_id = getattr(row, 'source_event_id', None)
+        if event_id:
+            revisions.setdefault(source, {}).setdefault(str(event_id), set()).add(
+                int(getattr(row, 'source_revision', None) or 1)
+            )
+    for source, group in sources.items():
+        by_event = revisions.get(source, {})
+        group['distinct_source_events'] = len(by_event)
+        group['multi_revision_events'] = sum(len(versions) > 1 for versions in by_event.values())
+    return {
+        'scope': 'accounting_retained_intake_only',
+        'source_coverage': 'Not a transport health check: missing/unreceived events and duplicate delivery attempts are unknown without source-side evidence.',
+        'sources': [sources[key] for key in sorted(sources)],
+    }
+
+
 def summary(db: Session):
     rows = db.query(IntegrationReviewItem).all()
     superseded_paid_ids = _staff_payroll_superseded_paid_ids(rows)
@@ -392,6 +467,7 @@ def summary(db: Session):
         # connected or syncing; integration transport health is a separate check.
         'by_source': dict(sorted(by_source.items())),
         'source_coverage_note': 'Received Accounting review events only; not a live connectivity or delivery guarantee.',
+        'delivery_evidence': delivery_evidence(rows),
     }
 
 

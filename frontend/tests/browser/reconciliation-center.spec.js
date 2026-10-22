@@ -21,7 +21,17 @@ async function mockReconciliationCenter(page, { role = 'owner', unavailable = ''
       items: [], page: 1, page_size: 1,
     };
     if (path === '/api/cashflow/summary') data = { summary_cards: { unreconciled_accounts: 3 } };
-    if (path === '/api/integration-review/summary') data = { needs_review: 7, by_status: { ready_for_review: 7 } };
+    if (path === '/api/integration-review/summary') data = {
+      needs_review: 7, by_status: { ready_for_review: 7 },
+      delivery_evidence: { scope: 'accounting_retained_intake_only', sources: [
+        { source_app: 'pos', received_records: 8, last_received_at: '2026-10-21T09:00:00+00:00',
+          validation_failed: 1, ready_for_review: 2, accepted_with_direct_link: 3,
+          accepted_without_direct_link: 1, multi_revision_events: 1, rejected: 1 },
+        { source_app: 'inventory', received_records: 0, last_received_at: null,
+          validation_failed: 0, ready_for_review: 0, accepted_with_direct_link: 0,
+          accepted_without_direct_link: 0, multi_revision_events: 0, rejected: 0 },
+      ] },
+    };
     if (path === '/api/reports/management') data = { close_readiness: {
       status: 'blocked', checks: [
         { key: 'unreconciled_cashflow_accounts', label: 'Unreconciled cash/bank accounts', severity: 'critical', passed: false, value: 3, action: 'Finish cash checks.' },
@@ -47,6 +57,11 @@ test('reconciliation center displays grounded workstreams and direct links on de
   await expect(page.getByRole('article').filter({ hasText: 'Review connected financial events' }).getByText('7')).toBeVisible();
   await expect(page.getByRole('article').filter({ hasText: 'Clear period-close blockers' }).getByText('1')).toBeVisible();
   await expect(page.getByText('Saved review evidence does not automatically resolve a linkage.', { exact: false })).toBeVisible();
+  const evidence = page.getByRole('region', { name: 'Integration delivery evidence' });
+  await expect(evidence.getByText('Source intake evidence')).toBeVisible();
+  await expect(evidence.getByText('8 retained intake records')).toBeVisible();
+  await expect(evidence.getByText('Not observed')).toBeVisible();
+  await expect(evidence.getByText('Unreceived events: unknown.', { exact: false }).first()).toBeVisible();
   await expect(journal.getByRole('link', { name: 'Open Journal Review' })).toHaveAttribute('href', '/reports?view=journal-review');
   await expect(page.evaluate(() => document.documentElement.scrollWidth <= document.documentElement.clientWidth + 1)).resolves.toBe(true);
 });
@@ -59,6 +74,7 @@ test('reconciliation center does not leak owner-only evidence to authorized non-
   await expect(page.getByRole('article').filter({ hasText: 'Investigate historical journal links' }).getByText('—')).toBeVisible();
   expect(requests).not.toContain('/api/reports/journal-linkage-review');
   expect(requests).not.toContain('/api/integration-review/summary');
+  await expect(page.getByRole('region', { name: 'Integration delivery evidence' })).toHaveCount(0);
 });
 
 test('failed control source is never presented as zero exceptions and refresh recovers', async ({ page }) => {
