@@ -446,6 +446,7 @@ export const deleteAccountMapping = (id) => request(`/account-mappings/${id}`, {
 export const fetchIntegrationReviewItems = (params = {}) => request(`/integration-review${Object.keys(params).length ? `?${new URLSearchParams(Object.entries(params).filter(([, v]) => v !== '' && v !== null && typeof v !== 'undefined')).toString()}` : ''}`);
 export const fetchIntegrationReviewPage = (params = {}) => request(`/integration-review/page?${new URLSearchParams(Object.entries(params).filter(([, v]) => v !== '' && v !== null && typeof v !== 'undefined')).toString()}`);
 export const fetchIntegrationReviewSummary = () => request('/integration-review/summary');
+export const fetchAcceptedIntegrationLinkageAudit = () => request('/integration-review/accepted-linkage-audit');
 export const fetchIntegrationReviewItem = (id) => request(`/integration-review/${id}`);
 export const acceptIntegrationReviewItem = (id, payload = {}) => request(`/integration-review/${id}/accept`, { method:'POST', body: JSON.stringify(payload) });
 export const rejectIntegrationReviewItem = (id, payload = {}) => request(`/integration-review/${id}/reject`, { method:'POST', body: JSON.stringify(payload) });

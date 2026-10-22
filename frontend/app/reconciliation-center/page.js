@@ -4,7 +4,7 @@ import Link from 'next/link';
 import { useEffect, useMemo, useState } from 'react';
 import { useAppShell } from '../../components/app-shell/AppShellContext';
 import { canAccess } from '../../lib/permissions';
-import { fetchIntegrationReviewSummary, fetchJournalLinkageReview, fetchManagementReport } from '../../lib/api';
+import { fetchIntegrationReviewSummary, fetchAcceptedIntegrationLinkageAudit, fetchJournalLinkageReview, fetchManagementReport } from '../../lib/api';
 import { fetchCashflowSummary } from '../../lib/cashflowApi';
 import { businessDateISO } from '../../lib/businessDate';
 
@@ -27,6 +27,7 @@ export default function ReconciliationCenterPage() {
   const [refresh, setRefresh] = useState(0);
   const [sources, setSources] = useState({});
   const [checkedAt, setCheckedAt] = useState('');
+  const [linkage, setLinkage] = useState({ state: 'loading' });
 
   useEffect(() => {
     if (!user) return undefined;
@@ -37,6 +38,14 @@ export default function ReconciliationCenterPage() {
       item.key, allowed(item) ? { state: 'loading' } : { state: 'restricted' },
     ]));
     setSources(initial);
+    if (allowed(SOURCES[2])) {
+      setLinkage({ state: 'loading' });
+      fetchAcceptedIntegrationLinkageAudit()
+        .then((value) => { if (alive) setLinkage({ state: 'ready', value }); })
+        .catch(() => { if (alive) setLinkage({ state: 'error' }); });
+    } else {
+      setLinkage({ state: 'restricted' });
+    }
     const calls = {
       journals: () => fetchJournalLinkageReview({ queue: 'all', page: 1, limit: 1 }),
       cash: () => fetchCashflowSummary({ date: businessDateISO() }),
@@ -154,6 +163,37 @@ export default function ReconciliationCenterPage() {
         </div>)}
       </div>
       <p className="small muted">An accepted reference-only event may correctly have no direct financial link. Duplicate delivery attempts cannot be counted from a deduplicated inbox. Verify transport and upstream outbox evidence separately.</p>
+    </section>}
+
+    {linkage.state !== 'restricted' && <section className="section" aria-label="Accepted record linkage audit">
+      <div className="section-title-row">
+        <div>
+          <h2>Accepted Accounting record links</h2>
+          <p className="small muted">Checks whether accepted connected-app events reference existing local Accounting records. This does not certify financial balances or upstream delivery.</p>
+        </div>
+        <Link href="/review-inbox">Review Inbox</Link>
+      </div>
+      {linkage.state === 'loading' && <p className="muted" role="status">Checking accepted record links…</p>}
+      {linkage.state === 'error' && <p className="error-text" role="alert">Record-link verification unavailable. No zero-exception conclusion can be made; refresh checks.</p>}
+      {linkage.state === 'ready' && <>
+        <div className="control-center-check-grid">
+          <div className="control-center-check"><strong>{number(linkage.value.total_accepted)}</strong><span>Accepted events examined</span></div>
+          <div className="control-center-check"><strong>{number(linkage.value.verified_record_links)}</strong><span>Existing local record links</span></div>
+          <div className="control-center-check"><strong>{number(linkage.value.needs_review)}</strong><span>Links needing review</span></div>
+          <div className="control-center-check"><strong>{number(linkage.value.reference_only)}</strong><span>Reference-only effects</span></div>
+          <div className="control-center-check"><strong>{number(linkage.value.reversed_targets)}</strong><span>Reversed linked records</span></div>
+        </div>
+        {linkage.value.findings?.length > 0 && <div className="stack" aria-label="Accepted link exceptions">
+          <h3>Linkage exceptions</h3>
+          {linkage.value.findings.slice(0, 8).map((item) => <div className="control-center-check" key={item.review_id}>
+            <strong>{item.source_app} · Review #{item.review_id}</strong>
+            <span>{item.financial_effect.replace(/_/g, ' ')} · {item.state.replace(/_/g, ' ')}</span>
+            <small>{item.reason}</small>
+          </div>)}
+          {linkage.value.findings_truncated && <p className="small muted">More exceptions exist beyond this preview. Open the Review Inbox to inspect individual source events.</p>}
+        </div>}
+        <p className="small muted">Reversed records are shown separately because a legitimate reversal is not automatically an error. Existing links do not prove the ledger, bank statement or original producer event agrees.</p>
+      </>}
     </section>}
     {close?.state === 'ready' && checks.length > 0 && <section className="section">
       <div className="section-title-row"><h2>Period-close checklist</h2><Link href="/reports">Full reports</Link></div>
