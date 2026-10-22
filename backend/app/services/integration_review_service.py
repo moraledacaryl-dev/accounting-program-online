@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import json
+import math
 from datetime import datetime, timedelta, timezone
 from types import SimpleNamespace
 
@@ -529,6 +530,22 @@ def _locked_item(db: Session, item_id: int):
     return row
 
 
+def _positive_pos_room_charge_amount(payload: dict, fallback_amount: float) -> float:
+    """Legacy negative POS room-charge review events cannot create receivables.
+
+    A negative amount is an adjustment/reversal lead, not a new guest claim;
+    it requires an independently approved original-charge reconciliation.
+    """
+    raw = payload.get('gross_amount')
+    try:
+        amount = float(raw if raw is not None else fallback_amount)
+    except (TypeError, ValueError, OverflowError):
+        raise ValueError('The POS room-charge amount is invalid.') from None
+    if not math.isfinite(amount) or amount <= 0:
+        raise ValueError('POS room-charge reversals require documentary review; no new receivable may be posted.')
+    return amount
+
+
 def _current_validation(db: Session, row: IntegrationReviewItem) -> dict:
     payload = {
         'source_app': row.source_app,
@@ -833,7 +850,8 @@ def accept_item(db: Session, item_id: int, decision: IntegrationReviewDecision, 
     elif effect == 'receivable':
         payload = _loads(row.payload_json)
         is_pos_room_charge = row.source_app == 'pos' and row.source_entity_type == 'room_charge'
-        gross_amount = float(payload.get('gross_amount') or row.amount or 0) if is_pos_room_charge else float(row.amount or 0)
+        gross_amount = (_positive_pos_room_charge_amount(payload, row.amount)
+                        if is_pos_room_charge else float(row.amount or 0))
         source_type = str(payload.get('source_type') or row.source_entity_type)
         source_id = payload.get('source_id') if is_pos_room_charge else row.source_entity_id
         rec_result = create_receivable(
