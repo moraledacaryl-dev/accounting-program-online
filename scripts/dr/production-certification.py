@@ -66,6 +66,13 @@ AUDIT_QUERIES = {
                     THEN 1 ELSE 0 END),0) AS negative_collections
         FROM receivables
     """,
+    "pos_room_reversals": """
+        SELECT count(*) AS legacy_reversal_receivables,
+               coalesce(sum(CASE WHEN coalesce(gross_amount,0) > 0
+                    THEN 1 ELSE 0 END),0) AS reversal_as_positive_guest_claim
+        FROM receivables
+        WHERE lower(trim(coalesce(source_type,''))) = 'pos_room_charge_reversal'
+    """,
     "payables": """
         SELECT count(*) AS rows,
                coalesce(sum(CASE WHEN abs(coalesce(gross_amount,0)
@@ -166,10 +173,19 @@ AUDIT_QUERIES = {
                coalesce(sum(CASE WHEN review.status = 'accepted'
                   AND review.financial_effect = 'journal_only'
                   AND journal.id IS NOT NULL AND journal.status <> 'posted'
-                  THEN 1 ELSE 0 END),0) AS accepted_journal_target_not_posted
+                  THEN 1 ELSE 0 END),0) AS accepted_journal_target_not_posted,
+               coalesce(sum(CASE WHEN review.status = 'accepted'
+                  AND review.financial_effect IN ('cash_in','cash_out','settlement')
+                  AND cash.id IS NOT NULL
+                  AND accepted_account.id IS NOT NULL
+                  AND (accepted_account.account_type IS NULL OR
+                       accepted_account.account_type NOT IN
+                        ('cash_drawer','petty_cash','safe','bank','ewallet'))
+                  THEN 1 ELSE 0 END),0) AS accepted_cash_nonmonetary_account
         FROM integration_review_items AS review
         LEFT JOIN financial_accounts AS proposed_account ON proposed_account.id = review.proposed_account_id
         LEFT JOIN money_transactions AS cash ON cash.id = review.accepted_transaction_id
+        LEFT JOIN financial_accounts AS accepted_account ON accepted_account.id = cash.financial_account_id
         LEFT JOIN journal_entries AS journal ON journal.id = review.accepted_journal_entry_id
         LEFT JOIN receivables AS receivable ON receivable.id = review.accepted_receivable_id
         LEFT JOIN payables AS payable ON payable.id = review.accepted_payable_id
@@ -192,11 +208,14 @@ AUDIT_QUERIES = {
 CRITICAL_KEYS = {
     "posted_journals": ("unbalanced_entries", "invalid_lines"),
     "cash_coverage": ("negative_posted_amounts",),
+    "pos_room_reversals": ("reversal_as_positive_guest_claim",),
+    "integration_intake": ("accepted_cash_nonmonetary_account",),
 }
 REVIEW_KEYS = {
     "posted_journals": ("incomplete_entries", "legacy_zero_lines"),
     "settlement_evidence": ("over_settled_records", "negative_paid_records"),
     "receivables": ("balance_discrepancies", "negative_collections"),
+    "pos_room_reversals": ("legacy_reversal_receivables",),
     "payables": ("balance_discrepancies", "negative_payments"),
     "cash_coverage": ("legacy_posted_without_journal",),
     "beds24_links": ("duplicate_external_booking_id_groups",),
@@ -259,6 +278,8 @@ def render(metrics, runtimes_ms):
     print("CERTIFICATION: integration_pos_direct_sync=NOT_TESTED")
     print("CERTIFICATION: integration_secondary_journal_and_rounding_proof=NOT_TESTED")
     print("CERTIFICATION: pending_review_counts_are_not_approved_postings=YES")
+    print("CERTIFICATION: legacy_pos_reversal_claims_require_documentary_resolution=YES")
+    print("CERTIFICATION: cash_account_type_proof_does_not_establish_bank_reconciliation=YES")
     print("CERTIFICATION: proposed_account_absence_requires_review_not_auto_assignment=YES")
     print("CERTIFICATION: proposed_account_presence_does_not_prove_payment_method_or_approval=YES")
     print("CERTIFICATION: reporting_query_timings_are_single_sample_not_SLA")
