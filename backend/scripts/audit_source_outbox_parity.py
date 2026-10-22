@@ -171,11 +171,89 @@ def compare_snapshots(snapshot):
     }
 
 
+
+
+def build_private_parity_snapshot(accounting_export, *, staff_export=None, inventory_export=None):
+    """Combine protected source exports without writing or echoing identifiers.
+
+    No implicit complete-for-window claims: each independent database was read
+    at a different instant and there is no shared cross-app snapshot lock.
+    """
+    if not isinstance(accounting_export, dict):
+        raise ValueError('Accounting export must be an object.')
+    if accounting_export.get('export_type') != 'accounting_review_identities':
+        raise ValueError('Unexpected Accounting receipt export type.')
+    if accounting_export.get('no_pagination_cutoff') is not True:
+        raise ValueError('Accounting receipt export must certify unpaginated coverage.')
+    receipts = accounting_export.get('accounting_review')
+    if not isinstance(receipts, list):
+        raise ValueError('Accounting export has no review identity array.')
+    covered_sources = accounting_export.get('sources')
+    if not isinstance(covered_sources, list) or not all(
+        source in ('inventory', 'staff') for source in covered_sources
+    ):
+        raise ValueError('Accounting export is missing a supported source coverage declaration.')
+
+    supplied = {'staff': staff_export, 'inventory': inventory_export}
+    producers = {}
+    expected_export_types = {
+        'staff': 'staff_financial_outbox_identities',
+        'inventory': 'inventory_accounting_outbox_identities',
+    }
+    for name, data in supplied.items():
+        if data is None:
+            continue
+        if name not in covered_sources:
+            raise ValueError(f'Accounting export does not include {name} review identities.')
+        if not isinstance(data, dict) or data.get('source') != name:
+            raise ValueError(f'{name} source export identity was not verified.')
+        if data.get('export_type') != expected_export_types[name]:
+            raise ValueError(f'{name} source export type is unexpected.')
+        if data.get('full_source_scan') is not True or data.get('complete_for_window') is not False:
+            raise ValueError(f'{name} source export must be an unpaginated uncoordinated snapshot.')
+        if not isinstance(data.get('events'), list):
+            raise ValueError(f'{name} source events missing.')
+        # Revalidate the only identity/status fields allowed by the contract,
+        # dropping sender-export metadata that is not part of the comparison.
+        permitted = (
+            {'destination', 'event_type', 'external_id', 'source_revision', 'status'}
+            if name == 'staff' else {'id', 'destination_system', 'status'}
+        )
+        for event in data['events']:
+            if not isinstance(event, dict) or set(event) != permitted:
+                raise ValueError(f'{name} source event schema mismatch.')
+        producers[name] = {
+            # A non-atomic source/receiver export cannot prove both databases
+            # covered the same instant; absence of any event stays UNKNOWN.
+            'complete_for_window': False,
+            'events': data['events'],
+        }
+    if not producers:
+        raise ValueError('At least one Staff or Inventory export is required.')
+    return {'schema_version': 1, 'producers': producers, 'accounting_review': receipts}
+
 def main(argv=None):
     parser = argparse.ArgumentParser(description=__doc__)
-    parser.add_argument('--snapshot', required=True, help='Sanitized exported JSON snapshot; read only')
+    mode = parser.add_mutually_exclusive_group(required=True)
+    mode.add_argument('--snapshot', help='Legacy combined sanitized JSON snapshot')
+    mode.add_argument('--accounting', help='Restricted Accounting identity exporter JSON')
+    parser.add_argument('--staff', help='Restricted Staff source exporter JSON')
+    parser.add_argument('--inventory', help='Restricted Inventory source exporter JSON')
     args = parser.parse_args(argv)
-    payload = json.loads(Path(args.snapshot).read_text(encoding='utf-8'))
+    if args.snapshot:
+        if args.staff or args.inventory:
+            parser.error('--snapshot cannot be combined with individual source exports')
+        payload = json.loads(Path(args.snapshot).read_text(encoding='utf-8'))
+    else:
+        if not args.staff and not args.inventory:
+            parser.error('--accounting requires --staff and/or --inventory')
+        payload = build_private_parity_snapshot(
+            json.loads(Path(args.accounting).read_text(encoding='utf-8')),
+            staff_export=json.loads(Path(args.staff).read_text(encoding='utf-8')) if args.staff else None,
+            inventory_export=json.loads(Path(args.inventory).read_text(encoding='utf-8')) if args.inventory else None,
+        )
+    # The comparison prints only aggregate counts and short fingerprints,
+    # never the raw Staff/Inventory/Accounting event identities.
     print(json.dumps(compare_snapshots(payload), indent=2, sort_keys=True))
     return 0
 

@@ -133,3 +133,33 @@ snapshot of the producer systems. For meaningful missing-event classification,
 take producer and receiver snapshots from the same agreed window using
 appropriate read-only transaction isolation, and set
 `complete_for_window` to true only with verified full source coverage.
+
+
+## Direct combination of the three protected exports (no manual JSON editing)
+
+After authorized read-only local exports have been created by the source owners,
+copy them only into a restricted directory on an authorized machine. Do not
+upload the actual identity files to GitHub, Slack, workflow artifacts or chat.
+
+```bash
+cd backend
+python3 scripts/audit_source_outbox_parity.py \
+  --accounting /root/private/accounting-intake.json \
+  --staff /root/private/staff-source.json \
+  --inventory /root/private/inventory-source.json
+```
+
+Either `--staff` or `--inventory` may be omitted, but `--accounting`
+is required. The command checks exact source exporter type, source identity,
+unpaginated scan evidence and the minimal allowed row schema. It refuses
+unexpected fields such as payroll details or source payloads. The report
+shows aggregate counts and bounded, hashed event fingerprints only.
+
+**This direct-combination method always retains
+`complete_for_window=false`.** The Inventory PostgreSQL, Staff SQLite,
+and Accounting PostgreSQL transactions were not captured by one atomic
+cross-database snapshot. A missing record can be due to capture timing and
+must remain an investigation lead, not an automatic lost-delivery assertion.
+Proof of a common cutoff, retry finality, and posting evidence is separate.
+To preserve compatibility, the original `--snapshot` command remains
+available for manually prepared, separately certified snapshots.
