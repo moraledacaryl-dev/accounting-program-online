@@ -58,6 +58,22 @@ ACCOUNTING_SQL = """
     WHERE source_app IN ('inventory','staff')
 """
 
+# Count source-domain activity without exposing purchase/supplier/item/stock
+# identities, transaction values or private payloads. Some historical records
+# legitimately predate integrations, so this is descriptive, not an assertion
+# that every domain row should have an Accounting event.
+INVENTORY_DOMAIN_SQL = """
+    SELECT
+      (SELECT count(*) FROM purchase_orders) AS purchase_orders,
+      (SELECT count(*) FROM purchase_orders WHERE approved_at IS NOT NULL)
+          AS approved_purchase_orders,
+      (SELECT count(*) FROM goods_receipts) AS goods_receipts,
+      (SELECT count(*) FROM purchase_returns) AS purchase_returns,
+      (SELECT count(*) FROM stock_documents WHERE status='posted')
+          AS posted_stock_documents
+"""
+
+
 
 def read_staff_sqlite(db_path):
     if not db_path or not os.path.isabs(db_path) or not os.path.isfile(db_path):
@@ -159,12 +175,27 @@ def compare_live_rows(accounting_rows, inventory_rows, staff_rows):
     return {name: dict(sorted(counter.items())) for name, counter in counts.items()}
 
 
-def render(report):
+def render(report, *, inventory_domain=None):
     print("LIVE SOURCE PARITY: MODE=READ_ONLY; IDENTITIES=REDACTED")
     print("LIVE SOURCE PARITY: SOURCE_DATABASES=SEQUENTIALLY_READ")
     for name, values in report.items():
         for key, value in values.items():
             print(f"LIVE SOURCE PARITY: {name}.{key}={value}")
+    if inventory_domain is not None:
+        if not isinstance(inventory_domain, dict):
+            raise ValueError("Inventory activity summary must be an object.")
+        expected = {
+            "purchase_orders", "approved_purchase_orders",
+            "goods_receipts", "purchase_returns", "posted_stock_documents",
+        }
+        if set(inventory_domain) != expected or any(
+            type(value) is not int or value < 0 for value in inventory_domain.values()
+        ):
+            raise ValueError("Unexpected Inventory source activity schema.")
+        for key, value in sorted(inventory_domain.items()):
+            print(f"LIVE SOURCE DOMAIN: inventory.{key}={value}")
+        print("LIVE SOURCE DOMAIN: HISTORICAL_ROWS_MAY_PRECEDE_INTEGRATION=YES")
+        print("LIVE SOURCE DOMAIN: ACTIVITY_AND_OUTBOX_SNAPSHOTS_ATOMIC=NO")
     print("LIVE SOURCE PARITY: CROSS_DATABASE_ATOMIC_SNAPSHOT=NO")
     print("LIVE SOURCE PARITY: DIFFERENCES_REQUIRE_HUMAN_REVIEW=YES")
     print("LIVE SOURCE PARITY: SOURCE_COMPLETED_MEANS_ACCOUNTING_ACCEPTED=NO")
@@ -179,7 +210,19 @@ def main():
         inventory_rows = read_postgres(os.environ.get("INVENTORY_AUDIT_DATABASE_URL"),
                                        INVENTORY_SQL)
         staff_rows = read_staff_sqlite(os.environ.get("STAFF_PAYROLL_DB_PATH"))
-        render(compare_live_rows(accounting_rows, inventory_rows, staff_rows))
+        inventory_domain_rows = read_postgres(
+            os.environ.get("INVENTORY_AUDIT_DATABASE_URL"),
+            INVENTORY_DOMAIN_SQL,
+        )
+        if len(inventory_domain_rows) != 1 or len(inventory_domain_rows[0]) != 5:
+            raise ValueError("Inventory activity summary has an invalid shape.")
+        inventory_domain = dict(zip(
+            ("purchase_orders", "approved_purchase_orders", "goods_receipts",
+             "purchase_returns", "posted_stock_documents"),
+            (int(v) for v in inventory_domain_rows[0]),
+        ))
+        render(compare_live_rows(accounting_rows, inventory_rows, staff_rows),
+               inventory_domain=inventory_domain)
         print("LIVE SOURCE PARITY: EXECUTION PASS")
         return 0
     except Exception as exc:

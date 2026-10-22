@@ -51,6 +51,65 @@ def test_real_source_id_mapping_and_no_false_equation_between_delivery_and_posti
     assert "CROSS_DATABASE_ATOMIC_SNAPSHOT=NO" in output
 
 
+def test_inventory_source_domain_counts_are_aggregated_without_source_ids(capsys):
+    from sqlalchemy import text
+    engine = create_engine("sqlite:///:memory:")
+    with engine.begin() as connection:
+        connection.exec_driver_sql(
+            "CREATE TABLE purchase_orders (id TEXT, approved_at TEXT)"
+        )
+        connection.exec_driver_sql("CREATE TABLE goods_receipts (id TEXT)")
+        connection.exec_driver_sql("CREATE TABLE purchase_returns (id TEXT)")
+        connection.exec_driver_sql(
+            "CREATE TABLE stock_documents (id TEXT, status TEXT)"
+        )
+        connection.exec_driver_sql(
+            "INSERT INTO purchase_orders VALUES ('PRIVATE-PO-1', NULL),"
+            " ('PRIVATE-PO-2', '2026-10-21')"
+        )
+        connection.exec_driver_sql(
+            "INSERT INTO goods_receipts VALUES ('PRIVATE-GRN-1')"
+        )
+        connection.exec_driver_sql(
+            "INSERT INTO stock_documents VALUES ('PRIVATE-STOCK-1', 'posted'),"
+            " ('PRIVATE-STOCK-2','draft')"
+        )
+        rows = connection.execute(text(audit.INVENTORY_DOMAIN_SQL)).all()
+    engine.dispose()
+    assert len(rows) == 1
+    names = ("purchase_orders", "approved_purchase_orders",
+             "goods_receipts", "purchase_returns", "posted_stock_documents")
+    activity = dict(zip(names, (int(v) for v in rows[0])))
+    assert activity == {
+        "purchase_orders": 2,
+        "approved_purchase_orders": 1,
+        "goods_receipts": 1,
+        "purchase_returns": 0,
+        "posted_stock_documents": 1,
+    }
+    audit.render(audit.compare_live_rows([], [], []), inventory_domain=activity)
+    out = capsys.readouterr().out
+    assert "LIVE SOURCE DOMAIN: inventory.goods_receipts=1" in out
+    assert "ACTIVITY_AND_OUTBOX_SNAPSHOTS_ATOMIC=NO" in out
+    assert "HISTORICAL_ROWS_MAY_PRECEDE_INTEGRATION=YES" in out
+    assert "PRIVATE-" not in out
+
+
+def test_inventory_domain_report_rejects_bad_or_private_fields():
+    baseline = {
+        "purchase_orders": 0, "approved_purchase_orders": 0,
+        "goods_receipts": 0, "purchase_returns": 0,
+        "posted_stock_documents": 0,
+    }
+    for broken in (
+        {**baseline, "supplier_name": "secret"},
+        {**baseline, "goods_receipts": -1},
+        {**baseline, "goods_receipts": "1"},
+    ):
+        with pytest.raises(ValueError, match="Unexpected Inventory"):
+            audit.render(audit.compare_live_rows([], [], []), inventory_domain=broken)
+
+
 def test_zero_inventory_and_staff_events_are_explicit_not_missing_from_report(capsys):
     report = audit.compare_live_rows([], [], [])
     for name in ("inventory", "staff"):
