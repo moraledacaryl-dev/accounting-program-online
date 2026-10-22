@@ -62,6 +62,7 @@ jobs:
             POS_AUDIT_DATABASE_URL="$DATABASE_URL"
             set +a
             export ACCOUNTING_AUDIT_DATABASE_URL POS_AUDIT_DATABASE_URL
-            "$CURRENT/backend/.venv/bin/python" "$audit_file"
+            # Do not create __pycache__ in the private temporary audit directory.
+            "$CURRENT/backend/.venv/bin/python" -B "$audit_file"
         env:
           AUDIT_SHA: ${{ github.sha }}
