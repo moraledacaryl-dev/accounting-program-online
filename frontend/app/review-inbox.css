@@ -259,3 +259,25 @@
     min-height: 40px;
   }
 }
+
+
+.review-inbox-page .review-pagination {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  padding: 16px 0 2px;
+  flex-wrap: wrap;
+}
+.review-inbox-page .review-pagination > .row {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+.review-inbox-page .review-pagination button {
+  min-width: 94px;
+}
+@media (max-width: 600px) {
+  .review-inbox-page .review-pagination { align-items: stretch; }
+  .review-inbox-page .review-pagination > .row { justify-content: space-between; }
+}
