@@ -106,7 +106,7 @@ def test_staff_sqlite_readonly_scan_and_non_mutation(tmp_path):
     assert len(rows) == 2
     assert audit.compare_live_rows([], [], rows)["staff"]["source_financial_events"] == 1
     with sqlite3.connect(file) as db:
-        assert db.execute("SELECT count(*) FROM integration_outbox").scalar() == 2
+        assert db.execute("SELECT count(*) FROM integration_outbox").fetchone()[0] == 2
 
 
 def test_sql_selects_only_and_workflow_does_not_enable_automatic_posts():
