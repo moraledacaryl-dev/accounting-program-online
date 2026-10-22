@@ -1,12 +1,12 @@
 import json
 
 import pytest
-from sqlalchemy import create_engine
+from sqlalchemy import create_engine, event
 from sqlalchemy.orm import sessionmaker
 
 from app.db.database import Base
 from app.models.entities import IntegrationReviewItem
-from app.services.integration_review_service import list_review_items, paginated_review_items
+from app.services.integration_review_service import list_review_items, paginated_review_items, summary
 
 
 @pytest.fixture()
@@ -87,3 +87,24 @@ def test_filters_and_legacy_list_exclude_hidden_rows_before_count_and_limit(db):
 def test_invalid_pagination_bounds_rejected(db, page, size):
     with pytest.raises(ValueError, match='Invalid page or page_size'):
         paginated_review_items(db, page=page, page_size=size)
+
+
+def test_summary_scales_without_staff_approval_per_row_sql_queries(db):
+    for n in range(80):
+        add(db, f'payroll:{n}:Approved', source='staff', entity=n)
+        if n % 2 == 0:
+            add(db, f'payroll:{n}:Paid', source='staff', entity=n, status='accepted')
+    db.commit()
+    queries = []
+    def count_sql(conn, cursor, statement, parameters, context, executemany):
+        if statement.lstrip().upper().startswith('SELECT'):
+            queries.append(statement)
+    engine = db.get_bind()
+    event.listen(engine, 'before_cursor_execute', count_sql)
+    try:
+        result = summary(db)
+    finally:
+        event.remove(engine, 'before_cursor_execute', count_sql)
+    assert result['by_source']['staff']['total'] == 80
+    assert result['delivery_evidence']['sources']
+    assert len(queries) <= 2, f'Unexpected per-approval SELECTs: {len(queries)}'

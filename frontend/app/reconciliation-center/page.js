@@ -146,6 +146,8 @@ export default function ReconciliationCenterPage() {
           <span>{number(item.received_records)} retained intake records</span>
           <small>Last received: {item.last_received_at ? new Date(item.last_received_at).toLocaleString('en-PH') : 'Not observed'}</small>
           <small>Needs validation: {number(item.validation_failed)} · Awaiting review: {number(item.ready_for_review)}</small>
+          <small>Pending over 7 days: {number(item.pending_over_7d)} · Age unavailable: {number(item.pending_age_unknown)}</small>
+          <small>Oldest pending: {item.oldest_pending_at ? new Date(item.oldest_pending_at).toLocaleDateString('en-PH') : 'Not observed'}</small>
           <small>Accepted with direct link: {number(item.accepted_with_direct_link)} · Without: {number(item.accepted_without_direct_link)}</small>
           <small>Revised source events: {number(item.multi_revision_events)} · Rejected: {number(item.rejected)}</small>
           <span className="small muted">Sender connectivity: unverified. Unreceived events: unknown.</span>

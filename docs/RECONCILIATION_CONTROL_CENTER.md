@@ -69,3 +69,15 @@ These are **Accounting observation metrics**, not producer health metrics:
 
 Source outbox watermarks and end-to-end delivery proofs remain an outstanding
 acceptance gate for a fully certified integration.
+
+
+## Review Inbox aging and query efficiency
+
+Source cards distinguish pending events older than seven full days from
+those with missing or unparsable intake timestamps. An oldest pending
+timestamp is shown only when a timestamp exists. These observations refer
+only to Accounting-received records, not upstream sender health.
+
+The summary builds Staff Approved/Paid visibility from one retained snapshot
+rather than querying per approved payroll run. Existing visible Review Inbox
+totals and immutable Staff revision history are preserved.

@@ -26,10 +26,12 @@ async function mockReconciliationCenter(page, { role = 'owner', unavailable = ''
       delivery_evidence: { scope: 'accounting_retained_intake_only', sources: [
         { source_app: 'pos', received_records: 8, last_received_at: '2026-10-21T09:00:00+00:00',
           validation_failed: 1, ready_for_review: 2, accepted_with_direct_link: 3,
-          accepted_without_direct_link: 1, multi_revision_events: 1, rejected: 1 },
+          accepted_without_direct_link: 1, multi_revision_events: 1, rejected: 1,
+          pending_over_7d: 2, pending_age_unknown: 1, oldest_pending_at: '2026-10-10T00:00:00+00:00' },
         { source_app: 'inventory', received_records: 0, last_received_at: null,
           validation_failed: 0, ready_for_review: 0, accepted_with_direct_link: 0,
-          accepted_without_direct_link: 0, multi_revision_events: 0, rejected: 0 },
+          accepted_without_direct_link: 0, multi_revision_events: 0, rejected: 0,
+          pending_over_7d: 0, pending_age_unknown: 0, oldest_pending_at: null },
       ] },
     };
     if (path === '/api/reports/management') data = { close_readiness: {
@@ -60,7 +62,8 @@ test('reconciliation center displays grounded workstreams and direct links on de
   const evidence = page.getByRole('region', { name: 'Integration delivery evidence' });
   await expect(evidence.getByText('Source intake evidence')).toBeVisible();
   await expect(evidence.getByText('8 retained intake records')).toBeVisible();
-  await expect(evidence.getByText('Not observed')).toBeVisible();
+  await expect(evidence.getByText('Pending over 7 days: 2 · Age unavailable: 1')).toBeVisible();
+  await expect(evidence.getByText('Last received: Not observed')).toBeVisible();
   await expect(evidence.getByText('Unreceived events: unknown.', { exact: false }).first()).toBeVisible();
   await expect(journal.getByRole('link', { name: 'Open Journal Review' })).toHaveAttribute('href', '/reports?view=journal-review');
   await expect(page.evaluate(() => document.documentElement.scrollWidth <= document.documentElement.clientWidth + 1)).resolves.toBe(true);
