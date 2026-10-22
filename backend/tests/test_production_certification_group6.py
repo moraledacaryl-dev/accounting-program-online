@@ -36,6 +36,11 @@ def connection():
         db.exec_driver_sql("""CREATE TABLE money_transactions (
             id INTEGER PRIMARY KEY, status TEXT, amount NUMERIC,
             journal_entry_id INTEGER)""")
+        db.exec_driver_sql("""CREATE TABLE integration_review_items (
+            id INTEGER PRIMARY KEY, source_app TEXT, source_event_id TEXT,
+            status TEXT, financial_effect TEXT,
+            accepted_transaction_id INTEGER, accepted_journal_entry_id INTEGER,
+            accepted_receivable_id INTEGER, accepted_payable_id INTEGER)""")
         db.exec_driver_sql("""CREATE TABLE bookings (
             id INTEGER PRIMARY KEY, external_source TEXT,
             external_booking_id TEXT)""")
@@ -111,3 +116,82 @@ def test_sql_only_selects_and_production_transaction_forces_read_only():
     assert 'MODE: ${{ inputs.mode || ' + "'read_only'" + ' }}' in workflow
     assert 'push:' in workflow and 'branches: [main]' in workflow
     assert 'git -C "$SOURCE" show "$AUDIT_SHA:scripts/dr/production-certification.py"' in workflow
+
+
+def test_integration_intake_summary_never_claims_sender_completeness(connection, capsys):
+    connection.exec_driver_sql("""
+        INSERT INTO integration_review_items
+        (id,source_app,source_event_id,status,financial_effect,
+         accepted_transaction_id,accepted_journal_entry_id,accepted_receivable_id,accepted_payable_id)
+        VALUES
+        (1,'inventory','opaque-inventory-event','ready_for_review','payable',NULL,NULL,NULL,NULL),
+        (2,'staff','opaque-payroll','accepted','cash_out',10,NULL,NULL,NULL),
+        (3,'pos','opaque-pos-review','accepted','journal_only',NULL,1,NULL,NULL)
+    """)
+    # Fixture money target 10 is posted, but it is a fixture that intentionally
+    # does not demonstrate any upstream Staff sender outbox completeness.
+    metrics, runtimes = audit.collect(connection)
+    intake = metrics['integration_intake']
+    assert intake['retained_events'] == 3
+    assert intake['inventory_events'] == 1
+    assert intake['staff_events'] == 1
+    assert intake['pos_review_events'] == 1
+    assert intake['waiting_for_review'] == 1
+    assert intake['accepted_events'] == 2
+    assert intake['missing_cash_target_ids'] == 0
+    assert intake['missing_journal_target_ids'] == 0
+    assert audit.render(metrics, runtimes) == 0
+    printed = capsys.readouterr().out
+    assert 'integration_upstream_producer_completeness=NOT_TESTED' in printed
+    assert 'integration_pos_direct_sync=NOT_TESTED' in printed
+    assert 'integration_secondary_journal_and_rounding_proof=NOT_TESTED' in printed
+    assert 'opaque-inventory-event' not in printed
+    assert 'opaque-payroll' not in printed
+
+
+def test_accepted_intake_missing_and_dangling_targets_are_review_only(connection, capsys):
+    connection.exec_driver_sql("""
+        INSERT INTO integration_review_items
+        (id,source_app,source_event_id,status,financial_effect,
+         accepted_transaction_id,accepted_journal_entry_id,accepted_receivable_id,accepted_payable_id)
+        VALUES
+        (11,'staff','private-1','accepted','cash_out',NULL,NULL,NULL,NULL),
+        (12,'inventory','private-2','accepted','payable',NULL,NULL,NULL,99999),
+        (13,'inventory','private-3','accepted','reference_only',NULL,NULL,NULL,NULL),
+        (14,'staff','private-4','accepted','receivable',NULL,NULL,NULL,NULL),
+        (15,'pos','private-5','rejected','cash_in',NULL,NULL,NULL,NULL),
+        (16,'pos','private-6','accepted','journal_only',NULL,99999,NULL,NULL)
+    """)
+    metrics, runtimes = audit.collect(connection)
+    intake = metrics['integration_intake']
+    assert intake['accepted_events'] == 5
+    assert intake['missing_cash_target_ids'] == 1
+    assert intake['missing_receivable_target_ids'] == 1
+    assert intake['dangling_journal_target_ids'] == 1
+    assert intake['dangling_payable_target_ids'] == 1
+    assert intake['missing_payable_target_ids'] == 0
+    assert intake['missing_journal_target_ids'] == 0
+    critical, review = audit.assessment(metrics)
+    assert not critical
+    assert {(group, key) for group, key, _ in review if group == 'integration_intake'} == {
+        ('integration_intake', 'missing_cash_target_ids'),
+        ('integration_intake', 'missing_receivable_target_ids'),
+        ('integration_intake', 'dangling_journal_target_ids'),
+        ('integration_intake', 'dangling_payable_target_ids'),
+    }
+    assert audit.render(metrics, runtimes) == 0
+    printed = capsys.readouterr().out
+    assert 'status=REVIEW_REQUIRED' in printed
+    assert 'private-' not in printed
+
+
+def test_integration_intake_counts_posted_state_without_mutating_db(connection):
+    connection.exec_driver_sql("INSERT INTO money_transactions VALUES (99, 'draft', 25, NULL)")
+    connection.exec_driver_sql("""
+        INSERT INTO integration_review_items
+        (id,source_app,source_event_id,status,financial_effect,accepted_transaction_id)
+        VALUES (21,'staff','opaque-status','accepted','cash_in',99)
+    """)
+    metrics, _ = audit.collect(connection)
+    assert metrics['integration_intake']['accepted_cash_target_not_posted'] == 1
+    assert connection.exec_driver_sql("SELECT status FROM money_transactions WHERE id=99").scalar_one() == 'draft'
