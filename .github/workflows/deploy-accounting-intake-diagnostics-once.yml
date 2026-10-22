@@ -31,8 +31,12 @@ jobs:
           [[ "$RELEASE_SHA" =~ ^[0-9a-f]{40}$ ]]
           main_sha="$(gh api "repos/$GH_REPO/commits/main" --jq '.sha')"
           [[ "$main_sha" == "$TRIGGER_SHA" ]] || { echo "Main moved; refusing stale bridge" >&2; exit 1; }
-          first_parent="$(gh api "repos/$GH_REPO/commits/$TRIGGER_SHA" --jq '.parents[0].sha')"
-          [[ "$first_parent" == "$RELEASE_SHA" ]] || { echo "Not the one-time bridge merge; refusing deployment" >&2; exit 1; }
+          # Concurrency-safe one-time identity: only a merge introducing THIS
+          # workflow (and nothing else) may activate the approved feature SHA.
+          # Other app deploy bridges can merge without changing this release.
+          changed_count="$(gh api "repos/$GH_REPO/commits/$TRIGGER_SHA" --jq '.files | length')"
+          bridge_added="$(gh api "repos/$GH_REPO/commits/$TRIGGER_SHA" --jq '[.files[] | select(.filename == ".github/workflows/deploy-accounting-intake-diagnostics-once.yml" and .status == "added")] | length')"
+          [[ "$changed_count" == 1 && "$bridge_added" == 1 ]] || { echo "Not a single-file Accounting release bridge; refusing deployment" >&2; exit 1; }
           relation="$(gh api "repos/$GH_REPO/compare/$RELEASE_SHA...$TRIGGER_SHA" --jq '.status')"
           [[ "$relation" == "ahead" ]] || { echo "Exact release ancestry not confirmed" >&2; exit 1; }
           mapfile -t release_ci < <(
