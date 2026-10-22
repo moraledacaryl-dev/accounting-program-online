@@ -91,7 +91,7 @@ def test_order_void_payload_maps_to_linked_reference():
     assert result['proposed_links']['reason'] == 'Guest cancellation'
 
 
-def test_negative_room_charge_maps_to_receivable_reversal():
+def test_negative_room_charge_is_reference_only_until_original_charge_reconciled():
     result = _capture(room_charge, {
         'source_type': 'pos_room_charge_reversal',
         'source_id': 56,
@@ -102,8 +102,25 @@ def test_negative_room_charge_maps_to_receivable_reversal():
         'reverses_source_id': 55,
         'external_id': 'posting-reversal-56',
     })
-    assert result['financial_effect'] == 'receivable'
+    assert result['financial_effect'] == 'reference_only'
     assert result['amount'] == 780
+    assert result['proposed_links']['target_type'] == 'pos_room_charge_reversal'
+    assert result['proposed_links']['reversal_review_only'] is True
+    assert result['proposed_links']['requires_original_charge_evidence'] is True
     assert result['proposed_links']['reverses_source_type'] == 'pos_room_charge'
     assert result['proposed_links']['reverses_source_id'] == 55
     assert result['idempotency_key'] == 'pos:room_charge:posting-reversal-56'
+
+
+def test_invalid_or_conflicting_room_charge_sign_and_source_type_rejected():
+    from fastapi import HTTPException
+    import pytest
+
+    for amount in (0, float('nan'), float('inf')):
+        with pytest.raises(HTTPException) as error:
+            _capture(room_charge, {'gross_amount': amount, 'source_type': 'pos_room_charge'})
+        assert error.value.status_code == 422
+    for gross, source_type in ((-80, 'pos_room_charge'), (80, 'pos_room_charge_reversal')):
+        with pytest.raises(HTTPException) as error:
+            _capture(room_charge, {'gross_amount': gross, 'source_type': source_type})
+        assert error.value.status_code == 422
