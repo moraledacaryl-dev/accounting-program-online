@@ -67,6 +67,9 @@ def test_incomplete_source_no_receiver_orphan_claims_even_if_accounting_has_othe
 @pytest.mark.parametrize('mutator', [
     lambda a, s, i: a.update(export_type="wrong"),
     lambda a, s, i: a.update(no_pagination_cutoff=False),
+    lambda a, s, i: a.update(sources=["inventory"]),
+    lambda a, s, i: a.update(sources=[]),
+    lambda a, s, i: a.update(sources=["inventory", "unknown"]),
     lambda a, s, i: s.update(source="inventory"),
     lambda a, s, i: s.update(export_type="wrong"),
     lambda a, s, i: s.update(full_source_scan=False),
