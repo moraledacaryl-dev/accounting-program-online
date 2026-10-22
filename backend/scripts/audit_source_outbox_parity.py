@@ -188,6 +188,11 @@ def build_private_parity_snapshot(accounting_export, *, staff_export=None, inven
     receipts = accounting_export.get('accounting_review')
     if not isinstance(receipts, list):
         raise ValueError('Accounting export has no review identity array.')
+    covered_sources = accounting_export.get('sources')
+    if not isinstance(covered_sources, list) or not all(
+        source in ('inventory', 'staff') for source in covered_sources
+    ):
+        raise ValueError('Accounting export is missing a supported source coverage declaration.')
 
     supplied = {'staff': staff_export, 'inventory': inventory_export}
     producers = {}
@@ -198,6 +203,8 @@ def build_private_parity_snapshot(accounting_export, *, staff_export=None, inven
     for name, data in supplied.items():
         if data is None:
             continue
+        if name not in covered_sources:
+            raise ValueError(f'Accounting export does not include {name} review identities.')
         if not isinstance(data, dict) or data.get('source') != name:
             raise ValueError(f'{name} source export identity was not verified.')
         if data.get('export_type') != expected_export_types[name]:
