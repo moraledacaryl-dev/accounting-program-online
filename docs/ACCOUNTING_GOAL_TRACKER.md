@@ -109,3 +109,25 @@ and is not triggered by this read-only certification change.
 ### Completion definition
 
 The project is **accounting-reconciled** only once all material unsupported balances/transactions are explained or correctly adjusted with independently reviewed evidence, cash/bank and AR/AP agree to source records, posted GL reports tie out, integration duplicates are controlled, and a documented restore rehearsal succeeds. Until then: **technical controls largely implemented, financial reconciliation OPEN**.
+
+
+## Read-only financial Review Inbox acceptance backlog classification
+
+Production certification additionally reports integer-only pending Review Inbox
+counts by source (Staff, POS, Inventory) and the source financial effects
+(cash in/out, settlement, journal, receivable, payable, inventory payable
+adjustment, folio charge, reference-only, unknown). For pending cash-related
+effects it reports missing proposed financial-account mapping; for pending
+journal-only events it reports missing proposed journal lines.
+
+A pending event is **not** evidence of a valid cash receipt or expense, and
+a proposed financial account is **not** approval. Unknown effects and missing
+proposals are review leads. No raw source IDs, guest/employee details, amounts,
+bank references, proposed journal bodies or private payloads enter CI logs.
+The baseline scan is `SELECT`-only, and its status remains `REVIEW_REQUIRED`
+when there are pending events. This tool never accepts/rejects a review,
+assigns an account, creates a transaction, replays a POS/Staff event, or
+posts a general-ledger journal. Source documents and the authorized reviewer
+remain mandatory for the two POS and 20 Staff financial items identified by
+the earlier protected source-side parity checks.
+

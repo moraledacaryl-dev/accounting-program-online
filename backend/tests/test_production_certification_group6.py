@@ -39,6 +39,7 @@ def connection():
         db.exec_driver_sql("""CREATE TABLE integration_review_items (
             id INTEGER PRIMARY KEY, source_app TEXT, source_event_id TEXT,
             status TEXT, financial_effect TEXT,
+            proposed_account_id INTEGER, proposed_journal_json TEXT,
             accepted_transaction_id INTEGER, accepted_journal_entry_id INTEGER,
             accepted_receivable_id INTEGER, accepted_payable_id INTEGER)""")
         db.exec_driver_sql("""CREATE TABLE bookings (
@@ -195,3 +196,57 @@ def test_integration_intake_counts_posted_state_without_mutating_db(connection):
     metrics, _ = audit.collect(connection)
     assert metrics['integration_intake']['accepted_cash_target_not_posted'] == 1
     assert connection.exec_driver_sql("SELECT status FROM money_transactions WHERE id=99").scalar_one() == 'draft'
+
+
+def test_pending_review_worklist_is_counted_by_source_effect_and_proposal_not_posted(connection, capsys):
+    connection.exec_driver_sql("""
+      INSERT INTO integration_review_items
+      (id,source_app,source_event_id,status,financial_effect,
+       proposed_account_id,proposed_journal_json)
+      VALUES
+      (31,'staff','private-staff-cash','ready_for_review','cash_out',NULL,NULL),
+      (32,'staff','private-staff-journal','ready_for_review','journal_only',NULL,'  '),
+      (33,'staff','private-staff-reference','ready_for_review','reference_only',NULL,NULL),
+      (34,'pos','private-pos-cash','ready_for_review','cash_in',12,NULL),
+      (35,'pos','private-pos-other','ready_for_review','unrecognized',NULL,NULL),
+      (36,'inventory','private-inventory-payable','ready_for_review','payable',NULL,NULL),
+      (37,'pos','private-already-reviewed','accepted','cash_in',NULL,NULL)
+    """)
+    metrics, runtimes = audit.collect(connection)
+    row = metrics['integration_intake']
+    assert row['waiting_for_review'] == 6
+    assert row['staff_waiting_for_review'] == 3
+    assert row['pos_waiting_for_review'] == 2
+    assert row['inventory_waiting_for_review'] == 1
+    assert row['pending_cash_in'] == 1
+    assert row['pending_cash_out'] == 1
+    assert row['pending_journal_only'] == 1
+    assert row['pending_reference_only'] == 1
+    assert row['pending_payable'] == 1
+    assert row['pending_unclassified_effect'] == 1
+    assert row['pending_cash_without_proposed_account'] == 1
+    assert row['pending_journal_without_proposed_lines'] == 1
+    assert row['accepted_events'] == 1
+    critical, review = audit.assessment(metrics)
+    assert not critical
+    assert ('integration_intake', 'staff_waiting_for_review', 3) in review
+    assert ('integration_intake', 'pending_cash_without_proposed_account', 1) in review
+    assert audit.render(metrics, runtimes) == 0
+    out = capsys.readouterr().out
+    assert 'status=REVIEW_REQUIRED' in out
+    assert 'pending_review_counts_are_not_approved_postings=YES' in out
+    assert 'proposed_account_absence_requires_review_not_auto_assignment=YES' in out
+    for private in ('private-staff', 'private-pos', 'private-inventory'):
+        assert private not in out
+
+
+def test_zero_pending_review_counts_explicit_without_auto_acceptance(connection, capsys):
+    metrics, runtimes = audit.collect(connection)
+    row = metrics['integration_intake']
+    for key in ('staff_waiting_for_review','pos_waiting_for_review',
+                'inventory_waiting_for_review','pending_cash_in','pending_cash_out',
+                'pending_unclassified_effect','pending_cash_without_proposed_account',
+                'pending_journal_without_proposed_lines'):
+        assert row[key] == 0
+    assert audit.render(metrics, runtimes) == 0
+    assert 'integration_intake.pos_waiting_for_review=0' in capsys.readouterr().out

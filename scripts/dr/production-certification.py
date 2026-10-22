@@ -89,6 +89,31 @@ AUDIT_QUERIES = {
                coalesce(sum(CASE WHEN review.source_app = 'staff' THEN 1 ELSE 0 END),0) AS staff_events,
                coalesce(sum(CASE WHEN review.source_app = 'pos' THEN 1 ELSE 0 END),0) AS pos_review_events,
                coalesce(sum(CASE WHEN review.status = 'ready_for_review' THEN 1 ELSE 0 END),0) AS waiting_for_review,
+               coalesce(sum(CASE WHEN review.status = 'ready_for_review' AND review.source_app='staff' THEN 1 ELSE 0 END),0) AS staff_waiting_for_review,
+               coalesce(sum(CASE WHEN review.status = 'ready_for_review' AND review.source_app='pos' THEN 1 ELSE 0 END),0) AS pos_waiting_for_review,
+               coalesce(sum(CASE WHEN review.status = 'ready_for_review' AND review.source_app='inventory' THEN 1 ELSE 0 END),0) AS inventory_waiting_for_review,
+               coalesce(sum(CASE WHEN review.status = 'ready_for_review' AND review.financial_effect = 'cash_in' THEN 1 ELSE 0 END),0) AS pending_cash_in,
+               coalesce(sum(CASE WHEN review.status = 'ready_for_review' AND review.financial_effect = 'cash_out' THEN 1 ELSE 0 END),0) AS pending_cash_out,
+               coalesce(sum(CASE WHEN review.status = 'ready_for_review' AND review.financial_effect = 'settlement' THEN 1 ELSE 0 END),0) AS pending_settlement,
+               coalesce(sum(CASE WHEN review.status = 'ready_for_review' AND review.financial_effect = 'journal_only' THEN 1 ELSE 0 END),0) AS pending_journal_only,
+               coalesce(sum(CASE WHEN review.status = 'ready_for_review' AND review.financial_effect = 'receivable' THEN 1 ELSE 0 END),0) AS pending_receivable,
+               coalesce(sum(CASE WHEN review.status = 'ready_for_review' AND review.financial_effect = 'payable' THEN 1 ELSE 0 END),0) AS pending_payable,
+               coalesce(sum(CASE WHEN review.status = 'ready_for_review' AND review.financial_effect = 'payable_adjustment' THEN 1 ELSE 0 END),0) AS pending_payable_adjustment,
+               coalesce(sum(CASE WHEN review.status = 'ready_for_review' AND review.financial_effect = 'folio_charge' THEN 1 ELSE 0 END),0) AS pending_folio_charge,
+               coalesce(sum(CASE WHEN review.status = 'ready_for_review' AND review.financial_effect = 'reference_only' THEN 1 ELSE 0 END),0) AS pending_reference_only,
+               coalesce(sum(CASE WHEN review.status = 'ready_for_review'
+                   AND (review.financial_effect IS NULL OR review.financial_effect NOT IN
+                     ('cash_in','cash_out','settlement','journal_only','receivable','payable',
+                      'payable_adjustment','folio_charge','reference_only'))
+                   THEN 1 ELSE 0 END),0) AS pending_unclassified_effect,
+               coalesce(sum(CASE WHEN review.status = 'ready_for_review'
+                   AND review.financial_effect IN ('cash_in','cash_out','settlement')
+                   AND review.proposed_account_id IS NULL
+                   THEN 1 ELSE 0 END),0) AS pending_cash_without_proposed_account,
+               coalesce(sum(CASE WHEN review.status = 'ready_for_review'
+                   AND review.financial_effect = 'journal_only'
+                   AND (review.proposed_journal_json IS NULL OR trim(review.proposed_journal_json) = '')
+                   THEN 1 ELSE 0 END),0) AS pending_journal_without_proposed_lines,
                coalesce(sum(CASE WHEN review.status = 'accepted' THEN 1 ELSE 0 END),0) AS accepted_events,
                coalesce(sum(CASE WHEN review.status = 'rejected' THEN 1 ELSE 0 END),0) AS rejected_events,
                coalesce(sum(CASE WHEN review.status = 'validation_failed' THEN 1 ELSE 0 END),0) AS validation_failed_events,
@@ -161,6 +186,11 @@ REVIEW_KEYS = {
     "cash_coverage": ("legacy_posted_without_journal",),
     "beds24_links": ("duplicate_external_booking_id_groups",),
     "integration_intake": (
+        "staff_waiting_for_review", "pos_waiting_for_review",
+        "inventory_waiting_for_review",
+        "pending_unclassified_effect",
+        "pending_cash_without_proposed_account",
+        "pending_journal_without_proposed_lines",
         "missing_cash_target_ids", "missing_journal_target_ids",
         "missing_receivable_target_ids", "missing_payable_target_ids",
         "dangling_cash_target_ids", "dangling_journal_target_ids",
@@ -210,6 +240,8 @@ def render(metrics, runtimes_ms):
     print("CERTIFICATION: integration_upstream_producer_completeness=NOT_TESTED")
     print("CERTIFICATION: integration_pos_direct_sync=NOT_TESTED")
     print("CERTIFICATION: integration_secondary_journal_and_rounding_proof=NOT_TESTED")
+    print("CERTIFICATION: pending_review_counts_are_not_approved_postings=YES")
+    print("CERTIFICATION: proposed_account_absence_requires_review_not_auto_assignment=YES")
     print("CERTIFICATION: reporting_query_timings_are_single_sample_not_SLA")
     return 2 if critical else 0
 
