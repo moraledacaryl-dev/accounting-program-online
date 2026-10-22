@@ -102,3 +102,34 @@ source outbox snapshots or authenticated read-only APIs and independently
 check source acknowledgements, Accounting record links, reversals, journals,
 financial accounts and cash/bank/GCash settlement. Do not automatically
 replay any event based only on this report.
+
+
+## Restricted Accounting intake identity export
+
+For an authorized read-only snapshot of Accounting's retained review identities,
+run the following from an access-controlled Accounting host (with the usual
+database configuration). It performs **SELECT statements only**, emits no
+financial or payroll payloads, and creates a **new** 0600-permission local file.
+It refuses to overwrite existing files or follow an existing symlink.
+
+```bash
+cd /opt/accounting-program-online/backend
+python3 scripts/export_accounting_review_identities.py \
+  --source inventory --source staff \
+  --output /root/restricted-accounting-intake-identities.json
+```
+
+The file contains the `accounting_review` array expected by the parity
+auditor plus export metadata. Combine the exported array with the sanitized
+`producers` snapshot *locally* in a restricted working directory. Do not
+publish raw IDs, payroll details, guest information, connection strings or
+this export as a GitHub Actions artifact, and do not check it into Git.
+
+This exporter does **not** poll Staff, Inventory or POS, nor can it prove
+that upstream source outboxes were fully exported. The exporter scans the
+selected Accounting sources without an arbitrary pagination cutoff, but
+a changing live database is not a transactionally coordinated point-in-time
+snapshot of the producer systems. For meaningful missing-event classification,
+take producer and receiver snapshots from the same agreed window using
+appropriate read-only transaction isolation, and set
+`complete_for_window` to true only with verified full source coverage.
