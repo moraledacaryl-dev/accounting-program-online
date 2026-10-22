@@ -79,6 +79,7 @@ def test_pos_parity_workflow_stages_both_exact_sha_modules_before_server_audit()
     assert 'show "$AUDIT_SHA:scripts/dr/pos-direct-erp-evidence.py"' in source
     assert 'test -s "$helper_file"' in source
     assert 'rm -f "$audit_file" "$helper_file"' in source
+    assert '"$CURRENT/backend/.venv/bin/python" -B "$audit_file"' in source
     assert "      - 'scripts/dr/pos_sale_evidence.py'" in source
 
 
