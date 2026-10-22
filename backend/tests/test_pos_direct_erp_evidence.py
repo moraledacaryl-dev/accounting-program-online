@@ -263,3 +263,115 @@ def test_invalid_route_evidence_fails_closed(rows):
 def test_router_and_review_queries_are_sql_select_only():
     assert audit.REVIEW_SQL.lstrip().upper().startswith("SELECT")
     assert audit.ROUTING_SQL.lstrip().upper().startswith("SELECT")
+
+
+
+def test_register_session_closes_match_counted_reconciliation_by_account_date_shift(capsys):
+    source = [
+        row("session.closed", "synced", {
+            "session_code": "REG-A-2026-10-22-SHIFT1", "business_date": "2026-10-22",
+            "register_accounting_financial_account_id": 12}),
+        row("session.closed", "synced", {
+            "session_code": "REG-A-2026-10-22-SHIFT2", "business_date": "2026-10-22",
+            "register_accounting_financial_account_id": 12}),
+        row("session.closed", "synced", {
+            "session_code": "REG-B-2026-10-22-SHIFT3", "business_date": "2026-10-22",
+            "register_accounting_financial_account_id": 15}),
+    ]
+    accounting = [
+        (12, "2026-10-22", "REG-A-2026-10-22-SHIFT1", "counted"),
+        (12, "2026-10-22", "REG-A-2026-10-22-SHIFT2", "counted"),
+        (15, "2026-10-22", "REG-B-2026-10-22-SHIFT3", "counted"),
+    ]
+    report = audit.compare_sessions(source, accounting)
+    assert report["register_pos_closed_events"] == 3
+    assert report["register_pos_synced_events"] == 3
+    assert report["register_direct_receipt_matched"] == 3
+    assert report["register_synced_without_either_receipt"] == 0
+    assert report["register_review_receipt_matched"] == 0
+    assert report["register_route_default_direct"] == 1
+    audit.render(report)
+    output = capsys.readouterr().out
+    assert "REG-A-" not in output and "REG-B-" not in output
+    assert "REGISTER_COUNT_RECEIPT_IS_NOT_APPROVED_CASH_RECONCILIATION=YES" in output
+
+
+def test_register_review_inbox_route_exact_id_not_false_direct_reconciliation():
+    sources = [
+        row("session.closed", "synced", {
+            "session_code": "review-session-1", "business_date": "2026-10-22",
+            "register_accounting_financial_account_id": 8}),
+        row("session.closed", "synced", {
+            "session_code": "review-session-2", "business_date": "2026-10-22",
+            "register_accounting_financial_account_id": 8}),
+    ]
+    reviews = [("pos:register_reconciliation:review-session-1", "ready_for_review")]
+    routing = [(json.dumps({
+        "api_token": "DO NOT DISCLOSE",
+        "current_erp_reconciliation_path": "/integrations/pos-review/reconciliation",
+    }),)]
+    result = audit.compare_sessions(sources, [], reviews, routing_rows=routing)
+    assert result["register_review_receipt_matched"] == 1
+    assert result["register_review_awaiting_acceptance"] == 1
+    assert result["register_synced_without_either_receipt"] == 1
+    assert result["register_route_review_inbox"] == 1
+
+
+def test_register_amounts_and_private_details_are_not_in_evidence(capsys):
+    source = [row("session.closed", "synced", {
+        "session_code": "PRIVATE REGISTER 01", "business_date": "2026-10-22",
+        "register_accounting_financial_account_id": 1,
+        "closing_actual_cash": 999999,
+        "variance_note": "SECRET CASH VARIANCE",
+    })]
+    result = audit.compare_sessions(source, [(1, "2026-10-22", "PRIVATE REGISTER 01", "draft")])
+    assert result["register_direct_receipt_matched"] == 1
+    assert result["register_direct_receipt_other_status"] == 1
+    audit.render(result)
+    evidence = capsys.readouterr().out
+    assert "PRIVATE REGISTER" not in evidence
+    assert "SECRET CASH" not in evidence
+    assert "999999" not in evidence
+
+
+def test_register_ambiguous_source_and_receiver_report_review_counts():
+    source = [
+        row("session.closed", "synced", {
+            "session_code": "REG-01", "business_date": "2026-10-22",
+            "register_accounting_financial_account_id": 10}),
+        row("session.closed", "synced", {
+            "session_code": "REG-01", "business_date": "2026-10-22",
+            "register_accounting_financial_account_id": 10}),
+        row("session.closed", "synced", {
+            "session_code": "UNMAPPED", "business_date": "2026-10-22",
+            "register_accounting_financial_account_id": None}),
+    ]
+    receiving = [
+        (10, "2026-10-22", "REG-01", "counted"),
+        (10, "2026-10-22", "REG-01", "counted"),
+        (20, "2026-10-22", "REG-OTHER", "counted"),
+    ]
+    result = audit.compare_sessions(source, receiving)
+    assert result["register_duplicate_source_business_key"] == 1
+    assert result["register_duplicate_direct_key"] == 1
+    assert result["register_unverifiable_account_date_or_shift"] == 1
+    assert result["register_accounting_direct_not_in_scanned_source"] == 1
+
+
+@pytest.mark.parametrize("bad", [
+    [(12, "2026-10-22", "SHIFT-1", "counted")],
+    [("{}junk",)],
+    [(json.dumps({"current_erp_reconciliation_path": 1}),)],
+])
+def test_register_route_input_fails_closed_when_malformed(bad):
+    payload = [row("session.closed", "synced", {
+        "session_code": "REG-SHIFT-1", "business_date": "2026-10-22",
+        "register_accounting_financial_account_id": 12,
+    })]
+    with pytest.raises(ValueError):
+        audit.compare_sessions(payload, [], routing_rows=bad)
+
+
+def test_register_receipt_query_is_select_only():
+    assert audit.REGISTER_RECON_SQL.lstrip().upper().startswith("SELECT")
+    assert "counted_by='Dedicated POS'" in audit.REGISTER_RECON_SQL

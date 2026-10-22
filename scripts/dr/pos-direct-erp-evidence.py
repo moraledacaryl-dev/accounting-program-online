@@ -53,6 +53,11 @@ REVIEW_SQL = """
     SELECT source_event_id, status FROM integration_review_items
     WHERE source_app='pos'
 """
+REGISTER_RECON_SQL = """
+    SELECT financial_account_id, reconciliation_date, shift_name, status
+    FROM cash_reconciliations
+    WHERE counted_by='Dedicated POS'
+"""
 ROUTING_SQL = """
     SELECT value_json FROM system_settings
     WHERE key='accounting_sync'
@@ -321,6 +326,116 @@ def compare(pos_rows, target_rows, *, review_rows=(), routing=None):
     return result
 
 
+def compare_sessions(pos_rows, register_rows, review_rows=(), *, routing_rows=()):
+    """Audit POS register closes against their separate reconciliations.
+
+    A counted reconciliation receipt is NOT a bank deposit or verified
+    shortage settlement. Numeric account ID + date + shift is the exact
+    direct Accounting cash_reconciliations unique business key.
+    """
+    direct = {}
+    stats = Counter()
+    for account_id, date, shift, status in register_rows:
+        stats["register_accounting_direct_records"] += 1
+        key = (str(account_id), str(date or ""), str(shift or ""))
+        if key in direct:
+            stats["register_duplicate_direct_key"] += 1
+        else:
+            direct[key] = str(status or "").lower()
+    review = {}
+    for event_id, status in review_rows:
+        if not isinstance(event_id, str) or not event_id.startswith(
+            "pos:register_reconciliation:"
+        ):
+            continue
+        if event_id in review:
+            stats["register_duplicate_review_key"] += 1
+        review[event_id] = str(status or "").lower()
+
+    scoped = set()
+    matched_review = set()
+    for event_type, status, raw_payload in pos_rows:
+        if event_type != "session.closed":
+            continue
+        stats["register_pos_closed_events"] += 1
+        is_synced = str(status or "").strip().lower() == "synced"
+        if is_synced:
+            stats["register_pos_synced_events"] += 1
+        else:
+            stats["register_pos_not_synced_events"] += 1
+        try:
+            payload = _json(raw_payload)
+        except (TypeError, ValueError):
+            raise ValueError("Invalid POS register close envelope.") from None
+        acct = payload.get("register_accounting_financial_account_id")
+        shift = payload.get("session_code")
+        date = payload.get("business_date")
+        if type(acct) is not int or acct <= 0 or not isinstance(shift, str) or not shift.strip() or not isinstance(date, str) or not date.strip():
+            stats["register_unverifiable_account_date_or_shift"] += 1
+            continue
+        key = (str(acct), date.strip(), shift.strip())
+        if key in scoped:
+            stats["register_duplicate_source_business_key"] += 1
+        scoped.add(key)
+        review_id = "pos:register_reconciliation:" + shift
+        found_direct = key in direct
+        found_review = review_id in review
+        if found_direct:
+            stats["register_direct_receipt_matched"] += 1
+            direct_status = direct[key]
+            if direct_status != "counted":
+                stats["register_direct_receipt_other_status"] += 1
+        if found_review:
+            stats["register_review_receipt_matched"] += 1
+            matched_review.add(review_id)
+            if review[review_id] in {"ready_for_review", "awaiting_approval", "pending"}:
+                stats["register_review_awaiting_acceptance"] += 1
+            elif review[review_id] == "accepted":
+                stats["register_review_accepted"] += 1
+            else:
+                stats["register_review_other_status"] += 1
+        if found_direct and found_review:
+            stats["register_direct_and_review_both_present"] += 1
+        if not found_direct and not found_review:
+            stats["register_without_direct_or_review_receipt"] += 1
+            if is_synced:
+                stats["register_synced_without_either_receipt"] += 1
+    stats["register_accounting_direct_not_in_scanned_source"] = sum(k not in scoped for k in direct)
+    stats["register_review_not_in_scanned_source"] = len(set(review) - matched_review)
+
+    if routing_rows:
+        if len(routing_rows) != 1 or not isinstance(routing_rows[0][0], str):
+            raise ValueError("Ambiguous POS reconciliation routing config.")
+        try:
+            routing = json.loads(routing_rows[0][0])
+        except (TypeError, ValueError):
+            raise ValueError("Invalid POS reconciliation routing config.") from None
+        if not isinstance(routing, dict):
+            raise ValueError("Invalid POS reconciliation routing config.")
+        path = routing.get("current_erp_reconciliation_path")
+        if path is not None and not isinstance(path, str):
+            raise ValueError("Invalid POS reconciliation route type.")
+        route_class = ("default_direct" if not path else
+                       "review_inbox" if "/integrations/pos-review/" in path else
+                       "custom_direct_or_other")
+    else:
+        route_class = "default_direct"
+    stats["register_route_" + route_class] = 1
+    baseline = (
+        "register_pos_closed_events", "register_pos_synced_events",
+        "register_direct_receipt_matched", "register_review_receipt_matched",
+        "register_review_awaiting_acceptance", "register_review_accepted",
+        "register_without_direct_or_review_receipt",
+        "register_synced_without_either_receipt",
+        "register_unverifiable_account_date_or_shift",
+        "register_direct_and_review_both_present",
+        "register_duplicate_source_business_key", "register_duplicate_direct_key",
+        "register_accounting_direct_not_in_scanned_source",
+        "register_review_not_in_scanned_source",
+    )
+    return {key: int(stats.get(key, 0)) for key in sorted(set(stats) | set(baseline))}
+
+
 def render(report):
     print("POS DIRECT PARITY: SQL=READ_ONLY; OUTPUT=COUNTS_ONLY")
     for key, value in sorted(report.items()):
@@ -333,6 +448,7 @@ def render(report):
     print("POS DIRECT PARITY: SALES_VOIDS_REGISTER_CLOSES_AND_NEGATIVE_ROOM_CHARGES=NOT_COMPARABLE")
     print("POS DIRECT PARITY: REVIEW_RECEIPT_DOES_NOT_MEAN_ACCOUNTING_POSTED=YES")
     print("POS DIRECT PARITY: PAYMENT_BANK_RECONCILIATION=NOT_TESTED")
+    print("POS DIRECT PARITY: REGISTER_COUNT_RECEIPT_IS_NOT_APPROVED_CASH_RECONCILIATION=YES")
     print("POS DIRECT PARITY: ACCOUNTING_REVIEW_INBOX_IS_NOT_GENERIC_POS_RECEIVER=YES")
 
 
@@ -341,10 +457,15 @@ def main():
         pos = read_pg(os.environ.get("POS_AUDIT_DATABASE_URL"),
                       {"events": POS_SQL, "routing": ROUTING_SQL})
         accounting = read_pg(os.environ.get("ACCOUNTING_AUDIT_DATABASE_URL"),
-                             {**RECEIPT_QUERIES, "review": REVIEW_SQL})
+                             {**RECEIPT_QUERIES, "review": REVIEW_SQL,
+                              "register": REGISTER_RECON_SQL})
         reviews = accounting.pop("review")
-        render(compare(pos["events"], accounting, review_rows=reviews,
-                       routing=configured_routes(pos["routing"])))
+        registers = accounting.pop("register")
+        result = compare(pos["events"], accounting, review_rows=reviews,
+                         routing=configured_routes(pos["routing"]))
+        result.update(compare_sessions(pos["events"], registers, reviews,
+                                       routing_rows=pos["routing"]))
+        render(result)
         print("POS DIRECT PARITY: EXECUTION PASS")
         return 0
     except Exception as exc:
