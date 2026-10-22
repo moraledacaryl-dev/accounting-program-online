@@ -1,4 +1,4 @@
-name: One-time Inventory Procurement Location Scope Certified Release
+name: One-time Inventory Procurement and PO Workspace Scope Certified Release
 
 # Temporary credential bridge: both applications share the authorized server.
 # This workflow runs only when this file is added/changed on Accounting main.
@@ -27,7 +27,7 @@ jobs:
         run: |
           set -euo pipefail
           REPO=moraledacaryl-dev/inventory-procurement
-          RELEASE_SHA=2cdfdb18f4a71dbbe69be558c9b918085b36918c
+          RELEASE_SHA=6bfb34f768f8b72708ea1f453fa8bc61ec19b133
           main_sha="$(gh api "repos/$REPO/commits/main" --jq .sha)"
           [[ "$main_sha" == "$RELEASE_SHA" ]] || {
             echo "Inventory main changed; refusing the stale one-time deployment." >&2
@@ -59,7 +59,7 @@ jobs:
             set -euo pipefail
             export PATH="/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin"
             ROOT=/opt/inventory-procurement-online
-            RELEASE_SHA=2cdfdb18f4a71dbbe69be558c9b918085b36918c
+            RELEASE_SHA=6bfb34f768f8b72708ea1f453fa8bc61ec19b133
             test -d "$ROOT/.git"
             git -C "$ROOT" fetch --no-tags origin main
             temp_script="/tmp/inventory-release-$RELEASE_SHA-$$.sh"
