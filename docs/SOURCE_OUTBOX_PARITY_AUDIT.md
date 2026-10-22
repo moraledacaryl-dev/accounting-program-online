@@ -297,3 +297,29 @@ a posted journal; it does not replay or accept financial events. Only
 counts and fixed route classes appear in CI logs. Sales, voids, register
 reconciliations and negative room-charge reversals still have separate
 destination contracts and remain outside one-to-one direct cash matching.
+
+
+## POS register-session close reconciliation receipt proof
+
+A separate, read-only step in the existing POS production parity audit now
+compares `session.closed` outbox events against `cash_reconciliations` created
+by **Dedicated POS**. The exact three-part direct business key is
+(`financial_account_id`, `reconciliation_date`, `shift_name`) from the
+POS `register_accounting_financial_account_id`, `business_date`, and
+`session_code`. If POS is configured for the compatibility Review Inbox,
+the alternate identity is `pos:register_reconciliation:<session_code>`.
+
+The report distinguishes directly created **counted** reconciliations,
+retained review events awaiting human acceptance, unobserved receipts,
+duplicate business keys, different target statuses, and an omitted register
+account/date/shift mapping. The path classification is from a fixed
+allowlist; configured endpoints, register names, cash amounts and
+denomination notes are never printed.
+
+**Counting the drawer is not closing cash reconciliation.** A matching
+`counted` record proves only that the receiving application retained a
+register count; it does not prove physical cash custody, approved variance,
+actual bank deposit, a valid GL journal, or a locked shift close.
+Outbox scans, Review Inbox and direct reconciliation tables are not an
+atomic cross-system snapshot. Never auto-accept or create a bank
+transaction based on this count-only report.
