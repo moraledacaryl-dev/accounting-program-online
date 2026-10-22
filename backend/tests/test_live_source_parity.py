@@ -51,6 +51,18 @@ def test_real_source_id_mapping_and_no_false_equation_between_delivery_and_posti
     assert "CROSS_DATABASE_ATOMIC_SNAPSHOT=NO" in output
 
 
+def test_zero_inventory_and_staff_events_are_explicit_not_missing_from_report(capsys):
+    report = audit.compare_live_rows([], [], [])
+    for name in ("inventory", "staff"):
+        assert report[name]["source_financial_events"] == 0
+        assert report[name]["accounting_received"] == 0
+        assert report[name]["present_in_accounting"] == 0
+    audit.render(report)
+    output = capsys.readouterr().out
+    assert "inventory.source_financial_events=0" in output
+    assert "staff.source_financial_events=0" in output
+
+
 def test_delivered_without_accounting_record_requires_review_not_automatic_replay():
     report = audit.compare_live_rows([], [("inv-only", "completed")],
                                      [staff_row("staff-only", status="Completed")])
