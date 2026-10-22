@@ -1,0 +1,104 @@
+# Read-only producer outbox parity audit
+
+This offline command compares **explicitly exported, sanitized producer outbox
+identities** with **Accounting Integration Review intake identities**. It does
+not connect to live databases, use tokens, import financial statements, post a
+journal, retry events, or update the Accounting application.
+
+```bash
+cd backend
+python3 scripts/audit_source_outbox_parity.py --snapshot /path/to/sanitized-snapshot.json
+```
+
+The source export is a reviewer-controlled, **point-in-time** and **same time
+window** snapshot. Export only the permitted, minimal ID/status/event-type
+columns; never include employee data, guest names, amounts, bank details,
+payload JSON, tokens or personally identifiable information. Run it locally
+or in a protected environment. The output contains only aggregate counts
+and truncated SHA-256 event fingerprints, not raw event IDs.
+
+## Input contract
+
+```json
+{
+  "schema_version": 1,
+  "producers": {
+    "inventory": {
+      "complete_for_window": false,
+      "events": [
+        {"id": "example-inventory-uuid", "destination_system": "accounting",
+         "status": "completed"}
+      ]
+    },
+    "staff": {
+      "complete_for_window": false,
+      "events": [
+        {"external_id": "payroll-example:Paid", "destination": "accounting",
+         "event_type": "payroll.run.paid", "source_revision": 1,
+         "status": "Completed"}
+      ]
+    },
+    "pos": {
+      "complete_for_window": false,
+      "events": [
+        {"event_type": "payment.collected", "status": "synced"}
+      ]
+    }
+  },
+  "accounting_review": [
+    {"source_app": "inventory", "source_event_id": "example-inventory-uuid",
+     "source_revision": 1},
+    {"source_app": "staff", "source_event_id": "payroll-example:Paid",
+     "source_revision": 1}
+  ]
+}
+```
+
+A source may be omitted if its data is not available. Set
+`complete_for_window` to `true` **only** when the export has no pagination
+cutoff, no excluded historical records, and all matching Accounting Review
+rows are restricted to precisely that same window. Otherwise use `false`.
+Use a frozen snapshot from both sides to avoid racing newly delivered events.
+The tool does not infer or verify completeness on its own.
+
+## Identity contracts confirmed from repository implementations
+
+| Producer | Scoped outbox | Accounting review source identity | Sent/delivered marker |
+| --- | --- | --- | --- |
+| Inventory Procurement | `destination_system=accounting` | `source_app=inventory`, `source_event_id=IntegrationEvent.id`, revision 1 | `completed` means intake delivered, **not** posted journal |
+| Staff / Payroll | `destination=accounting` and financial event types | `source_app=staff`, `source_event_id=external_id`, source revision supplied/default 1 | `Completed` means delivered, **not** payroll cash paid in Accounting |
+| POS Cloud | Legacy sync outbox `synced` | **Not generally Integration Review**: distinct cashflow, transfer, POS sale, room-charge and reconciliation endpoints | `synced` alone does not prove journal linkage or bank settlement |
+
+Staff `employee.sync` is intentionally excluded. It uses a separate
+employee-identity endpoint, not the financial Review Inbox. POS must not be
+compared by assuming its outbox row ID is an Accounting
+`source_event_id`: this would fabricate missing or duplicate reviews.
+
+The tool checks matching source IDs and revisions, duplicate identities,
+source-completed records without retained Review Inbox receipt, uncompleted
+source records already received, and Accounting-only identities **only when**
+the producer export is declared complete.
+
+## Interpreting outcomes
+
+- `present_in_accounting` means the source identity matches an Accounting
+  *review item*, **not** that the event was accepted or posted.
+- `source_completed_without_accounting_receipt` indicates a review
+  discrepancy requiring source/receiver investigation; it does not alone
+  prove lost delivery or an accounting omission.
+- `source_pending_without_receipt` describes the producer's backlog, not
+  automatically a breach.
+- `receipt_absent_from_complete_source_window` is only valid when
+  `complete_for_window=true`. With partial snapshots this is **unknown**.
+- `legacy_direct_pos_not_review_comparable` is **not** a healthy count.
+  POS requires separate endpoint-specific comparison against transaction,
+  transfer, receivable, sale and reconciliation external IDs.
+- `fully_certified=false` and `live_connectivity_checked=false` always
+  remain explicit, irrespective of whether zero findings are returned.
+
+This is a preparatory source-to-Accounting parity tool, not a certified live
+end-to-end producer-delivery audit. Before closing Group 3, obtain actual
+source outbox snapshots or authenticated read-only APIs and independently
+check source acknowledgements, Accounting record links, reversals, journals,
+financial accounts and cash/bank/GCash settlement. Do not automatically
+replay any event based only on this report.
