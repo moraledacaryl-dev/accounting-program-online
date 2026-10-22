@@ -5,7 +5,7 @@ from datetime import datetime, timezone
 from types import SimpleNamespace
 
 from sqlalchemy import func
-from sqlalchemy.orm import Session, selectinload
+from sqlalchemy.orm import Session, aliased, selectinload
 
 from app.models.entities import FinancialAccount, IntegrationReviewItem, JournalEntry, JournalLine, Payable, Receivable
 from app.schemas.cashflow import MoneyTransactionCreate, ReceivableCreate
@@ -256,8 +256,13 @@ def _staff_payroll_superseded_paid_ids(rows: list[IntegrationReviewItem]) -> set
     }
 
 
-def list_review_items(db: Session, *, status=None, source_app=None, financial_effect=None, q=None, limit=200):
-    query = db.query(IntegrationReviewItem).options(selectinload(IntegrationReviewItem.proposed_account))
+def _visible_review_query(db: Session, *, status=None, source_app=None, financial_effect=None, q=None):
+    """Apply source filters and Staff lifecycle visibility *before* pagination.
+
+    A query-level exclusion prevents hidden Approved / superseded Paid rows
+    from consuming page slots or corrupting the reported filtered total.
+    """
+    query = db.query(IntegrationReviewItem)
     if status:
         query = query.filter(IntegrationReviewItem.status == status)
     if source_app:
@@ -271,28 +276,79 @@ def list_review_items(db: Session, *, status=None, source_app=None, financial_ef
             | IntegrationReviewItem.source_entity_id.ilike(like)
             | IntegrationReviewItem.payload_json.ilike(like)
         )
-    rows = query.order_by(IntegrationReviewItem.id.desc()).limit(limit).all()
-    staff_paid_rows = db.query(IntegrationReviewItem).filter(
+
+    paid = aliased(IntegrationReviewItem)
+    partnered_approved = (
+        (IntegrationReviewItem.source_app == 'staff')
+        & IntegrationReviewItem.source_event_id.endswith(':Approved')
+        & db.query(paid.id).filter(
+            paid.source_app == 'staff',
+            paid.source_entity_id == IntegrationReviewItem.source_entity_id,
+            paid.source_event_id.endswith(':Paid'),
+        ).exists()
+    )
+    # Revision lineage is carried in the Staff payload, not a standalone column.
+    # Look up only Paid events once; use their source entity IDs to exclude old
+    # Paid items while preserving them in the underlying immutable history.
+    paid_rows = db.query(IntegrationReviewItem).filter(
         IntegrationReviewItem.source_app == 'staff',
         IntegrationReviewItem.source_event_id.endswith(':Paid'),
     ).all()
-    superseded_paid_ids = _staff_payroll_superseded_paid_ids(staff_paid_rows)
-    # Staff sends both Approved (liability) and Paid (settlement) lifecycle
-    # events. Once Paid exists, present the run as one review workflow instead
-    # of two apparently duplicated rows. Paid revisions also supersede their
-    # original Paid run; keep the original row for audit but hide it from the
-    # actionable queue so one payroll period cannot look like two cash-outs.
-    return [
-        _serialize(row)
-        for row in rows
-        if not _staff_payroll_approval_has_paid_partner(db, row)
-        and not (
-            row.source_app == 'staff'
-            and str(row.source_event_id or '').endswith(':Paid')
-            and str(row.source_entity_id or '') in superseded_paid_ids
-        )
-    ]
+    superseded = _staff_payroll_superseded_paid_ids(paid_rows)
+    query = query.filter(~partnered_approved)
+    if superseded:
+        query = query.filter(~(
+            (IntegrationReviewItem.source_app == 'staff')
+            & IntegrationReviewItem.source_event_id.endswith(':Paid')
+            & IntegrationReviewItem.source_entity_id.in_(superseded)
+        ))
+    return query
 
+
+def paginated_review_items(
+    db: Session, *, status=None, source_app=None, financial_effect=None,
+    q=None, page: int = 1, page_size: int = 25,
+):
+    """Page actual visible rows in stable descending ID order; read only."""
+    if page < 1 or page_size < 1 or page_size > 100:
+        raise ValueError('Invalid page or page_size.')
+    base = _visible_review_query(
+        db, status=status, source_app=source_app,
+        financial_effect=financial_effect, q=q,
+    )
+    total = base.count()
+    rows = (
+        base.options(selectinload(IntegrationReviewItem.proposed_account))
+        .order_by(IntegrationReviewItem.id.desc())
+        .offset((page - 1) * page_size)
+        .limit(page_size)
+        .all()
+    )
+    return {
+        'items': [_serialize(row) for row in rows],
+        'page': page,
+        'page_size': page_size,
+        'total': total,
+        'total_pages': (total + page_size - 1) // page_size,
+        'has_previous': page > 1 and total > 0,
+        'has_next': page * page_size < total,
+        'ordering': 'newest_first',
+    }
+
+
+def list_review_items(db: Session, *, status=None, source_app=None, financial_effect=None, q=None, limit=200):
+    """Legacy list response retained for API consumers, with correct visibility."""
+    base = _visible_review_query(
+        db, status=status, source_app=source_app,
+        financial_effect=financial_effect, q=q,
+    )
+    rows = (
+        base.options(selectinload(IntegrationReviewItem.proposed_account))
+        .order_by(IntegrationReviewItem.id.desc())
+        .limit(limit)
+        .all()
+    )
+    return [_serialize(row) for row in rows]
 
 def summary(db: Session):
     rows = db.query(IntegrationReviewItem).all()
