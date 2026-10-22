@@ -83,6 +83,57 @@ AUDIT_QUERIES = {
                     THEN 1 ELSE 0 END),0) AS negative_posted_amounts
         FROM money_transactions
     """,
+    "integration_intake": """
+        SELECT count(*) AS retained_events,
+               coalesce(sum(CASE WHEN review.source_app = 'inventory' THEN 1 ELSE 0 END),0) AS inventory_events,
+               coalesce(sum(CASE WHEN review.source_app = 'staff' THEN 1 ELSE 0 END),0) AS staff_events,
+               coalesce(sum(CASE WHEN review.source_app = 'pos' THEN 1 ELSE 0 END),0) AS pos_review_events,
+               coalesce(sum(CASE WHEN review.status = 'ready_for_review' THEN 1 ELSE 0 END),0) AS waiting_for_review,
+               coalesce(sum(CASE WHEN review.status = 'accepted' THEN 1 ELSE 0 END),0) AS accepted_events,
+               coalesce(sum(CASE WHEN review.status = 'rejected' THEN 1 ELSE 0 END),0) AS rejected_events,
+               coalesce(sum(CASE WHEN review.status = 'validation_failed' THEN 1 ELSE 0 END),0) AS validation_failed_events,
+               coalesce(sum(CASE WHEN review.status = 'accepted'
+                  AND review.financial_effect IN ('cash_in','cash_out','settlement')
+                  AND review.accepted_transaction_id IS NULL
+                  THEN 1 ELSE 0 END),0) AS missing_cash_target_ids,
+               coalesce(sum(CASE WHEN review.status = 'accepted'
+                  AND review.financial_effect = 'journal_only'
+                  AND review.accepted_journal_entry_id IS NULL
+                  THEN 1 ELSE 0 END),0) AS missing_journal_target_ids,
+               coalesce(sum(CASE WHEN review.status = 'accepted'
+                  AND review.financial_effect = 'receivable'
+                  AND review.accepted_receivable_id IS NULL
+                  THEN 1 ELSE 0 END),0) AS missing_receivable_target_ids,
+               coalesce(sum(CASE WHEN review.status = 'accepted'
+                  AND review.financial_effect = 'payable'
+                  AND review.accepted_payable_id IS NULL
+                  THEN 1 ELSE 0 END),0) AS missing_payable_target_ids,
+               coalesce(sum(CASE WHEN review.status = 'accepted'
+                  AND review.accepted_transaction_id IS NOT NULL
+                  AND cash.id IS NULL THEN 1 ELSE 0 END),0) AS dangling_cash_target_ids,
+               coalesce(sum(CASE WHEN review.status = 'accepted'
+                  AND review.accepted_journal_entry_id IS NOT NULL
+                  AND journal.id IS NULL THEN 1 ELSE 0 END),0) AS dangling_journal_target_ids,
+               coalesce(sum(CASE WHEN review.status = 'accepted'
+                  AND review.accepted_receivable_id IS NOT NULL
+                  AND receivable.id IS NULL THEN 1 ELSE 0 END),0) AS dangling_receivable_target_ids,
+               coalesce(sum(CASE WHEN review.status = 'accepted'
+                  AND review.accepted_payable_id IS NOT NULL
+                  AND payable.id IS NULL THEN 1 ELSE 0 END),0) AS dangling_payable_target_ids,
+               coalesce(sum(CASE WHEN review.status = 'accepted'
+                  AND review.financial_effect IN ('cash_in','cash_out','settlement')
+                  AND cash.id IS NOT NULL AND cash.status <> 'posted'
+                  THEN 1 ELSE 0 END),0) AS accepted_cash_target_not_posted,
+               coalesce(sum(CASE WHEN review.status = 'accepted'
+                  AND review.financial_effect = 'journal_only'
+                  AND journal.id IS NOT NULL AND journal.status <> 'posted'
+                  THEN 1 ELSE 0 END),0) AS accepted_journal_target_not_posted
+        FROM integration_review_items AS review
+        LEFT JOIN money_transactions AS cash ON cash.id = review.accepted_transaction_id
+        LEFT JOIN journal_entries AS journal ON journal.id = review.accepted_journal_entry_id
+        LEFT JOIN receivables AS receivable ON receivable.id = review.accepted_receivable_id
+        LEFT JOIN payables AS payable ON payable.id = review.accepted_payable_id
+    """,
     "beds24_links": """
         SELECT count(*) AS duplicate_external_booking_id_groups
         FROM (
@@ -109,6 +160,13 @@ REVIEW_KEYS = {
     "payables": ("balance_discrepancies", "negative_payments"),
     "cash_coverage": ("legacy_posted_without_journal",),
     "beds24_links": ("duplicate_external_booking_id_groups",),
+    "integration_intake": (
+        "missing_cash_target_ids", "missing_journal_target_ids",
+        "missing_receivable_target_ids", "missing_payable_target_ids",
+        "dangling_cash_target_ids", "dangling_journal_target_ids",
+        "dangling_receivable_target_ids", "dangling_payable_target_ids",
+        "accepted_cash_target_not_posted", "accepted_journal_target_not_posted",
+    ),
 }
 
 
@@ -149,6 +207,9 @@ def render(metrics, runtimes_ms):
           ("INTEGRITY_FAILURE" if critical else "REVIEW_REQUIRED" if review else "NO_FINDINGS"))
     print("CERTIFICATION: cash_balance_to_bank_statement=NOT_TESTED")
     print("CERTIFICATION: source_documents_to_postings=NOT_TESTED")
+    print("CERTIFICATION: integration_upstream_producer_completeness=NOT_TESTED")
+    print("CERTIFICATION: integration_pos_direct_sync=NOT_TESTED")
+    print("CERTIFICATION: integration_secondary_journal_and_rounding_proof=NOT_TESTED")
     print("CERTIFICATION: reporting_query_timings_are_single_sample_not_SLA")
     return 2 if critical else 0
 
