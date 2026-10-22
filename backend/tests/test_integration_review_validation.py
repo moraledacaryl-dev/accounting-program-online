@@ -245,3 +245,27 @@ def test_summary_retains_original_visible_counts_and_adds_separate_raw_evidence(
     assert result['delivery_evidence']['sources']
     assert result['delivery_evidence']['scope'] == 'accounting_retained_intake_only'
     assert db.commit.call_count == 0
+
+
+def test_delivery_evidence_pending_age_uses_only_actual_receipt_timestamps():
+    from datetime import datetime, timezone, timedelta
+    now = datetime(2026, 10, 22, 8, 0, tzinfo=timezone.utc)
+    def intake(source, event_id, status, created):
+        return SimpleNamespace(source_app=source, source_event_id=event_id,
+                               source_revision=1, status=status, created_at=created,
+                               reviewed_at=None)
+    result = delivery_evidence([
+        intake('pos', 'stale', 'ready_for_review', now - timedelta(days=8)),
+        intake('pos', 'recent', 'validation_failed', now - timedelta(hours=2)),
+        intake('pos', 'missing', 'ready_for_review', None),
+        intake('pos', 'bad', 'validation_failed', 'not-a-timestamp'),
+        intake('pos', 'closed', 'accepted', now - timedelta(days=90)),
+        intake('staff', 'older', 'ready_for_review', (now - timedelta(days=9)).isoformat()),
+    ], now=now)
+    sources = {group['source_app']: group for group in result['sources']}
+    assert sources['pos']['pending_over_7d'] == 1
+    assert sources['pos']['pending_age_unknown'] == 2
+    assert sources['pos']['oldest_pending_at'].startswith('2026-10-14')
+    assert sources['staff']['pending_over_7d'] == 1
+    assert sources['inventory']['oldest_pending_at'] is None
+    assert sources['inventory']['pending_over_7d'] == 0

@@ -1,7 +1,7 @@
 from __future__ import annotations
 
 import json
-from datetime import datetime, timezone
+from datetime import datetime, timedelta, timezone
 from types import SimpleNamespace
 
 from sqlalchemy import func
@@ -365,12 +365,25 @@ def _evidence_timestamp(value):
     return str(value)
 
 
-def delivery_evidence(rows) -> dict:
+def _review_age_timestamp(value):
+    """Return a comparable UTC instant, or None when source time is unusable."""
+    if value is None or value == '':
+        return None
+    try:
+        instant = value if isinstance(value, datetime) else datetime.fromisoformat(str(value).replace('Z', '+00:00'))
+        return (instant if instant.tzinfo else instant.replace(tzinfo=timezone.utc)).astimezone(timezone.utc)
+    except (TypeError, ValueError, OverflowError):
+        return None
+
+
+def delivery_evidence(rows, *, now=None) -> dict:
     """Read-only raw intake evidence; includes hidden Staff revision history.
 
     No source transport health, delivery-attempt or sender-side count is inferred.
     The records remain distinct from the user-facing filtered review queue.
     """
+    now = now or datetime.now(timezone.utc)
+    cutoff = now - timedelta(days=7)
     sources = {name: {
         'source_app': name, 'received_records': 0, 'distinct_source_events': 0,
         'multi_revision_events': 0, 'last_received_at': None,
@@ -380,6 +393,8 @@ def delivery_evidence(rows) -> dict:
         'sender_connectivity': 'unverified',
         'unreceived_events': None,
         'duplicate_delivery_attempts': None,
+        'pending_over_7d': 0, 'pending_age_unknown': 0,
+        'oldest_pending_at': None,
     } for name in EXPECTED_INTEGRATION_SOURCES}
     revisions = {}
     for row in rows:
@@ -392,11 +407,24 @@ def delivery_evidence(rows) -> dict:
             'accepted_without_direct_link': 0,
             'sender_connectivity': 'unverified',
             'unreceived_events': None, 'duplicate_delivery_attempts': None,
+            'pending_over_7d': 0, 'pending_age_unknown': 0,
+            'oldest_pending_at': None,
         })
         group['received_records'] += 1
         status = str(getattr(row, 'status', None) or '')
         if status in ('validation_failed', 'ready_for_review', 'rejected', 'accepted'):
             group[status] += 1
+        if status in ('validation_failed', 'ready_for_review'):
+            instant = _review_age_timestamp(getattr(row, 'created_at', None))
+            if instant is None:
+                group['pending_age_unknown'] += 1
+            else:
+                if instant < cutoff:
+                    group['pending_over_7d'] += 1
+                oldest = group['oldest_pending_at']
+                when = instant.isoformat()
+                if oldest is None or when < oldest:
+                    group['oldest_pending_at'] = when
         received = _evidence_timestamp(getattr(row, 'created_at', None))
         reviewed = _evidence_timestamp(getattr(row, 'reviewed_at', None))
         if received and (not group['last_received_at'] or received > group['last_received_at']):
@@ -428,10 +456,20 @@ def delivery_evidence(rows) -> dict:
 def summary(db: Session):
     rows = db.query(IntegrationReviewItem).all()
     superseded_paid_ids = _staff_payroll_superseded_paid_ids(rows)
+    # Resolve Approved/Paid partners from one snapshot, avoiding per-row SQL.
+    paid_staff_entity_ids = {
+        row.source_entity_id for row in rows
+        if row.source_app == 'staff'
+        and str(row.source_event_id or '').endswith(':Paid')
+    }
     visible = [
         row
         for row in rows
-        if not _staff_payroll_approval_has_paid_partner(db, row)
+        if not (
+            row.source_app == 'staff'
+            and str(row.source_event_id or '').endswith(':Approved')
+            and row.source_entity_id in paid_staff_entity_ids
+        )
         and not (
             row.source_app == 'staff'
             and str(row.source_event_id or '').endswith(':Paid')
