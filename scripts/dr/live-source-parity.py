@@ -67,11 +67,15 @@ def read_staff_sqlite(db_path):
     with sqlite3.connect(Path(db_path).resolve().as_uri() + "?mode=ro", uri=True) as db:
         db.execute("PRAGMA query_only=ON")
         db.execute("BEGIN")
+        event_types = tuple(sorted(STAFF_FINANCIAL_TYPES))
+        placeholders = ",".join("?" for _ in event_types)
         return db.execute(
             "SELECT external_id, status, event_type, payload_json "
             "FROM integration_outbox "
             "WHERE destination='accounting' "
-            "AND external_source='hidden_oasis_staff_payroll'"
+            "AND external_source='hidden_oasis_staff_payroll' "
+            f"AND event_type IN ({placeholders})",
+            event_types,
         ).fetchall()
 
 
