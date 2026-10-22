@@ -36,6 +36,8 @@ def connection():
         db.exec_driver_sql("""CREATE TABLE money_transactions (
             id INTEGER PRIMARY KEY, status TEXT, amount NUMERIC,
             journal_entry_id INTEGER)""")
+        db.exec_driver_sql("""CREATE TABLE financial_accounts (
+            id INTEGER PRIMARY KEY, account_type TEXT, is_active BOOLEAN)""")
         db.exec_driver_sql("""CREATE TABLE integration_review_items (
             id INTEGER PRIMARY KEY, source_app TEXT, source_event_id TEXT,
             status TEXT, financial_effect TEXT,
@@ -250,3 +252,29 @@ def test_zero_pending_review_counts_explicit_without_auto_acceptance(connection,
         assert row[key] == 0
     assert audit.render(metrics, runtimes) == 0
     assert 'integration_intake.pos_waiting_for_review=0' in capsys.readouterr().out
+
+
+def test_pending_cash_account_mapping_flags_inactive_missing_and_nonmonetary_without_assigning(connection, capsys):
+    connection.exec_driver_sql("""INSERT INTO financial_accounts VALUES
+        (1,'bank',1), (2,'ewallet',0), (3,'expense',1)""")
+    connection.exec_driver_sql("""INSERT INTO integration_review_items
+        (id,source_app,source_event_id,status,financial_effect,proposed_account_id)
+        VALUES
+        (301,'staff','SECRET-VALID','ready_for_review','cash_out',1),
+        (302,'staff','SECRET-INACTIVE','ready_for_review','cash_out',2),
+        (303,'pos','SECRET-NONMONEY','ready_for_review','cash_in',3),
+        (304,'pos','SECRET-DANGLING','ready_for_review','settlement',404),
+        (305,'pos','SECRET-ACCEPTED','accepted','cash_in',2)""")
+    metrics, durations = audit.collect(connection)
+    pending = metrics['integration_intake']
+    assert pending['pending_cash_without_proposed_account'] == 0
+    assert pending['pending_cash_proposed_account_missing'] == 1
+    assert pending['pending_cash_proposed_account_inactive'] == 1
+    assert pending['pending_cash_proposed_account_nonmonetary'] == 1
+    assert ('integration_intake', 'pending_cash_proposed_account_missing', 1) in audit.assessment(metrics)[1]
+    assert audit.render(metrics, durations) == 0
+    output = capsys.readouterr().out
+    assert 'status=REVIEW_REQUIRED' in output
+    assert 'proposed_account_presence_does_not_prove_payment_method_or_approval=YES' in output
+    assert 'SECRET-' not in output
+    assert connection.exec_driver_sql("SELECT count(*) FROM integration_review_items WHERE status='ready_for_review'").scalar_one() == 4
