@@ -1,0 +1,63 @@
+name: Accounting Live Source Parity (Read Only)
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - 'scripts/dr/live-source-parity.py'
+      - '.github/workflows/accounting-live-source-parity.yml'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: accounting-live-source-parity
+  cancel-in-progress: false
+
+jobs:
+  verify-source-intake:
+    runs-on: ubuntu-latest
+    timeout-minutes: 16
+    steps:
+      - name: Compare protected source-to-Accounting event identities, output counts only
+        uses: appleboy/ssh-action@029f5b4aeeeb58fdfe1410a5d17f967dacf36262
+        with:
+          host: ${{ secrets.SERVER_HOST }}
+          username: ${{ secrets.SERVER_USER }}
+          key: ${{ secrets.SERVER_SSH_KEY }}
+          port: ${{ secrets.SERVER_PORT }}
+          envs: AUDIT_SHA
+          command_timeout: 13m
+          script: |
+            set -euo pipefail
+            umask 077
+            set +x
+            export PATH="/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin"
+            SOURCE=/opt/accounting-program-online
+            CURRENT=/opt/accounting-current
+            test -L "$CURRENT"
+            test -x "$CURRENT/backend/.venv/bin/python"
+            test -f /etc/hiddenoasis/accounting-backend.env
+            test -f /etc/hiddenoasis/inventory-backend.env
+            test -f /etc/hiddenoasis/staff-payroll.env
+            git -C "$SOURCE" fetch --no-tags origin main
+            git -C "$SOURCE" cat-file -e "$AUDIT_SHA^{commit}"
+            git -C "$SOURCE" merge-base --is-ancestor "$AUDIT_SHA" origin/main
+            audit_file="$(mktemp /tmp/accounting-live-source-parity.XXXXXXXX.py)"
+            trap 'rm -f "$audit_file"' EXIT
+            git -C "$SOURCE" show "$AUDIT_SHA:scripts/dr/live-source-parity.py" > "$audit_file"
+            test -s "$audit_file"
+            # Never print or persist environment values; each app's
+            # database credentials stay solely on the protected server.
+            set -a
+            . /etc/hiddenoasis/accounting-backend.env
+            ACCOUNTING_AUDIT_DATABASE_URL="$DATABASE_URL"
+            . /etc/hiddenoasis/inventory-backend.env
+            INVENTORY_AUDIT_DATABASE_URL="$DATABASE_URL"
+            . /etc/hiddenoasis/staff-payroll.env
+            set +a
+            export ACCOUNTING_AUDIT_DATABASE_URL INVENTORY_AUDIT_DATABASE_URL
+            "$CURRENT/backend/.venv/bin/python" "$audit_file"
+        env:
+          AUDIT_SHA: ${{ github.sha }}
