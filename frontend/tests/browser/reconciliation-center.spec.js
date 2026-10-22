@@ -63,7 +63,7 @@ test('reconciliation center displays grounded workstreams and direct links on de
   await expect(evidence.getByText('Source intake evidence')).toBeVisible();
   await expect(evidence.getByText('8 retained intake records')).toBeVisible();
   await expect(evidence.getByText('Pending over 7 days: 2 · Age unavailable: 1')).toBeVisible();
-  await expect(evidence.getByText('Not observed')).toBeVisible();
+  await expect(evidence.getByText('Last received: Not observed')).toBeVisible();
   await expect(evidence.getByText('Unreceived events: unknown.', { exact: false }).first()).toBeVisible();
   await expect(journal.getByRole('link', { name: 'Open Journal Review' })).toHaveAttribute('href', '/reports?view=journal-review');
   await expect(page.evaluate(() => document.documentElement.scrollWidth <= document.documentElement.clientWidth + 1)).resolves.toBe(true);
