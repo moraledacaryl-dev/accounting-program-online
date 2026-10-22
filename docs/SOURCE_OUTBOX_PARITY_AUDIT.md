@@ -199,3 +199,21 @@ credential handling remains on the server. If production is not co-hosted
 with the three source databases, this workflow correctly fails and requires
 a separately authorized, protected multi-host audit.
 
+
+
+## Inventory domain activity, separate from outbox delivery
+
+A later version of the live read-only source-parity probe also prints the
+Inventory PostgreSQL counts of purchase orders, approved purchase orders,
+goods receipts, purchase returns, and posted stock documents. It reports
+no supplier, item, stock, purchase or document IDs or amounts.
+
+These counts explain whether an **empty Inventory Accounting outbox** was
+observed alongside any current domain activity. A purchase order or posted
+stock document does not automatically imply a financial event: some
+operations are nonfinancial, some status changes are historical, and source
+rules can differ by workflow/release. An apparent domain-to-outbox gap is
+a **manual engineering investigation**, not grounds to generate a missing
+payable, copy a journal, or backfill source events. The domain scan and
+outbox scan also have separate database snapshots and are not atomic.
+
