@@ -20,6 +20,7 @@ from app.services.integration_review_service import (
 )
 from app.services.inventory_integration_adapter import normalize_inventory_review_payload
 from app.services.inventory_journal_proof import inventory_journal_proof
+from app.services.integration_linkage_audit_service import accepted_linkage_audit
 
 router = APIRouter()
 
@@ -124,6 +125,17 @@ def get_summary(
     user=Depends(require_any_permissions('integrations.view', 'approvals.view')),
 ):
     return summary(db)
+
+
+@router.get('/accepted-linkage-audit')
+def get_accepted_linkage_audit(
+    source_app: str | None = Query(default=None, max_length=80),
+    finding_limit: int = Query(default=40, ge=0, le=100),
+    db: Session = Depends(get_db),
+    user=Depends(require_any_permissions('integrations.view', 'approvals.view')),
+):
+    """Read-only accepted Accounting record linkage diagnostics; no source polling."""
+    return accepted_linkage_audit(db, source_app=source_app, finding_limit=finding_limit)
 
 
 @router.get('/{item_id}')
