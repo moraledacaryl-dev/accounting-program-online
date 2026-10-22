@@ -81,3 +81,37 @@ only to Accounting-received records, not upstream sender health.
 The summary builds Staff Approved/Paid visibility from one retained snapshot
 rather than querying per approved payroll run. Existing visible Review Inbox
 totals and immutable Staff revision history are preserved.
+
+
+## Accepted event local record linkage audit
+
+The **Accepted Accounting record links** section is a separate, permission-gated,
+read-only `GET /integration-review/accepted-linkage-audit` check. It interrogates
+the actual Accounting target rows for accepted review events rather than treating
+an accepted status as proof that a journal or money transaction exists. It
+checks:
+
+- Cash In/Out and settlement: linked MoneyTransaction exists, has the expected
+  direction and source amount, and is posted (unless explicitly reversed).
+- Journal-only: linked JournalEntry exists and is posted with positive,
+  balanced debit and credit totals (or is explicitly reversed).
+- Receivable and payable: linked local target record exists; this does **not**
+  establish its external settlement, account classification or correct aging.
+- Inventory payable adjustment: recorded adjustment / supplier-credit IDs
+  resolve to existing local rows. These are not assumed to be direct payable
+  foreign keys on the original IntegrationReviewItem.
+- Folio charges / reference-only events: no direct financial link is expected;
+  they do not count as missing journal exceptions.
+- Reversed targets are counted separately rather than automatically labelled
+  erroneous; an auditor must inspect their reversal trail and original entries.
+
+The result includes a bounded set of exception identities (no raw payroll
+payloads). Source-app permissions are enforced by the same Integration Review
+authorization as the inbox. Missing/unavailable checks must never display
+zero exceptions. All target lookups are batched and read-only; no journal,
+transaction, booking, or balance is automatically changed.
+
+**Limitations:** Local record existence and status checks do not prove upstream
+producer outbox completeness, banking settlement, independent financial
+reconciliation, balances, or tax compliance. Review the original documents and
+reversal history before correcting any financial posting.
