@@ -163,3 +163,39 @@ must remain an investigation lead, not an automatic lost-delivery assertion.
 Proof of a common cutoff, retry finality, and posting evidence is separate.
 To preserve compatibility, the original `--snapshot` command remains
 available for manually prepared, separately certified snapshots.
+
+
+## Live protected source-to-receiver aggregate probe
+
+The optional `Accounting Live Source Parity (Read Only)` workflow executes
+`scripts/dr/live-source-parity.py` **on the protected Accounting server**.
+It uses established environment files for Accounting PostgreSQL, Inventory
+PostgreSQL and Staff SQLite, and never transfers actual source event IDs,
+private payloads, bank details or credentials to GitHub Actions. Only
+integer event counts and fixed-scope caveats appear in its logs.
+
+The script performs three **separate** read-only database scans and compares
+the exact in-memory Inventory event UUIDs and Staff external IDs/revisions
+with retained Accounting Review Inbox keys. It reports:
+- each producer's financial event total, delivered/unacknowledged statuses,
+  missing receipt candidates, already-received but unacknowledged events,
+  duplicate source/receiver keys, and receiver IDs absent from source scans
+- explicit `CROSS_DATABASE_ATOMIC_SNAPSHOT=NO`,
+  `SOURCE_COMPLETED_MEANS_ACCOUNTING_ACCEPTED=NO`, and
+  `BANK_SETTLEMENT_AND_JOURNAL_POSTING=NOT_TESTED`
+
+Because the databases are read at different instants, an apparent missing or
+extra source event requires a later same-cutoff/receipt audit before concluding
+the transport dropped an event. The probe does not distinguish an old deleted
+producer outbox row from a missing one without separately retained source
+history. **Never replay or post an event automatically** based on its results.
+
+It fails closed if either protected source database, configuration or data
+contract cannot be read. A failure is `NOT_CERTIFIED`, not zero events.
+The workflow starts on changes to its own audited script or workflow file;
+its `workflow_dispatch` mode can repeat the read-only check, and it never
+runs the separate restore-rehearsal or journal posting routines. All source
+credential handling remains on the server. If production is not co-hosted
+with the three source databases, this workflow correctly fails and requires
+a separately authorized, protected multi-host audit.
+
