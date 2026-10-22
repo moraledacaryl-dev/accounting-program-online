@@ -85,7 +85,7 @@ def test_historical_coverage_and_overpayment_are_review_only(connection, capsys)
     connection.exec_driver_sql("INSERT INTO record_settlements VALUES (4, 10, 70)")
     connection.exec_driver_sql("INSERT INTO money_transactions (id,status,amount,journal_entry_id) VALUES (11, 'posted', 7, NULL)")
     connection.exec_driver_sql("INSERT INTO bookings VALUES (12, 'beds24', 'B1')")
-    connection.exec_driver_sql("INSERT INTO receivables VALUES (11, 100, 30, 60)")
+    connection.exec_driver_sql("INSERT INTO receivables (id,gross_amount,amount_collected,balance_due) VALUES (11, 100, 30, 60)")
     metrics, runtime = audit.collect(connection)
     critical, review = audit.assessment(metrics)
     assert not critical
