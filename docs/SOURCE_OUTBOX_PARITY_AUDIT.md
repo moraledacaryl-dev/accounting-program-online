@@ -266,3 +266,34 @@ re-run by authorized manual dispatch, and never calls POS's sending worker
 or an Accounting posting endpoint. It fails closed as `NOT_CERTIFIED`
 if credentials, tables or data cannot be read. Do not replay or post based
 on its aggregate findings.
+
+
+## Distinguish directly posted POS cashflow from the Review Inbox route
+
+In the initial [POS direct-ERP audit #39782305322](https://github.com/moraledacaryl-dev/accounting-program-online/actions/runs/39782305322),
+two POS cash-movement events were marked `synced`, but there were no
+matching `dedicated_pos_cloud` direct MoneyTransaction rows. The
+Accounting production certification separately showed two POS review
+events; equal counts alone do not establish their identity.
+
+The enhanced audit classifies the actual POS `system_settings.accounting_sync`
+**cashflow, transfer and room-charge endpoint type** using an allowlist. It
+never outputs configured URLs, tokens or headers. It also reads the
+Accounting `integration_review_items` **source_app=pos** records and checks
+the exact `pos:<kind>:<external_id>` keys produced by the Accounting
+compatibility routes, including `pos:cashflow_transaction:<external_id>`.
+Source revisions and status are separate approval questions.
+
+An event can therefore be:
+- received as an exact matching POS Review Inbox event but **not yet accepted
+  or posted**;
+- directly recorded in Accounting's cashflow or transfer table;
+- recorded in both paths (requires duplicate/ownership review);
+- not observed in either path (investigate source configuration, transport,
+  timing, or alternate historical routes before claiming lost revenue).
+
+This audit never equates **synced** with **accepted**, or **accepted** with
+a posted journal; it does not replay or accept financial events. Only
+counts and fixed route classes appear in CI logs. Sales, voids, register
+reconciliations and negative room-charge reversals still have separate
+destination contracts and remain outside one-to-one direct cash matching.
