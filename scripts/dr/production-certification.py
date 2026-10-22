@@ -111,6 +111,20 @@ AUDIT_QUERIES = {
                    AND review.proposed_account_id IS NULL
                    THEN 1 ELSE 0 END),0) AS pending_cash_without_proposed_account,
                coalesce(sum(CASE WHEN review.status = 'ready_for_review'
+                   AND review.financial_effect IN ('cash_in','cash_out','settlement')
+                   AND review.proposed_account_id IS NOT NULL AND proposed_account.id IS NULL
+                   THEN 1 ELSE 0 END),0) AS pending_cash_proposed_account_missing,
+               coalesce(sum(CASE WHEN review.status = 'ready_for_review'
+                   AND review.financial_effect IN ('cash_in','cash_out','settlement')
+                   AND proposed_account.id IS NOT NULL AND proposed_account.is_active = false
+                   THEN 1 ELSE 0 END),0) AS pending_cash_proposed_account_inactive,
+               coalesce(sum(CASE WHEN review.status = 'ready_for_review'
+                   AND review.financial_effect IN ('cash_in','cash_out','settlement')
+                   AND proposed_account.id IS NOT NULL
+                   AND (proposed_account.account_type IS NULL OR proposed_account.account_type NOT IN
+                     ('cash_drawer','petty_cash','safe','bank','ewallet'))
+                   THEN 1 ELSE 0 END),0) AS pending_cash_proposed_account_nonmonetary,
+               coalesce(sum(CASE WHEN review.status = 'ready_for_review'
                    AND review.financial_effect = 'journal_only'
                    AND (review.proposed_journal_json IS NULL OR trim(review.proposed_journal_json) = '')
                    THEN 1 ELSE 0 END),0) AS pending_journal_without_proposed_lines,
@@ -154,6 +168,7 @@ AUDIT_QUERIES = {
                   AND journal.id IS NOT NULL AND journal.status <> 'posted'
                   THEN 1 ELSE 0 END),0) AS accepted_journal_target_not_posted
         FROM integration_review_items AS review
+        LEFT JOIN financial_accounts AS proposed_account ON proposed_account.id = review.proposed_account_id
         LEFT JOIN money_transactions AS cash ON cash.id = review.accepted_transaction_id
         LEFT JOIN journal_entries AS journal ON journal.id = review.accepted_journal_entry_id
         LEFT JOIN receivables AS receivable ON receivable.id = review.accepted_receivable_id
@@ -190,6 +205,9 @@ REVIEW_KEYS = {
         "inventory_waiting_for_review",
         "pending_unclassified_effect",
         "pending_cash_without_proposed_account",
+        "pending_cash_proposed_account_missing",
+        "pending_cash_proposed_account_inactive",
+        "pending_cash_proposed_account_nonmonetary",
         "pending_journal_without_proposed_lines",
         "missing_cash_target_ids", "missing_journal_target_ids",
         "missing_receivable_target_ids", "missing_payable_target_ids",
@@ -242,6 +260,7 @@ def render(metrics, runtimes_ms):
     print("CERTIFICATION: integration_secondary_journal_and_rounding_proof=NOT_TESTED")
     print("CERTIFICATION: pending_review_counts_are_not_approved_postings=YES")
     print("CERTIFICATION: proposed_account_absence_requires_review_not_auto_assignment=YES")
+    print("CERTIFICATION: proposed_account_presence_does_not_prove_payment_method_or_approval=YES")
     print("CERTIFICATION: reporting_query_timings_are_single_sample_not_SLA")
     return 2 if critical else 0
 
