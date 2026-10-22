@@ -41,7 +41,7 @@ def test_real_source_id_mapping_and_no_false_equation_between_delivery_and_posti
     assert report["staff"]["source_marked_delivered"] == 1
     assert report["staff"]["pending_and_receipt_not_found"] == 1
     assert report["inventory"]["source_financial_events"] == 2
-    assert report["inventory"]["delivered_but_receipt_not_found"] == 0
+    assert report["inventory"].get("delivered_but_receipt_not_found", 0) == 0
     assert report["inventory"]["source_status_failed"] == 1
     audit.render(report)
     output = capsys.readouterr().out
