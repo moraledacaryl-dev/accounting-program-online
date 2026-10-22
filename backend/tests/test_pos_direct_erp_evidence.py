@@ -152,3 +152,114 @@ def test_sql_and_workflow_use_read_only_credentials_and_no_transport_posting():
     assert "workflow_dispatch:" in wf and "push:" in wf
     assert "pg_restore" not in wf
     assert "deploy-release" not in wf
+
+
+
+def test_review_intake_exact_cash_event_identity_explains_synced_without_direct_posting(capsys):
+    source = [
+        row("cash_movement.created", "synced", {
+            "cash_event_uuid": "drawer-uuid-01",
+            "integration_identity_version": 2,
+        }),
+        row("cash_movement.created", "synced", {
+            "reference_no": "legacy-drawer-no-02",
+            "integration_identity_version": 1,
+        }),
+    ]
+    reviews = [
+        ("pos:cashflow_transaction:cash-movement:drawer-uuid-01", "ready_for_review"),
+        ("pos:cashflow_transaction:legacy-drawer-no-02", "ready_for_review"),
+    ]
+    routing = audit.configured_routes([(json.dumps({
+        "api_token": "SECRET API TOKEN DO NOT OUTPUT",
+        "current_erp_cashflow_path": "/integrations/pos-review/cashflow",
+    }),)])
+    result = audit.compare(
+        source,
+        {"money": [], "transfer": [], "receivable": []},
+        review_rows=reviews, routing=routing,
+    )
+    assert result["synced_source_without_direct_target"] == 2
+    assert result["synced_source_missing_direct_but_review_received"] == 2
+    assert result["synced_source_without_direct_or_review_evidence"] == 0
+    assert result["matching_pos_review_awaiting_acceptance"] == 2
+    assert result["matching_pos_review_accepted"] == 0
+    assert result["route_cashflow_review_inbox"] == 1
+    audit.render(result)
+    output = capsys.readouterr().out
+    assert "SECRET API TOKEN" not in output
+    assert "drawer-uuid-01" not in output
+    assert "legacy-drawer" not in output
+    assert "/integrations/pos-review/cashflow" not in output
+    assert "REVIEW_RECEIPT_DOES_NOT_MEAN_ACCOUNTING_POSTED=YES" in output
+
+
+def test_review_count_alone_is_never_treated_as_exact_match():
+    source = [row("cash_movement.created", "synced", {
+        "cash_event_uuid": "sender-not-received",
+        "integration_identity_version": 2,
+    })]
+    result = audit.compare(
+        source,
+        {"money": [], "transfer": [], "receivable": []},
+        review_rows=[("pos:cashflow_transaction:another-event", "ready_for_review")],
+    )
+    assert result["pos_review_items"] == 1
+    assert result["matching_pos_review_intake"] == 0
+    assert result["synced_source_without_direct_or_review_evidence"] == 1
+    assert result["pos_review_items_not_assessed_under_direct_target_contract"] == 1
+
+
+def test_review_accepted_is_not_equated_to_direct_external_cash_target():
+    source = [row("payment.collected", "synced", {
+        "payment": {"tender_type": "cash", "reference_no": "pos-cash-01"},
+    })]
+    result = audit.compare(
+        source,
+        {"money": [], "transfer": [], "receivable": []},
+        review_rows=[("pos:cashflow_transaction:pos-cash-01", "accepted")],
+    )
+    assert result["matching_pos_review_accepted"] == 1
+    assert result["direct_target_present"] == 0
+    assert result["synced_source_missing_direct_but_review_received"] == 1
+
+
+def test_review_duplicate_and_unknown_status_are_safe_aggregates():
+    source = [row("cash_movement.created", "synced", {
+        "reference_no": "paper-123",
+    })]
+    result = audit.compare(
+        source,
+        {"money": [], "transfer": [], "receivable": []},
+        review_rows=[
+            ("pos:cashflow_transaction:paper-123", "ready_for_review"),
+            ("pos:cashflow_transaction:paper-123", "PRIVATE CUSTOM STATUS"),
+        ],
+    )
+    assert result["duplicate_pos_review_event_identity"] == 1
+    assert result["matching_pos_review_intake"] == 1
+    assert result["pos_review_status_other"] == 1
+
+
+@pytest.mark.parametrize("payload", [
+    '{"api_token": "SHOULD_NOT_BE_LOGGED", "current_erp_cashflow_path": "/integrations/pos-review/cashflow"}',
+    '{}',
+])
+def test_only_allowlisted_route_labels_are_displayed(payload):
+    routes = audit.configured_routes([(payload,)])
+    assert routes["cashflow"] in {"review_inbox", "default_direct"}
+    assert routes["transfer"] == "default_direct"
+    assert routes["room_charge"] == "default_direct"
+
+
+@pytest.mark.parametrize("rows", [[("{broken-json",)], [("[]",)], [
+    ('{"current_erp_cashflow_path": 42}',)
+]])
+def test_invalid_route_evidence_fails_closed(rows):
+    with pytest.raises(ValueError):
+        audit.configured_routes(rows)
+
+
+def test_router_and_review_queries_are_sql_select_only():
+    assert audit.REVIEW_SQL.lstrip().upper().startswith("SELECT")
+    assert audit.ROUTING_SQL.lstrip().upper().startswith("SELECT")
