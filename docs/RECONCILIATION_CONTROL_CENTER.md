@@ -115,3 +115,23 @@ transaction, booking, or balance is automatically changed.
 producer outbox completeness, banking settlement, independent financial
 reconciliation, balances, or tax compliance. Review the original documents and
 reversal history before correcting any financial posting.
+
+## Accepted event multi-target proof
+
+The local accepted-linkage audit also checks additional rows produced by a
+single accepted event. POS Settlement / POS Refund cash events require **both**
+a posted cash transaction and the recorded posted, balanced journal for the
+**same amount**. Other cash events with an explicitly linked journal also
+check that journal. A cash link alone is not complete proof.
+
+Staff `:Paid` payroll reviews can create an exact-net-pay cash-out, a payroll
+payable, and a separate positive rounding-expense cash-out. The audit checks
+the secondary IDs when recorded in the immutable acceptance evidence; it
+does **not** reinterpret the rounding expense as an additional payroll
+liability, nor does it assume every payroll run has rounding. A missing or
+mismatched rounding record is an exception for human investigation.
+
+Reversed secondary journals are reported as reversal history rather than
+automatically classed as a missing original cash posting. The audit remains
+read-only and cannot certify upstream outbox completeness, account
+classifications, or reconciled bank balances.
