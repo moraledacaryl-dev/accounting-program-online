@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import json
+import math
 from typing import Any
 
 from fastapi import APIRouter, Depends, HTTPException
@@ -140,8 +141,20 @@ def room_charge(
     db: Session = Depends(get_db),
     _user: User = Depends(require_pos_integration_user),
 ):
-    gross = float(payload.get('gross_amount') or 0)
-    effect = 'receivable'
+    try:
+        gross = float(payload.get('gross_amount') or 0)
+    except (TypeError, ValueError, OverflowError):
+        raise HTTPException(status_code=422, detail='A finite room-charge amount is required.') from None
+    if not math.isfinite(gross) or gross == 0:
+        raise HTTPException(status_code=422, detail='A finite nonzero room-charge amount is required.')
+    declared_type = str(payload.get('source_type') or '').strip()
+    if gross < 0 and declared_type not in {'', 'pos_room_charge_reversal'}:
+        raise HTTPException(status_code=422, detail='Negative room charges must be typed as reversals.')
+    if gross > 0 and declared_type == 'pos_room_charge_reversal':
+        raise HTTPException(status_code=422, detail='A reversal may not create a positive room receivable.')
+    # Retain negative reversal events for documentary review; do not create
+    # a new positive guest receivable or book an unverified adjustment.
+    effect = 'reference_only' if gross < 0 else 'receivable'
     links = {
         'counterparty_name': payload.get('counterparty_name'),
         'receivable_type': payload.get('receivable_type') or 'guest_balance',
@@ -155,6 +168,8 @@ def room_charge(
         links.update({
             'target_type': 'pos_room_charge_reversal',
             'target_id': str(payload.get('source_id') or _event_id('room_charge', payload)),
+            'reversal_review_only': True,
+            'requires_original_charge_evidence': True,
         })
     return _create_review(
         db,
