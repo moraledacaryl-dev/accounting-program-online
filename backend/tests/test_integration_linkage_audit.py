@@ -148,3 +148,106 @@ def test_many_accepted_rows_use_bounded_sql_batches(db):
     assert result['needs_review'] == 430
     assert len(result['findings']) == 5
     assert result['findings_truncated'] is True
+
+
+
+def test_pos_settlement_requires_both_cash_transaction_and_posted_balanced_journal(db):
+    account = FinancialAccount(name='Cash', code='POS-DOUBLE-LINK', account_type='cash_drawer')
+    db.add(account)
+    db.flush()
+    money = MoneyTransaction(financial_account_id=account.id, direction='in', amount=100, status='posted')
+    good = JournalEntry(status='posted')
+    bad = JournalEntry(status='posted')
+    db.add_all([money, good, bad])
+    db.flush()
+    db.add_all([
+        JournalLine(journal_entry_id=good.id, account_code='1000', account_name='Cash', debit=100),
+        JournalLine(journal_entry_id=good.id, account_code='4000', account_name='Revenue', credit=100),
+        JournalLine(journal_entry_id=bad.id, account_code='1000', account_name='Cash', debit=99),
+        JournalLine(journal_entry_id=bad.id, account_code='4000', account_name='Revenue', credit=99),
+    ])
+    links = json.dumps({'category': 'POS Settlement'})
+    review(db, 'pos-correct', 'settlement', accepted_transaction_id=money.id,
+           accepted_journal_entry_id=good.id, proposed_links_json=links)
+    review(db, 'pos-no-journal', 'settlement', accepted_transaction_id=money.id,
+           proposed_links_json=links)
+    review(db, 'pos-wrong-journal', 'settlement', accepted_transaction_id=money.id,
+           accepted_journal_entry_id=bad.id, proposed_links_json=links)
+    db.commit()
+    result = accepted_linkage_audit(db, source_app='pos')
+    assert result['total_accepted'] == 3
+    assert result['verified_record_links'] == 1
+    assert result['by_state']['missing_expected_link'] == 1
+    assert result['by_state']['journal_amount_mismatch'] == 1
+    assert {(f['source_event_id'], f['target_kind']) for f in result['findings']} == {
+        ('pos-no-journal', 'journal'),
+        ('pos-wrong-journal', 'journal'),
+    }
+
+
+def test_cash_with_optional_journal_checks_secondary_link_even_when_non_pos(db):
+    account = FinancialAccount(name='Bank', code='OPT-JOURNAL', account_type='bank')
+    db.add(account)
+    db.flush()
+    money = MoneyTransaction(financial_account_id=account.id, direction='in', amount=100, status='posted')
+    journal = JournalEntry(status='draft')
+    db.add_all([money, journal])
+    db.flush()
+    review(db, 'other-with-journal', 'cash_in', source='otherapp',
+           accepted_transaction_id=money.id, accepted_journal_entry_id=journal.id)
+    db.commit()
+    report = accepted_linkage_audit(db)
+    assert report['needs_review'] == 1
+    assert report['by_state']['unexpected_record_status'] == 1
+    assert report['findings'][0]['target_kind'] == 'journal'
+
+
+def test_staff_paid_rounding_is_separate_from_exact_net_cash_and_payable(db):
+    account = FinancialAccount(name='GCash', code='STAFF-ROUNDING', account_type='ewallet')
+    db.add(account)
+    db.flush()
+    exact = MoneyTransaction(financial_account_id=account.id, direction='out', amount=100.25, status='posted')
+    rounding = MoneyTransaction(financial_account_id=account.id, direction='out', amount=.75, status='posted')
+    wrong = MoneyTransaction(financial_account_id=account.id, direction='out', amount=.50, status='posted')
+    pay = Payable(supplier_name='Employees', gross_amount=100.25, balance_due=0, status='settled')
+    db.add_all([exact, rounding, wrong, pay])
+    db.flush()
+    def proof(rounding_id, payable_id=pay.id):
+        return json.dumps({'payroll_payment_reconciliation': {
+            'exact_net_pay': 100.25, 'actual_amount_paid': 101,
+            'rounding_difference': .75, 'rounding_transaction_id': rounding_id,
+            'payable_id': payable_id,
+        }})
+    review(db, 'payroll:1:Paid', 'cash_out', source='staff', amount=100.25,
+           accepted_transaction_id=exact.id, validation_json=proof(rounding.id))
+    review(db, 'payroll:2:Paid', 'cash_out', source='staff', amount=100.25,
+           accepted_transaction_id=exact.id, validation_json=proof(None))
+    review(db, 'payroll:3:Paid', 'cash_out', source='staff', amount=100.25,
+           accepted_transaction_id=exact.id, validation_json=proof(wrong.id))
+    review(db, 'payroll:4:Paid', 'cash_out', source='staff', amount=100.25,
+           accepted_transaction_id=exact.id, validation_json=proof(rounding.id, 999999))
+    db.commit()
+    report = accepted_linkage_audit(db, source_app='staff')
+    assert report['verified_record_links'] == 1
+    assert report['needs_review'] == 3
+    assert {f['state'] for f in report['findings']} == {
+        'missing_rounding_record', 'amount_difference', 'missing_payable_evidence',
+    }
+    assert all(f['source_app'] == 'staff' for f in report['findings'])
+
+
+def test_reversed_secondary_journal_is_not_a_false_missing_cash_record(db):
+    account = FinancialAccount(name='Cash', code='REV-JOURNAL', account_type='cash_drawer')
+    db.add(account)
+    db.flush()
+    money = MoneyTransaction(financial_account_id=account.id, direction='out', amount=20, status='posted')
+    journal = JournalEntry(status='posted', is_reversed=True)
+    db.add_all([money, journal])
+    db.flush()
+    review(db, 'refund-1', 'cash_out', source='pos', amount=20,
+           accepted_transaction_id=money.id, accepted_journal_entry_id=journal.id,
+           proposed_links_json=json.dumps({'category': 'POS Refund'}))
+    db.commit()
+    report = accepted_linkage_audit(db)
+    assert report['reversed_targets'] == 1
+    assert report['needs_review'] == 0
