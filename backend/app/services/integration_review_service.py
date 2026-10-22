@@ -12,7 +12,7 @@ from app.schemas.cashflow import MoneyTransactionCreate, ReceivableCreate
 from app.schemas.integration_review import IntegrationReviewCreate, IntegrationReviewDecision
 from app.services.audit_service import record_audit
 from app.services.bir_service import ensure_date_unlocked
-from app.services.cashflow_service import create_money_transaction, create_receivable
+from app.services.cashflow_service import FINANCIAL_ACCOUNT_TYPES, create_money_transaction, create_receivable
 from app.services.account_mapping_service import resolve_record_accounts
 from app.services.payable_adjustment_service import apply_purchase_return_adjustment
 
@@ -90,6 +90,8 @@ def validate_review_payload(db: Session, payload: IntegrationReviewCreate | dict
                 errors.append('The proposed financial account does not exist.')
             elif not account.is_active:
                 errors.append('The proposed financial account is inactive.')
+            elif str(account.account_type or '').strip().lower() not in FINANCIAL_ACCOUNT_TYPES:
+                errors.append('The proposed financial account is not a cash, safe, bank or e-wallet account.')
             elif str(account.currency or 'PHP').upper() != currency:
                 errors.append('The proposed financial account currency does not match the event currency.')
 
@@ -529,6 +531,22 @@ def _locked_item(db: Session, item_id: int):
     return row
 
 
+def _cash_posting_account(db: Session, account_id: int | None, currency: str) -> FinancialAccount:
+    """Check the actual selected account at posting time, not just intake.
+
+    Proposed source accounts may have been deactivated or retyped between
+    receipt and authorized review. No fallback to an arbitrary cash account.
+    """
+    account = db.query(FinancialAccount).filter(FinancialAccount.id == int(account_id)).first() if account_id else None
+    if not account or not account.is_active:
+        raise ValueError('An active financial account is required.')
+    if str(account.account_type or '').strip().lower() not in FINANCIAL_ACCOUNT_TYPES:
+        raise ValueError('A monetary cash, safe, bank or e-wallet account is required.')
+    if str(account.currency or 'PHP').upper() != str(currency or 'PHP').upper():
+        raise ValueError('Financial account currency does not match the event currency.')
+    return account
+
+
 def _current_validation(db: Session, row: IntegrationReviewItem) -> dict:
     payload = {
         'source_app': row.source_app,
@@ -589,11 +607,7 @@ def accept_item(db: Session, item_id: int, decision: IntegrationReviewDecision, 
             raise ValueError('This payroll payment was superseded by a paid revision and cannot be accepted as a separate cash disbursement.')
 
         account_id = decision.account_id or row.proposed_account_id
-        account = db.query(FinancialAccount).filter(FinancialAccount.id == int(account_id)).first() if account_id else None
-        if not account or not account.is_active:
-            raise ValueError('An active financial account is required.')
-        if str(account.currency or 'PHP').upper() != str(row.currency or 'PHP').upper():
-            raise ValueError('Financial account currency does not match the event currency.')
+        account = _cash_posting_account(db, account_id, row.currency)
 
         source_amount = round(float(row.amount or 0), 2)
         actual_amount = round(float(decision.actual_amount_paid), 2) if decision.actual_amount_paid is not None else source_amount
@@ -704,11 +718,7 @@ def accept_item(db: Session, item_id: int, decision: IntegrationReviewDecision, 
         })
     elif effect in CASH_EFFECTS:
         account_id = decision.account_id or row.proposed_account_id
-        account = db.query(FinancialAccount).filter(FinancialAccount.id == int(account_id)).first() if account_id else None
-        if not account or not account.is_active:
-            raise ValueError('An active financial account is required.')
-        if str(account.currency or 'PHP').upper() != str(row.currency or 'PHP').upper():
-            raise ValueError('Financial account currency does not match the event currency.')
+        account = _cash_posting_account(db, account_id, row.currency)
         source_amount = round(float(row.amount or 0), 2)
         actual_amount = round(float(decision.actual_amount_paid), 2) if decision.actual_amount_paid is not None else source_amount
         rounding_difference = round(actual_amount - source_amount, 2)
