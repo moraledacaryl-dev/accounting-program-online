@@ -95,6 +95,6 @@ def test_restricted_export_rejects_symlink_destination(tmp_path):
     target.write_text('unchanged')
     alias = tmp_path / 'alias.json'
     alias.symlink_to(target)
-    with pytest.raises(FileExistsError, OSError):
+    with pytest.raises((FileExistsError, OSError)):
         module.write_restricted_json(alias, {'accounting_review': []})
     assert target.read_text() == 'unchanged'
