@@ -34,6 +34,28 @@ The first five implementation groups should not be scored as five-sixths of *fin
 - **Receipts exporter:** [PR #328](https://github.com/moraledacaryl-dev/accounting-program-online/pull/328) passed CI; it provides a restricted, read-only local Accounting identity export for eventual source parity analysis. It must not be described as executed on live Accounting until an authorized private run is documented.
 - **Remaining critical closure:** [issue #249](https://github.com/moraledacaryl-dev/accounting-program-online/issues/249) remains **open**. Last protected count was 166 posted Money In records lacking direct journal foreign keys (not necessarily absent journals). No documentary matching, independent financial-review certification, cash/bank/GCash tie-out or isolated restore rehearsal has been established by these software release logs. Inventory/Staff producer acknowledgements and POS direct-sync transactions require real read-only source-system checks.
 
+## Live, privacy-minimized integration intake certification
+
+The existing `Accounting Production Certification` workflow is extended by
+`scripts/dr/production-certification.py` to report **aggregate-only**
+Integration Review intake counts and direct financial-link discrepancies from
+a read-only PostgreSQL transaction. It distinguishes source-app review event
+counts, accepted and pending statuses, missing direct expected transaction /
+journal / receivable / payable IDs, dangling local target IDs, and accepted
+transaction or journal links that are not posted.
+
+These findings require investigation; an accepted review record with an
+unpopulated financial target is not automatically proof of missing revenue,
+bank deposits, or general ledger entries. No event identities, account IDs,
+individual amounts, payroll/guest data or private payloads are printed.
+
+**Scope explicitly excluded:** live producer outbox completeness, POS direct
+sync endpoints, secondary POS journal and Staff rounding evidence, bank/GCash
+settlements, and original source documents. The specialized Reconciliation
+Control Center audit and future protected cross-app snapshots remain necessary.
+The existing workflow's manual restore mode requires explicit confirmation
+and is not triggered by this read-only certification change.
+
 ## Latest verified production and safety evidence
 
 - [Accounting deployment #39601553031](https://github.com/moraledacaryl-dev/accounting-program-online/actions/runs/39601553031) activated exact release `6b0fce5497a0da16ae331ae90cb0363ed4edb506`, Alembic `0017_journal_linkage_review`, with validated backup and atomic activation.
