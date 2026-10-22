@@ -51,6 +51,29 @@ SELECT count(*) AS unlinked_total,
                     AND same_reference_unlinked_cash_count > 1 THEN 1 ELSE 0 END) AS unique_journal_candidate_shared_by_cash,
        sum(CASE WHEN same_reference_journal_count > 0
                     AND same_reference_unlinked_cash_count > 1 THEN 1 ELSE 0 END) AS ambiguous_cash_journal_reference_overlap,
+       -- Mutually exclusive review leads, NOT likelihood or proof of matching.
+       sum(CASE WHEN reversed_from_id IS NOT NULL OR is_reversed = true
+                THEN 1 ELSE 0 END) AS review_lead_reversal_first,
+       sum(CASE WHEN (reversed_from_id IS NULL AND coalesce(is_reversed,false) = false)
+                    AND linked_record_id IS NOT NULL
+                THEN 1 ELSE 0 END) AS review_lead_linked_record,
+       sum(CASE WHEN (reversed_from_id IS NULL AND coalesce(is_reversed,false) = false)
+                    AND linked_record_id IS NULL
+                    AND trim(coalesce(external_source,'')) <> ''
+                    AND trim(coalesce(external_id,'')) <> ''
+                THEN 1 ELSE 0 END) AS review_lead_external_event,
+       sum(CASE WHEN (reversed_from_id IS NULL AND coalesce(is_reversed,false) = false)
+                    AND linked_record_id IS NULL
+                    AND (trim(coalesce(external_source,'')) = ''
+                         OR trim(coalesce(external_id,'')) = '')
+                    AND trim(coalesce(reference_no,'')) <> ''
+                THEN 1 ELSE 0 END) AS review_lead_reference_only,
+       sum(CASE WHEN (reversed_from_id IS NULL AND coalesce(is_reversed,false) = false)
+                    AND linked_record_id IS NULL
+                    AND (trim(coalesce(external_source,'')) = ''
+                         OR trim(coalesce(external_id,'')) = '')
+                    AND trim(coalesce(reference_no,'')) = ''
+                THEN 1 ELSE 0 END) AS review_lead_no_structured_identity,
        sum(CASE WHEN linked_record_id IS NOT NULL THEN 1 ELSE 0 END) AS with_record_id,
        sum(CASE WHEN trim(coalesce(external_source,'')) <> ''
                      AND trim(coalesce(external_id,'')) <> '' THEN 1 ELSE 0 END) AS with_external_event_identity,
@@ -103,6 +126,13 @@ def gather(db):
     if (overall["without_reference_candidate"] + overall["one_reference_candidate"]
             + overall["ambiguous_reference_candidates"] != overall["unlinked_total"]):
         raise ValueError("Reference candidate coverage does not agree with total.")
+    review_lead_buckets = (
+        "review_lead_reversal_first", "review_lead_linked_record",
+        "review_lead_external_event", "review_lead_reference_only",
+        "review_lead_no_structured_identity",
+    )
+    if sum(overall[key] for key in review_lead_buckets) != overall["unlinked_total"]:
+        raise ValueError("Documentary review-lead coverage does not agree with total.")
     if set(module_rows).difference(MODULES) or set(year_rows).difference(YEARS):
         raise ValueError("Unexpected bucket detected.")
     return overall, module_rows, year_rows, elapsed_ms
@@ -118,6 +148,7 @@ def report(overall, modules, years, elapsed_ms):
         print(f"JOURNAL_LINKAGE_TRIAGE: year.{name}={years.get(name,0)}")
     print(f"JOURNAL_LINKAGE_TRIAGE: elapsed_ms={elapsed_ms}")
     print("JOURNAL_LINKAGE_TRIAGE: candidate_reference_is_not_proof=true")
+    print("JOURNAL_LINKAGE_TRIAGE: review_leads_are_exclusive_but_not_financial_matches=true")
     print("JOURNAL_LINKAGE_TRIAGE: one_journal_to_many_cash_candidates_requires_human_review=true")
     print("JOURNAL_LINKAGE_TRIAGE: amount_and_identity_details=NOT_EXPORTED")
     print("JOURNAL_LINKAGE_TRIAGE: bank_statement_reconciliation=NOT_TESTED")
