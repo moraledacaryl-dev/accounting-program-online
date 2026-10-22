@@ -93,7 +93,18 @@ def _staff_revision(payload_json, ext_id):
 def compare_live_rows(accounting_rows, inventory_rows, staff_rows):
     """Use source IDs in memory only; return privacy-safe aggregated counts."""
     received = {}
-    counts = {name: Counter() for name in SOURCE_NAMES}
+    # Zero source events are a meaningful diagnostic, especially when the
+    # Accounting intake also has zero retained Inventory events. Print zeros
+    # explicitly instead of hiding missing categories in a sparse Counter.
+    baseline = (
+        "source_financial_events", "source_marked_delivered",
+        "source_not_marked_delivered", "accounting_received",
+        "present_in_accounting", "delivered_but_receipt_not_found",
+        "pending_and_receipt_not_found", "receiver_id_absent_from_source_scan",
+        "duplicate_source_identity", "duplicate_receiver_identity",
+        "receipt_exists_but_sender_unacknowledged",
+    )
+    counts = {name: Counter({field: 0 for field in baseline}) for name in SOURCE_NAMES}
     for app, identifier, revision, status in accounting_rows:
         if app not in SOURCE_NAMES:
             continue
