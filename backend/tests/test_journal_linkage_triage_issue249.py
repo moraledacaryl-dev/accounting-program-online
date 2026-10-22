@@ -96,3 +96,37 @@ def test_triage_source_is_read_only_and_workflow_never_logs_source_rows():
     assert "branches: [main]" in workflow
     assert "scripts/dr/journal-linkage-triage.py" in workflow
     assert "git -C \"$SOURCE\" show \"$AUDIT_SHA:scripts/dr/journal-linkage-triage.py\"" in workflow
+
+
+def test_shared_reference_with_one_journal_is_not_a_safe_one_to_one_match(capsys):
+    engine = create_engine("sqlite:///:memory:")
+    try:
+        with engine.begin() as db:
+            db.exec_driver_sql("CREATE TABLE journal_entries (id INTEGER PRIMARY KEY, status TEXT, reference_no TEXT)")
+            db.exec_driver_sql("""CREATE TABLE money_transactions (
+                id INTEGER PRIMARY KEY, status TEXT, journal_entry_id INTEGER,
+                transaction_date TEXT, posted_at TEXT, module TEXT,
+                reference_no TEXT, external_source TEXT, external_id TEXT,
+                linked_record_id INTEGER, reversed_from_id INTEGER,
+                is_reversed BOOLEAN, financial_account_id INTEGER)""")
+            db.exec_driver_sql("INSERT INTO journal_entries VALUES (1,'posted','Shared REF')")
+            db.exec_driver_sql("""INSERT INTO money_transactions VALUES
+                (1,'posted',NULL,'2025-01-12','2025-01-12','rooms',' SHARED ref ',NULL,NULL,NULL,NULL,0,1),
+                (2,'posted',NULL,'2025-01-13','2025-01-13','rooms','shared ref',NULL,NULL,NULL,NULL,0,1),
+                (3,'posted',NULL,'2025-01-14','2025-01-14','rooms','separate',NULL,NULL,NULL,NULL,0,1),
+                (4,'draft',NULL,'2025-01-14','2025-01-14','rooms','shared ref',NULL,NULL,NULL,NULL,0,1)""")
+        with engine.connect() as db:
+            metrics, modules, years, elapsed = triage.gather(db)
+            assert metrics["unlinked_total"] == 3
+            assert metrics["one_reference_candidate"] == 2
+            assert metrics["cash_reference_shared_by_multiple_unlinked"] == 2
+            assert metrics["unique_journal_candidate_shared_by_cash"] == 2
+            assert metrics["ambiguous_cash_journal_reference_overlap"] == 2
+            triage.report(metrics, modules, years, elapsed)
+            output = capsys.readouterr().out
+            assert "one_journal_to_many_cash_candidates_requires_human_review=true" in output
+            assert "SHARED" not in output
+            assert "Shared REF" not in output
+            assert db.exec_driver_sql("SELECT count(*) FROM money_transactions WHERE journal_entry_id IS NOT NULL").scalar_one() == 0
+    finally:
+        engine.dispose()
