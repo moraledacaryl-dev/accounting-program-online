@@ -55,6 +55,10 @@ def connection():
         db.exec_driver_sql("INSERT INTO payables VALUES (10, 250, 100, 150)")
         db.exec_driver_sql("INSERT INTO money_transactions VALUES (10, 'posted', 50, 1)")
         db.exec_driver_sql("INSERT INTO bookings VALUES (10, 'beds24', 'B1'), (11, 'beds24', 'B2')")
+        # Compatibility columns required by the Group 3 read-only audit,
+        # added after existing positional fixture inserts.
+        db.exec_driver_sql("ALTER TABLE money_transactions ADD COLUMN financial_account_id INTEGER")
+        db.exec_driver_sql("ALTER TABLE receivables ADD COLUMN source_type TEXT")
     with engine.connect() as db:
         yield db
     engine.dispose()
@@ -278,3 +282,64 @@ def test_pending_cash_account_mapping_flags_inactive_missing_and_nonmonetary_wit
     assert 'proposed_account_presence_does_not_prove_payment_method_or_approval=YES' in output
     assert 'SECRET-' not in output
     assert connection.exec_driver_sql("SELECT count(*) FROM integration_review_items WHERE status='ready_for_review'").scalar_one() == 4
+
+
+def test_group3_legacy_positive_pos_reversal_receivable_is_integrity_failure(connection, capsys):
+    # Historical malformed reversal must never be described as valid guest AR.
+    connection.exec_driver_sql("""INSERT INTO receivables
+        (id,gross_amount,amount_collected,balance_due,source_type)
+        VALUES (901,90,0,90,'pos_room_charge_reversal')""")
+    metrics, durations = audit.collect(connection)
+    assert metrics["pos_room_reversals"]["legacy_reversal_receivables"] == 1
+    assert metrics["pos_room_reversals"]["reversal_as_positive_guest_claim"] == 1
+    assert ("pos_room_reversals", "reversal_as_positive_guest_claim", 1) in audit.assessment(metrics)[0]
+    assert audit.render(metrics, durations) == 2
+    shown = capsys.readouterr().out
+    assert "status=INTEGRITY_FAILURE" in shown
+    assert "901" not in shown
+    assert connection.exec_driver_sql("SELECT balance_due FROM receivables WHERE id=901").scalar_one() == 90
+
+
+def test_group3_negative_legacy_reversal_is_review_not_auto_corrected(connection, capsys):
+    connection.exec_driver_sql("""INSERT INTO receivables
+        (id,gross_amount,amount_collected,balance_due,source_type)
+        VALUES (902,-100,0,-100,'pos_room_charge_reversal')""")
+    metrics, durations = audit.collect(connection)
+    critical, review = audit.assessment(metrics)
+    assert not critical
+    assert ("pos_room_reversals", "legacy_reversal_receivables", 1) in review
+    assert audit.render(metrics, durations) == 0
+    shown = capsys.readouterr().out
+    assert "status=REVIEW_REQUIRED" in shown
+    assert "902" not in shown
+    assert connection.exec_driver_sql("SELECT gross_amount FROM receivables WHERE id=902").scalar_one() == -100
+
+
+def test_group3_accepted_cash_nonmonetary_account_is_integrity_failure(connection, capsys):
+    connection.exec_driver_sql("INSERT INTO financial_accounts VALUES (44,'expense',1)")
+    connection.exec_driver_sql("UPDATE money_transactions SET financial_account_id = 44 WHERE id = 10")
+    connection.exec_driver_sql("""INSERT INTO integration_review_items
+        (id,source_app,source_event_id,status,financial_effect,accepted_transaction_id)
+        VALUES (951,'staff','PRIVATE_EVENT_ID','accepted','cash_out',10)""")
+    metrics, runtimes = audit.collect(connection)
+    assert metrics["integration_intake"]["accepted_cash_nonmonetary_account"] == 1
+    assert ("integration_intake", "accepted_cash_nonmonetary_account", 1) in audit.assessment(metrics)[0]
+    assert audit.render(metrics, runtimes) == 2
+    output = capsys.readouterr().out
+    assert "status=INTEGRITY_FAILURE" in output
+    assert "PRIVATE_EVENT_ID" not in output
+    assert connection.exec_driver_sql("SELECT financial_account_id FROM money_transactions WHERE id=10").scalar_one() == 44
+
+
+def test_group3_accepted_cash_on_monetary_account_is_allowed_not_bank_certified(connection, capsys):
+    connection.exec_driver_sql("INSERT INTO financial_accounts VALUES (45,'ewallet',1)")
+    connection.exec_driver_sql("UPDATE money_transactions SET financial_account_id = 45 WHERE id = 10")
+    connection.exec_driver_sql("""INSERT INTO integration_review_items
+        (id,source_app,source_event_id,status,financial_effect,accepted_transaction_id)
+        VALUES (952,'pos','PRIVATE_REFUND','accepted','cash_out',10)""")
+    metrics, times = audit.collect(connection)
+    assert metrics["integration_intake"]["accepted_cash_nonmonetary_account"] == 0
+    assert audit.render(metrics, times) == 0
+    output = capsys.readouterr().out
+    assert "cash_account_type_proof_does_not_establish_bank_reconciliation=YES" in output
+    assert "PRIVATE_REFUND" not in output
