@@ -10,6 +10,7 @@ from app.services.integration_review_service import (
     _staff_payroll_superseded_paid_ids,
     validate_review_payload,
     summary,
+    delivery_evidence,
 )
 
 
@@ -189,3 +190,58 @@ def test_empty_integration_summary_is_not_described_as_healthy():
     assert result['needs_review'] == 0
     assert result['by_source'] == {}
     assert 'not a live connectivity' in result['source_coverage_note'].lower()
+
+
+
+def test_delivery_evidence_does_not_infer_source_connectivity_or_missing_events():
+    empty = delivery_evidence([])
+    assert empty['scope'] == 'accounting_retained_intake_only'
+    assert empty['sources']
+    for group in empty['sources']:
+        assert group['received_records'] == 0
+        assert group['last_received_at'] is None
+        assert group['sender_connectivity'] == 'unverified'
+        assert group['unreceived_events'] is None
+        assert group['duplicate_delivery_attempts'] is None
+
+
+def test_delivery_evidence_counts_revisions_links_and_raw_staff_history():
+    from datetime import datetime, timezone
+
+    def row(source, event, revision, status, **kwargs):
+        return SimpleNamespace(
+            source_app=source, source_event_id=event, source_revision=revision,
+            status=status, created_at=datetime(2026, 10, 20 + revision, tzinfo=timezone.utc),
+            reviewed_at=None, **kwargs,
+        )
+
+    records = [
+        row('pos', 'sale-1', 1, 'accepted', accepted_transaction_id=12),
+        row('pos', 'sale-1', 2, 'accepted'),  # reference-only is not an automatic exception
+        row('pos', 'sale-2', 1, 'validation_failed'),
+        row('staff', 'payroll-1:Approved', 1, 'ready_for_review'),
+        row('staff', 'payroll-1:Paid', 1, 'accepted', accepted_journal_entry_id=4),
+    ]
+    evidence = delivery_evidence(records)
+    sources = {group['source_app']: group for group in evidence['sources']}
+    pos = sources['pos']
+    assert (pos['received_records'], pos['distinct_source_events'], pos['multi_revision_events']) == (3, 2, 1)
+    assert (pos['accepted_with_direct_link'], pos['accepted_without_direct_link']) == (1, 1)
+    assert pos['validation_failed'] == 1
+    assert pos['last_received_at'].startswith('2026-10-22')
+    assert sources['staff']['received_records'] == 2  # raw history remains distinct from visible queue
+    assert sources['inventory']['last_received_at'] is None
+    assert all(group['unreceived_events'] is None for group in sources.values())
+
+
+def test_summary_retains_original_visible_counts_and_adds_separate_raw_evidence():
+    db = MagicMock()
+    db.query.return_value.all.return_value = [
+        SimpleNamespace(source_app='pos', source_event_id='sale-1', source_entity_id='1',
+                        source_revision=1, status='ready_for_review'),
+    ]
+    result = summary(db)
+    assert result['by_source']['pos']['total'] == 1
+    assert result['delivery_evidence']['sources']
+    assert result['delivery_evidence']['scope'] == 'accounting_retained_intake_only'
+    assert db.commit.call_count == 0
