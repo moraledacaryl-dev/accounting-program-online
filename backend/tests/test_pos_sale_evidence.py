@@ -68,3 +68,23 @@ def test_sale_query_only_reads_scoped_accounting_receiver():
     assert "dedicated_pos_cloud" in query
     for word in ("insert into", "update sale_orders", "delete from", "drop table"):
         assert word not in query
+
+
+def test_pos_parity_workflow_stages_both_exact_sha_modules_before_server_audit():
+    source = (ROOT / ".github/workflows/accounting-pos-direct-parity.yml").read_text()
+    assert "mktemp -d /tmp/accounting-pos-direct-parity." in source
+    assert 'audit_file="$audit_dir/pos-direct-erp-evidence.py"' in source
+    assert 'helper_file="$audit_dir/pos_sale_evidence.py"' in source
+    assert 'show "$AUDIT_SHA:scripts/dr/pos_sale_evidence.py"' in source
+    assert 'show "$AUDIT_SHA:scripts/dr/pos-direct-erp-evidence.py"' in source
+    assert 'test -s "$helper_file"' in source
+    assert 'rm -f "$audit_file" "$helper_file"' in source
+    assert '"$CURRENT/backend/.venv/bin/python" -B "$audit_file"' in source
+    assert "      - 'scripts/dr/pos_sale_evidence.py'" in source
+
+
+def test_pos_audit_language_does_not_claim_sales_and_voids_unchecked():
+    main = (ROOT / "scripts/dr/pos-direct-erp-evidence.py").read_text()
+    assert "SALE_AND_VOID_RECEIPTS_HAVE_SEPARATE_CONTRACTS=YES" in main
+    assert "NEGATIVE_ROOM_CHARGE_REVERSALS=NOT_COMPARED" in main
+    assert "SALES_VOIDS_REGISTER_CLOSES_AND_NEGATIVE_ROOM_CHARGES=NOT_COMPARABLE" not in main

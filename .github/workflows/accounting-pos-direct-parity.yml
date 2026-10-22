@@ -5,6 +5,7 @@ on:
     branches: [main]
     paths:
       - 'scripts/dr/pos-direct-erp-evidence.py'
+      - 'scripts/dr/pos_sale_evidence.py'
       - '.github/workflows/accounting-pos-direct-parity.yml'
   workflow_dispatch:
 
@@ -43,10 +44,16 @@ jobs:
             git -C "$SOURCE" fetch --no-tags origin main
             git -C "$SOURCE" cat-file -e "$AUDIT_SHA^{commit}"
             git -C "$SOURCE" merge-base --is-ancestor "$AUDIT_SHA" origin/main
-            audit_file="$(mktemp /tmp/accounting-pos-direct-parity.XXXXXXXX.py)"
-            trap 'rm -f "$audit_file"' EXIT
+            # The POS auditor imports a sibling sale/void evidence module.
+            # Stage *both* exact-SHA files privately, never from mutable main.
+            audit_dir="$(mktemp -d /tmp/accounting-pos-direct-parity.XXXXXXXX)"
+            audit_file="$audit_dir/pos-direct-erp-evidence.py"
+            helper_file="$audit_dir/pos_sale_evidence.py"
+            trap 'rm -f "$audit_file" "$helper_file"; rmdir "$audit_dir"' EXIT
             git -C "$SOURCE" show "$AUDIT_SHA:scripts/dr/pos-direct-erp-evidence.py" > "$audit_file"
+            git -C "$SOURCE" show "$AUDIT_SHA:scripts/dr/pos_sale_evidence.py" > "$helper_file"
             test -s "$audit_file"
+            test -s "$helper_file"
             # Retain credentials only in the protected server process.
             set -a
             . /etc/hiddenoasis/accounting-backend.env
@@ -55,6 +62,7 @@ jobs:
             POS_AUDIT_DATABASE_URL="$DATABASE_URL"
             set +a
             export ACCOUNTING_AUDIT_DATABASE_URL POS_AUDIT_DATABASE_URL
-            "$CURRENT/backend/.venv/bin/python" "$audit_file"
+            # Do not create __pycache__ in the private temporary audit directory.
+            "$CURRENT/backend/.venv/bin/python" -B "$audit_file"
         env:
           AUDIT_SHA: ${{ github.sha }}
