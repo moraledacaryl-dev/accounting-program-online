@@ -34,6 +34,15 @@ async function mockReconciliationCenter(page, { role = 'owner', unavailable = ''
           pending_over_7d: 0, pending_age_unknown: 0, oldest_pending_at: null },
       ] },
     };
+    if (path === '/api/integration-review/accepted-linkage-audit') data = {
+      scope: 'accounting_accepted_record_links_only', total_accepted: 14,
+      verified_record_links: 8, reference_only: 2, reversed_targets: 1,
+      needs_review: 3, findings_truncated: false,
+      findings: [
+        { review_id: 103, source_app: 'pos', financial_effect: 'cash_in',
+          state: 'missing_expected_link', reason: 'Accepted effect lacks its expected Accounting record ID.' },
+      ],
+    };
     if (path === '/api/reports/management') data = { close_readiness: {
       status: 'blocked', checks: [
         { key: 'unreconciled_cashflow_accounts', label: 'Unreconciled cash/bank accounts', severity: 'critical', passed: false, value: 3, action: 'Finish cash checks.' },
@@ -62,6 +71,11 @@ test('reconciliation center displays grounded workstreams and direct links on de
   const evidence = page.getByRole('region', { name: 'Integration delivery evidence' });
   await expect(evidence.getByText('Source intake evidence')).toBeVisible();
   await expect(evidence.getByText('8 retained intake records')).toBeVisible();
+  const linkage = page.getByRole('region', { name: 'Accepted record linkage audit' });
+  await expect(linkage.getByText('14')).toBeVisible();
+  await expect(linkage.getByText('Existing local record links')).toBeVisible();
+  await expect(linkage.getByText('Links needing review')).toBeVisible();
+  await expect(linkage.getByText('Review #103', { exact: false })).toBeVisible();
   await expect(evidence.getByText('Pending over 7 days: 2 · Age unavailable: 1')).toBeVisible();
   await expect(evidence.getByText('Last received: Not observed')).toBeVisible();
   await expect(evidence.getByText('Unreceived events: unknown.', { exact: false }).first()).toBeVisible();
@@ -77,6 +91,7 @@ test('reconciliation center does not leak owner-only evidence to authorized non-
   await expect(page.getByRole('article').filter({ hasText: 'Investigate historical journal links' }).getByText('—')).toBeVisible();
   expect(requests).not.toContain('/api/reports/journal-linkage-review');
   expect(requests).not.toContain('/api/integration-review/summary');
+  expect(requests).not.toContain('/api/integration-review/accepted-linkage-audit');
   await expect(page.getByRole('region', { name: 'Integration delivery evidence' })).toHaveCount(0);
 });
 
@@ -95,4 +110,24 @@ test('failed control source is never presented as zero exceptions and refresh re
   fail = false;
   await page.getByRole('button', { name: 'Refresh checks' }).click();
   await expect(cash.locator('.control-center-count strong')).toHaveText('2');
+});
+
+test('unavailable linkage audit never appears as a clean zero and refresh recovers', async ({ page }) => {
+  await mockReconciliationCenter(page);
+  let failing = true;
+  await page.route('**/api/integration-review/accepted-linkage-audit', async (route) => {
+    if (failing) return route.fulfill({ status: 503, contentType: 'application/json', body: '{"detail":"Unavailable"}' });
+    return route.fulfill({ status: 200, contentType: 'application/json', body: JSON.stringify({
+      total_accepted: 2, verified_record_links: 2, needs_review: 0, reference_only: 0,
+      reversed_targets: 0, findings: [],
+    }) });
+  });
+  await page.goto('/reconciliation-center');
+  const section = page.getByRole('region', { name: 'Accepted record linkage audit' });
+  await expect(section.getByText('Record-link verification unavailable.', { exact: false })).toBeVisible();
+  await expect(section.getByText('Existing local record links')).toHaveCount(0);
+  failing = false;
+  await page.getByRole('button', { name: 'Refresh checks' }).click();
+  await expect(section.getByText('Existing local record links')).toBeVisible();
+  await expect(section.getByText('2', { exact: true }).first()).toBeVisible();
 });
