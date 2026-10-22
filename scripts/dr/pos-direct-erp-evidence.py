@@ -49,6 +49,24 @@ RECEIPT_QUERIES = {
         WHERE external_source='dedicated_pos_cloud'
     """,
 }
+REVIEW_SQL = """
+    SELECT source_event_id, status FROM integration_review_items
+    WHERE source_app='pos'
+"""
+ROUTING_SQL = """
+    SELECT value_json FROM system_settings
+    WHERE key='accounting_sync'
+"""
+KIND_FOR_TARGET = {
+    "money": "cashflow_transaction",
+    "transfer": "cash_transfer",
+    "receivable": "room_charge",
+}
+REVIEW_STATES = frozenset({
+    "ready_for_review", "accepted", "rejected", "validation_failed",
+    "awaiting_approval", "pending",
+})
+
 KNOWN_STATUSES = frozenset({
     "synced", "pending", "failed", "blocked", "archived", "resolved",
     "cancelled", "processing", "retry",
@@ -140,7 +158,41 @@ def expected_target(event_type, payload):
     raise ValueError("Unknown POS accounting event type.")
 
 
-def compare(pos_rows, target_rows):
+def configured_routes(rows):
+    """Read only explicit POS endpoint classification, never a path or secret."""
+    if not rows:
+        config = {}
+    elif len(rows) == 1 and isinstance(rows[0][0], str):
+        try:
+            config = json.loads(rows[0][0])
+        except (ValueError, TypeError):
+            raise ValueError("POS sync routing configuration is malformed.") from None
+        if not isinstance(config, dict):
+            raise ValueError("POS sync configuration must be an object.")
+    else:
+        raise ValueError("POS sync route configuration is ambiguous.")
+
+    fields = {
+        "cashflow": "current_erp_cashflow_path",
+        "transfer": "current_erp_transfers_path",
+        "room_charge": "current_erp_pos_room_charge_path",
+    }
+    routes = {}
+    for name, key in fields.items():
+        raw = config.get(key)
+        if raw is not None and not isinstance(raw, str):
+            raise ValueError("POS sync route field has an invalid type.")
+        if not raw:
+            # The POS application defaults to /cashflow/transactions,
+            # /transfers or /integrations/pos/room-charge as appropriate.
+            routes[name] = "default_direct"
+        else:
+            routes[name] = ("review_inbox" if "/integrations/pos-review/" in raw
+                            else "custom_direct_or_other")
+    return routes
+
+
+def compare(pos_rows, target_rows, *, review_rows=(), routing=None):
     """Only permitted classifications, never source or receiver identifiers."""
     stats = Counter()
     targets = {}
@@ -157,7 +209,22 @@ def compare(pos_rows, target_rows):
                 stats["duplicate_accounting_external_identity"] += 1
             else:
                 targets[key] = (str(status or "").lower(), bool(reversed_flag))
+    review_items = {}
+    for source_event_id, status in review_rows:
+        stats["pos_review_items"] += 1
+        if not isinstance(source_event_id, str) or not source_event_id:
+            stats["pos_review_missing_source_id"] += 1
+            continue
+        status_name = str(status or "").strip().lower()
+        safe_status = status_name if status_name in REVIEW_STATES else "other"
+        stats["pos_review_status_" + safe_status] += 1
+        if source_event_id in review_items:
+            stats["duplicate_pos_review_event_identity"] += 1
+        else:
+            review_items[source_event_id] = status_name
+
     expected = set()
+    examined_review = set()
     for event, status, raw_payload in pos_rows:
         if event not in POS_EVENTS:
             # Callers should query the scoped set. Unexpected types fail closed.
@@ -183,8 +250,21 @@ def compare(pos_rows, target_rows):
             stats["duplicate_pos_expected_target_identity"] += 1
         expected.add(identity)
         existing = targets.get(identity)
+        review_id = "pos:" + KIND_FOR_TARGET[identity[0]] + ":" + identity[1]
+        review_status = review_items.get(review_id)
+        if review_status is not None:
+            examined_review.add(review_id)
+            stats["matching_pos_review_intake"] += 1
+            if review_status == "accepted":
+                stats["matching_pos_review_accepted"] += 1
+            elif review_status in {"ready_for_review", "awaiting_approval", "pending"}:
+                stats["matching_pos_review_awaiting_acceptance"] += 1
+            else:
+                stats["matching_pos_review_other_status"] += 1
         if existing:
             stats["direct_target_present"] += 1
+            if review_status is not None:
+                stats["direct_target_and_review_both_present"] += 1
             if s != "synced":
                 stats["receiver_exists_sender_not_synced"] += 1
             if identity[0] in POSTED_KINDS:
@@ -194,10 +274,21 @@ def compare(pos_rows, target_rows):
                     stats["direct_cash_or_transfer_reversed"] += 1
         elif s == "synced":
             stats["synced_source_without_direct_target"] += 1
+            if review_status is None:
+                stats["synced_source_without_direct_or_review_evidence"] += 1
+            else:
+                stats["synced_source_missing_direct_but_review_received"] += 1
         else:
             stats["unsynced_source_without_direct_target"] += 1
+            if review_status is not None:
+                stats["unsynced_source_with_review_receipt"] += 1
     stats["accounting_direct_targets_not_referenced_by_scanned_source"] = sum(
         key not in expected for key in targets
+    )
+    # This is a limited comparison: sale/void/register close have other
+    # source identity conventions. Do not call unmatched review items lost.
+    stats["pos_review_items_not_assessed_under_direct_target_contract"] = (
+        len(review_items) - len(examined_review)
     )
     # Explicit zeros are essential when POS has not gone live.
     baseline = (
@@ -208,8 +299,26 @@ def compare(pos_rows, target_rows):
         "accounting_direct_targets_not_referenced_by_scanned_source",
         "direct_cash_or_transfer_not_posted", "direct_cash_or_transfer_reversed",
         "not_compared_distinct_erp_endpoint",
+        "pos_review_items", "matching_pos_review_intake",
+        "matching_pos_review_accepted", "matching_pos_review_awaiting_acceptance",
+        "matching_pos_review_other_status", "duplicate_pos_review_event_identity",
+        "synced_source_without_direct_or_review_evidence",
+        "synced_source_missing_direct_but_review_received",
+        "unsynced_source_with_review_receipt",
+        "direct_target_and_review_both_present",
+        "pos_review_items_not_assessed_under_direct_target_contract",
     )
-    return {key: int(stats.get(key, 0)) for key in sorted(set(stats) | set(baseline))}
+    result = {key: int(stats.get(key, 0)) for key in sorted(set(stats) | set(baseline))}
+    if routing is not None:
+        if set(routing) != {"cashflow", "transfer", "room_charge"}:
+            raise ValueError("POS routing scope is incomplete.")
+        safe_routes = {"default_direct", "review_inbox", "custom_direct_or_other"}
+        if any(v not in safe_routes for v in routing.values()):
+            raise ValueError("POS routing classification is invalid.")
+        # Route classes are rendered using a fixed allowlist; never actual
+        # configured endpoint URLs, auth headers, integration secrets.
+        result.update({"route_" + key + "_" + routing[key]: 1 for key in sorted(routing)})
+    return result
 
 
 def render(report):
@@ -222,16 +331,20 @@ def render(report):
     print("POS DIRECT PARITY: POS_SYNCED_DOES_NOT_PROVE_GENERAL_LEDGER_JOURNAL=YES")
     print("POS DIRECT PARITY: UNMATCHED_SOURCE_IS_REVIEW_NOT_PROOF_OF_LOST_DELIVERY=YES")
     print("POS DIRECT PARITY: SALES_VOIDS_REGISTER_CLOSES_AND_NEGATIVE_ROOM_CHARGES=NOT_COMPARABLE")
+    print("POS DIRECT PARITY: REVIEW_RECEIPT_DOES_NOT_MEAN_ACCOUNTING_POSTED=YES")
     print("POS DIRECT PARITY: PAYMENT_BANK_RECONCILIATION=NOT_TESTED")
     print("POS DIRECT PARITY: ACCOUNTING_REVIEW_INBOX_IS_NOT_GENERIC_POS_RECEIVER=YES")
 
 
 def main():
     try:
-        pos = read_pg(os.environ.get("POS_AUDIT_DATABASE_URL"), {"events": POS_SQL})
+        pos = read_pg(os.environ.get("POS_AUDIT_DATABASE_URL"),
+                      {"events": POS_SQL, "routing": ROUTING_SQL})
         accounting = read_pg(os.environ.get("ACCOUNTING_AUDIT_DATABASE_URL"),
-                             RECEIPT_QUERIES)
-        render(compare(pos["events"], accounting))
+                             {**RECEIPT_QUERIES, "review": REVIEW_SQL})
+        reviews = accounting.pop("review")
+        render(compare(pos["events"], accounting, review_rows=reviews,
+                       routing=configured_routes(pos["routing"])))
         print("POS DIRECT PARITY: EXECUTION PASS")
         return 0
     except Exception as exc:
