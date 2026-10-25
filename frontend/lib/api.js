@@ -40,7 +40,11 @@ async function request(path, init = {}) {
   if (res.status === 401 && !CSRF_EXEMPT_PATHS.has(path) && typeof window !== 'undefined') {
     window.dispatchEvent(new Event('accounting:session-expired'));
   }
-  if (!res.ok) throw new Error(readApiMessage(data?.detail || data?.message || data?.error || data) || 'Request failed');
+  if (!res.ok) {
+    const error = new Error(readApiMessage(data?.detail || data?.message || data?.error || data) || 'Request failed');
+    error.status = res.status;
+    throw error;
+  }
   return data;
 }
 
