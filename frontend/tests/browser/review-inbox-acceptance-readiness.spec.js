@@ -12,7 +12,7 @@ const sourceItem = {
   },
 };
 
-async function mockReviewApi(page, requests) {
+async function mockReviewApi(page, requests, actor = {}) {
   await page.route('**/api/**', async (route) => {
     const url = new URL(route.request().url());
     const path = url.pathname;
@@ -23,7 +23,8 @@ async function mockReviewApi(page, requests) {
     let data = {};
     if (path === '/api/auth/me') data = {
       id: 1, username: 'reviewer', full_name: 'Reviewer', is_active: true, role: 'owner',
-      permissions: ['integrations.view', 'integrations.manage', 'cashflow.view'],
+      permissions: ['review_inbox.view', 'review_inbox.act', 'integrations.view', 'integrations.manage', 'cashflow.view'],
+      ...actor,
     };
     if (path === '/api/integration-review/summary') data = {
       needs_review: 1, by_status: { ready_for_review: 1 },
@@ -32,6 +33,10 @@ async function mockReviewApi(page, requests) {
       items: [sourceItem], page: 1, page_size: 25, total: 1, total_pages: 1,
       has_previous: false, has_next: false,
     };
+    if (path === '/api/financial-accounts/' && !(
+      (actor.permissions || ['review_inbox.act']).includes('review_inbox.act')
+      || (actor.permissions || []).includes('cashflow.view')
+    )) return route.fulfill({ status: 403, contentType: 'application/json', body: JSON.stringify({ detail: 'Missing permissions' }) });
     if (path === '/api/financial-accounts/') data = [
       { id: 10, name: 'Actual GCash Wallet', account_type: 'ewallet', is_active: true, currency: 'PHP' },
       { id: 11, name: 'Inactive cash drawer', account_type: 'cash_drawer', is_active: false, currency: 'PHP' },
@@ -41,6 +46,53 @@ async function mockReviewApi(page, requests) {
     return route.fulfill({ status: 200, contentType: 'application/json', body: JSON.stringify(data) });
   });
 }
+
+test('payroll approver and integration operator have read-only review controls', async ({ page }) => {
+  const requests = [];
+  await mockReviewApi(page, requests, {
+    role: 'payroll_admin', permissions: ['review_inbox.view', 'approvals.act', 'integrations.manage', 'integrations.view'],
+  });
+  await page.goto('/review-inbox');
+  await page.getByRole('button', { name: 'Review', exact: true }).click();
+  await expect(page.getByText('Review Inbox approval permission is required', { exact: false })).toBeVisible();
+  await expect(page.getByRole('button', { name: 'Accept into accounting' })).toHaveCount(0);
+  await expect(page.getByRole('button', { name: 'Reject', exact: true })).toHaveCount(0);
+  await expect(page.getByLabel('Accounting posting date (required)')).toHaveCount(0);
+  await expect(page.getByLabel('Financial account')).toHaveCount(0);
+  expect(requests).toHaveLength(0);
+  for (const width of [1440, 1024, 768, 390, 320]) {
+    await page.setViewportSize({ width, height: 844 });
+    await expect(page.getByText('Review Inbox approval permission is required', { exact: false })).toBeVisible();
+    const overflow = await page.evaluate(() => document.documentElement.scrollWidth - innerWidth);
+    expect(overflow).toBeLessThanOrEqual(1);
+    const dir = process.env.ACCOUNTING_AUDIT_SCREENSHOT_DIR;
+    if (dir) await page.screenshot({ path: `${dir}/read-only-review-${width}.png`, fullPage: true });
+  }
+});
+
+test('revoked review permission removes posting controls after a rejected save', async ({ page }) => {
+  const requests = [];
+  const actor = {
+    role: 'accounting_admin',
+    permissions: ['review_inbox.view', 'review_inbox.act', 'integrations.view'],
+  };
+  await mockReviewApi(page, requests, actor);
+  await page.route('**/api/integration-review/14/accept', async (route) => {
+    actor.permissions = ['review_inbox.view', 'integrations.view'];
+    await route.fulfill({ status: 403, contentType: 'application/json',
+      body: JSON.stringify({ detail: 'Missing permissions: review_inbox.act' }) });
+  });
+  await page.goto('/review-inbox');
+  await page.getByRole('button', { name: 'Review', exact: true }).click();
+  await page.getByLabel('Financial account').selectOption('10');
+  await page.getByLabel('Accounting posting date (required)').fill('2026-10-25');
+  await page.getByLabel('Verified payment method').fill('gcash');
+  await page.getByRole('button', { name: 'Accept into accounting' }).click();
+  await page.getByRole('button', { name: 'Review', exact: true }).click();
+  await expect(page.getByText('Review Inbox approval permission is required', { exact: false })).toBeVisible();
+  await expect(page.getByRole('button', { name: 'Accept into accounting' })).toHaveCount(0);
+  expect(requests).toHaveLength(0);
+});
 
 test('Group 4: cash acceptance requires documented date, eligible account and verified payment method', async ({ page }) => {
   const requests = [];

@@ -1,7 +1,7 @@
 from fastapi import APIRouter, Depends, HTTPException, Query
 from sqlalchemy.orm import Session
 
-from app.api.deps import require_permissions
+from app.api.deps import require_any_permissions, require_permissions
 from app.db.database import get_db
 from app.schemas.cashflow import FinancialAccountCreate, FinancialAccountUpdate
 from app.services.cashflow_service import (
@@ -17,7 +17,7 @@ router = APIRouter()
 @router.get('/')
 def get_accounts(
     db: Session = Depends(get_db),
-    user=Depends(require_permissions('cashflow.view')),
+    user=Depends(require_any_permissions('cashflow.view', 'review_inbox.act')),
     account_type: str | None = None,
     only_active: bool = False,
     on_date: str | None = None,

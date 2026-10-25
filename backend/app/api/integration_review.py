@@ -155,7 +155,7 @@ def accept(
     item_id: int,
     payload: IntegrationReviewDecision,
     db: Session = Depends(get_db),
-    user=Depends(require_any_permissions('integrations.manage', 'approvals.act')),
+    user=Depends(require_permissions('review_inbox.act')),
 ):
     try:
         return accept_item(db, item_id, payload, getattr(user, 'username', None))
@@ -169,7 +169,7 @@ def reject(
     item_id: int,
     payload: IntegrationReviewDecision,
     db: Session = Depends(get_db),
-    user=Depends(require_any_permissions('integrations.manage', 'approvals.act')),
+    user=Depends(require_permissions('review_inbox.act')),
 ):
     try:
         return reject_item(db, item_id, payload.reason, getattr(user, 'username', None))

@@ -10,6 +10,7 @@ import {
   retryIntegrationReviewItem,
 } from '../../lib/api';
 import { fetchFinancialAccounts } from '../../lib/cashflowApi';
+import { useCurrentUser } from '../../lib/useCurrentUser';
 
 const effectLabels = {
   cash_in: 'Cash In',
@@ -56,6 +57,7 @@ function roundedUpAmount(value) {
 }
 
 export default function ReviewInboxPage() {
+  const { can, refresh } = useCurrentUser();
   const [items, setItems] = useState([]);
   const [summary, setSummary] = useState(null);
   const [accounts, setAccounts] = useState([]);
@@ -78,7 +80,10 @@ export default function ReviewInboxPage() {
     Promise.all([
       fetchIntegrationReviewPage({ ...appliedFilters, page, page_size: 25 }),
       fetchIntegrationReviewSummary(),
-      fetchFinancialAccounts(),
+      fetchFinancialAccounts().catch((err) => {
+        if (err.status === 403) return [];
+        throw err;
+      }),
     ]).then(([result, resultSummary, financialAccounts]) => {
       if (!active) return;
       if (!result.items?.length && result.total > 0 && page > 1) {
@@ -142,6 +147,7 @@ export default function ReviewInboxPage() {
       setSelected(null);
       refreshInbox();
     } catch (err) {
+      if (err.status === 403 && String(err.message).includes('review_inbox.act')) await refresh();
       setError(err.message || 'Acceptance failed.');
     } finally {
       setBusy(false);
@@ -155,6 +161,7 @@ export default function ReviewInboxPage() {
       setSelected(null);
       refreshInbox();
     } catch (err) {
+      if (err.status === 403 && String(err.message).includes('review_inbox.act')) await refresh();
       setError(err.message || 'Rejection failed.');
     } finally {
       setBusy(false);
@@ -310,13 +317,13 @@ export default function ReviewInboxPage() {
         size="large"
         footer={selected ? (
           <div className="row wrap">
-            {selected.status === 'ready_for_review' ? (
+            {selected.status === 'ready_for_review' && can('review_inbox.act') ? (
               <>
                 <button type="button" disabled={!canAccept} onClick={() => accept(selected)}>{busy ? 'Processing…' : 'Accept into accounting'}</button>
                 <button type="button" className="danger" disabled={busy || !selected.review_rejection_reason?.trim()} onClick={() => reject(selected)}>Reject</button>
               </>
             ) : null}
-            {['validation_failed', 'rejected'].includes(selected.status) ? <button type="button" disabled={busy} onClick={() => retry(selected)}>Retry processing</button> : null}
+            {['validation_failed', 'rejected'].includes(selected.status) && can('integrations.manage') ? <button type="button" disabled={busy} onClick={() => retry(selected)}>Retry processing</button> : null}
           </div>
         ) : null}
       >
@@ -339,7 +346,7 @@ export default function ReviewInboxPage() {
               </section>
             ) : null}
 
-            <div className="review-routing-card">
+            {can('review_inbox.act') ? <div className="review-routing-card">
               <strong>Acceptance result</strong>
               <p className="small muted">
                 Cash and settlement events create one Money Transaction. Journal-only events create a journal entry.
@@ -457,7 +464,12 @@ export default function ReviewInboxPage() {
                   ) : null}
                 </div>
               ) : null}
-            </div>
+            </div> : (
+              <div className="review-routing-card">
+                <strong>Read-only review</strong>
+                <p className="small muted">Review Inbox approval permission is required to accept or reject this event.</p>
+              </div>
+            )}
 
             <div>
               <strong>Source payload</strong>
