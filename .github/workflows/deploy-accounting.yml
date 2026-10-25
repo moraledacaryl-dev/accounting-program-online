@@ -97,6 +97,11 @@ jobs:
           script: |
             set -euo pipefail
             export PATH="/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin"
+            umask 077
+            install -d -m 0700 /run/hiddenoasis-accounting-release
+            exec 200>/run/hiddenoasis-accounting-release/deployment.lock
+            flock -n 200 || { echo 'Accounting release or backup is already running.' >&2; exit 75; }
+            export ACCOUNTING_RELEASE_LOCK_HELD=1
             ROOT=/opt/accounting-program-online
             git -C "$ROOT" fetch --no-tags origin main
             git -C "$ROOT" cat-file -e "$RELEASE_SHA^{commit}"

@@ -1,5 +1,8 @@
 #!/usr/bin/env bash
 set -euo pipefail
+umask 077
+source "$(dirname "$0")/release-lock.sh"
+accounting_release_lock
 
 TARGET_SHA="${1:-}"
 RELEASE_ROOT="${RELEASE_ROOT:-/opt/accounting-releases}"
