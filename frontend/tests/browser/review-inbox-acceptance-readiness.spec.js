@@ -54,9 +54,9 @@ test('Group 4: cash acceptance requires documented date, eligible account and ve
 
   const account = page.getByLabel('Financial account');
   await expect(account.locator('option')).toHaveCount(2);
-  await expect(account.locator('option')).not.toContainText('Inactive cash drawer');
-  await expect(account.locator('option')).not.toContainText('Expense GL account');
-  await expect(account.locator('option')).not.toContainText('USD bank account');
+  await expect(account).not.toContainText('Inactive cash drawer');
+  await expect(account).not.toContainText('Expense GL account');
+  await expect(account).not.toContainText('USD bank account');
 
   const accept = page.getByRole('button', { name: 'Accept into accounting' });
   await expect(accept).toBeDisabled();
