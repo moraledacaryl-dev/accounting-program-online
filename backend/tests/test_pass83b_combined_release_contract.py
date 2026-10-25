@@ -23,6 +23,12 @@ def test_combined_pass83_and_runtime_cache_release_contract():
     prepare_release = (
         ROOT / 'scripts/release/prepare-release.sh'
     ).read_text()
+    service_access = (
+        ROOT / 'scripts/release/set-release-permissions.sh'
+    ).read_text()
+    verify_release = (
+        ROOT / 'scripts/release/verify-release.sh'
+    ).read_text()
     activate_release = (
         ROOT / 'scripts/release/activate-release.sh'
     ).read_text()
@@ -40,9 +46,11 @@ def test_combined_pass83_and_runtime_cache_release_contract():
     assert "setNotice('Bill saved.')" in payable_page
 
     cache_path = 'frontend/.next/cache/images'
-    assert cache_path in prepare_release
-    assert 'install -d -o hiddenoasis -g hiddenoasis -m 0750' in prepare_release
+    assert 'bash "$RELEASE/scripts/release/set-release-permissions.sh" "$RELEASE"' in prepare_release
+    assert cache_path in service_access
+    assert 'install -d -o hiddenoasis -g hiddenoasis -m 0750' in service_access
     assert cache_path in activate_release
     assert "hiddenoasis:hiddenoasis" in activate_release
-    assert 'sudo -u hiddenoasis test -w' in prepare_release
+    assert 'runuser -u hiddenoasis -- test -w' in service_access
+    assert 'runuser -u hiddenoasis -- test -r' in verify_release
     assert 'sudo -u hiddenoasis test -w' in activate_release
