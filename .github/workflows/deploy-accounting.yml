@@ -1,6 +1,12 @@
 name: Deploy Accounting
 
 on:
+  workflow_call:
+    inputs:
+      release_sha:
+        description: 'Exact 40-character commit SHA from main to deploy'
+        required: true
+        type: string
   workflow_dispatch:
     inputs:
       release_sha:
