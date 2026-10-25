@@ -10,7 +10,6 @@ import {
   retryIntegrationReviewItem,
 } from '../../lib/api';
 import { fetchFinancialAccounts } from '../../lib/cashflowApi';
-import { businessDateISO } from '../../lib/businessDate';
 
 const effectLabels = {
   cash_in: 'Cash In',
@@ -22,6 +21,14 @@ const effectLabels = {
   folio_charge: 'Folio Charge',
   reference_only: 'Reference',
 };
+
+const MONETARY_ACCOUNT_TYPES = new Set(['cash_drawer', 'petty_cash', 'safe', 'bank', 'ewallet']);
+
+function eligibleMonetaryAccount(account, currency) {
+  return account?.is_active === true
+    && MONETARY_ACCOUNT_TYPES.has(String(account.account_type || '').trim().toLowerCase())
+    && String(account.currency || 'PHP').toUpperCase() === String(currency || 'PHP').toUpperCase();
+}
 
 function formatMoney(item) {
   return Number(item.amount || 0).toLocaleString(undefined, {
@@ -105,14 +112,31 @@ export default function ReviewInboxPage() {
   const dirty = Object.keys(filters).some((key) => filters[key] !== appliedFilters[key]);
 
   const counts = summary?.by_status || {};
+  const isCashReview = ['cash_in', 'cash_out', 'settlement'].includes(selected?.financial_effect);
+  const eligibleAccounts = accounts.filter((account) => eligibleMonetaryAccount(account, selected?.currency));
+  const selectedAccountValid = eligibleAccounts.some((account) => Number(account.id) === Number(selected?.proposed_account_id));
+  const canAccept = selected?.status === 'ready_for_review' && !busy
+    && Boolean(selected.transaction_date)
+    && (!isCashReview || (selectedAccountValid && Boolean(String(selected.review_payment_method || '').trim())));
 
   async function accept(item) {
+    const cashEffect = ['cash_in', 'cash_out', 'settlement'].includes(item.financial_effect);
+    if (!item.transaction_date || (cashEffect && (
+      !accounts.some((account) => Number(account.id) === Number(item.proposed_account_id)
+        && eligibleMonetaryAccount(account, item.currency))
+      || !String(item.review_payment_method || '').trim()
+    ))) {
+      setError('Confirm the posting date, and for cash events the actual monetary account and payment method.');
+      return;
+    }
     setBusy(true);
     try {
       await acceptIntegrationReviewItem(item.id, {
         account_id: item.proposed_account_id || null,
         actual_amount_paid: item.actual_amount_paid === '' || item.actual_amount_paid == null ? null : Number(item.actual_amount_paid),
-        transaction_date: item.transaction_date || businessDateISO(),
+        transaction_date: item.transaction_date,
+        payment_method: item.review_payment_method?.trim() || undefined,
+        notes: item.review_notes?.trim() || undefined,
         category: item.proposed_links?.category || 'Connected App',
       });
       setSelected(null);
@@ -127,7 +151,7 @@ export default function ReviewInboxPage() {
   async function reject(item) {
     setBusy(true);
     try {
-      await rejectIntegrationReviewItem(item.id, { reason: 'Rejected during Accounting review' });
+      await rejectIntegrationReviewItem(item.id, { reason: item.review_rejection_reason.trim() });
       setSelected(null);
       refreshInbox();
     } catch (err) {
@@ -288,8 +312,8 @@ export default function ReviewInboxPage() {
           <div className="row wrap">
             {selected.status === 'ready_for_review' ? (
               <>
-                <button type="button" disabled={busy || (['cash_in', 'cash_out', 'settlement'].includes(selected.financial_effect) && !selected.proposed_account_id)} onClick={() => accept(selected)}>{busy ? 'Processing…' : 'Accept into accounting'}</button>
-                <button type="button" className="danger" disabled={busy} onClick={() => reject(selected)}>Reject</button>
+                <button type="button" disabled={!canAccept} onClick={() => accept(selected)}>{busy ? 'Processing…' : 'Accept into accounting'}</button>
+                <button type="button" className="danger" disabled={busy || !selected.review_rejection_reason?.trim()} onClick={() => reject(selected)}>Reject</button>
               </>
             ) : null}
             {['validation_failed', 'rejected'].includes(selected.status) ? <button type="button" disabled={busy} onClick={() => retry(selected)}>Retry processing</button> : null}
@@ -306,20 +330,66 @@ export default function ReviewInboxPage() {
               <div className="review-detail-amount">{formatMoney(selected)}</div>
             </div>
 
+            {(selected.validation?.errors?.length || selected.validation?.warnings?.length) ? (
+              <section className="review-validation-findings" aria-label="Intake validation findings">
+                <strong>Intake validation findings</strong>
+                <p className="small muted">These were recorded when Accounting received the event. The server rechecks its financial rules on acceptance.</p>
+                {(selected.validation.errors || []).map((message, index) => <p key={`error-${index}`} className="error-text">{message}</p>)}
+                {(selected.validation.warnings || []).map((message, index) => <p key={`warning-${index}`} className="small">{message}</p>)}
+              </section>
+            ) : null}
+
             <div className="review-routing-card">
               <strong>Acceptance result</strong>
               <p className="small muted">
                 Cash and settlement events create one Money Transaction. Journal-only events create a journal entry.
                 Receivable and payable events create an open balance. Folio and reference effects retain their source link.
               </p>
-              {['cash_in', 'cash_out', 'settlement'].includes(selected.financial_effect) ? (
+              {selected.status === 'ready_for_review' ? (
                 <label>
-                  Financial account
-                  <select value={selected.proposed_account_id || ''} onChange={(event) => setSelected({ ...selected, proposed_account_id: Number(event.target.value) })}>
-                    <option value="">Select account</option>
-                    {accounts.map((account) => <option key={account.id} value={account.id}>{account.name}</option>)}
-                  </select>
+                  Accounting posting date (required)
+                  <input type="date" value={selected.transaction_date || ''}
+                    onChange={(event) => setSelected({ ...selected, transaction_date: event.target.value })} />
+                  <span className="small muted">Use the documented transaction date; the current date is not filled in automatically.</span>
                 </label>
+              ) : null}
+              {isCashReview ? (
+                <>
+                  <label>
+                    Financial account (required)
+                    <select aria-label="Financial account" value={selectedAccountValid ? selected.proposed_account_id : ''}
+                      onChange={(event) => setSelected({ ...selected, proposed_account_id: Number(event.target.value) || null })}>
+                      <option value="">Select the actual receiving or paying account</option>
+                      {eligibleAccounts.map((account) => <option key={account.id} value={account.id}>{account.name}</option>)}
+                    </select>
+                  </label>
+                  {selected.proposed_account_id && !selectedAccountValid ? (
+                    <p className="error-text" role="status">The previously proposed account is unavailable, inactive, nonmonetary, or uses a different currency. Select a valid account supported by evidence.</p>
+                  ) : null}
+                  <label>
+                    Verified payment method (required)
+                    <input aria-label="Verified payment method" type="text" value={selected.review_payment_method || ''}
+                      placeholder="e.g. cash, bank_transfer, gcash" autoComplete="off"
+                      onChange={(event) => setSelected({ ...selected, review_payment_method: event.target.value })} />
+                  </label>
+                  {selected.proposed_links?.payment_method ? (
+                    <p className="small muted">Source suggested: {selected.proposed_links.payment_method}. Verify against the original evidence before entering the method above.</p>
+                  ) : null}
+                </>
+              ) : null}
+              {selected.status === 'ready_for_review' ? (
+                <>
+                  <label>
+                    Review notes or evidence reference (optional)
+                    <input aria-label="Review notes" type="text" value={selected.review_notes || ''}
+                      onChange={(event) => setSelected({ ...selected, review_notes: event.target.value })} />
+                  </label>
+                  <label>
+                    Rejection reason (required to reject)
+                    <input aria-label="Rejection reason" type="text" value={selected.review_rejection_reason || ''}
+                      onChange={(event) => setSelected({ ...selected, review_rejection_reason: event.target.value })} />
+                  </label>
+                </>
               ) : null}
               {selected.source_app === 'staff' && selected.financial_effect === 'cash_out' && selected.source_event_id?.endsWith(':Paid') ? (
                 <div className="stack" style={{ gap: '0.5rem' }}>
@@ -366,14 +436,6 @@ export default function ReviewInboxPage() {
                   <p className="small muted">
                     This one review settles the matching approved payroll liability, so you do not need to process a separate Approved row.
                   </p>
-                  <label>
-                    Payment date
-                    <input
-                      type="date"
-                      value={selected.transaction_date || businessDateISO()}
-                      onChange={(event) => setSelected({ ...selected, transaction_date: event.target.value })}
-                    />
-                  </label>
                   <label>
                     Actual amount paid
                     <input

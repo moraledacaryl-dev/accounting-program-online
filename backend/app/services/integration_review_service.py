@@ -564,7 +564,7 @@ def _positive_pos_room_charge_amount(payload: dict, fallback_amount: float) -> f
     return amount
 
 
-def _current_validation(db: Session, row: IntegrationReviewItem) -> dict:
+def _current_validation(db: Session, row: IntegrationReviewItem, *, selected_account_id: int | None = None) -> dict:
     payload = {
         'source_app': row.source_app,
         'source_event_id': row.source_event_id,
@@ -574,7 +574,7 @@ def _current_validation(db: Session, row: IntegrationReviewItem) -> dict:
         'financial_effect': row.financial_effect,
         'amount': row.amount,
         'currency': row.currency,
-        'proposed_account_id': row.proposed_account_id,
+        'proposed_account_id': selected_account_id if selected_account_id is not None else row.proposed_account_id,
         'proposed_journal': _loads(row.proposed_journal_json),
         'proposed_links': _loads(row.proposed_links_json),
         'payload': _loads(row.payload_json),
@@ -589,7 +589,12 @@ def accept_item(db: Session, item_id: int, decision: IntegrationReviewDecision, 
     if row.status != 'ready_for_review':
         raise ValueError('Only validated items ready for review can be accepted.')
 
-    validation = _current_validation(db, row)
+    # Reviewers may replace an outdated source-proposed cash account.
+    # Validate the actual reviewer selection before any financial posting.
+    validation = _current_validation(
+        db, row,
+        selected_account_id=decision.account_id if row.financial_effect in CASH_EFFECTS else None,
+    )
     row.validation_json = json.dumps(validation)
     if not validation['valid']:
         row.status = 'validation_failed'
