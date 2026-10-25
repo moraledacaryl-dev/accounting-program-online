@@ -42,6 +42,9 @@ jobs:
       - name: Validate Pass 71 contract
         run: bash scripts/validate-pass71-source.sh
 
+      - name: Reproduce restrictive-umask release access on isolated synthetic files
+        run: sudo bash scripts/release/test-release-service-access.sh
+
       - name: Reject mutable production paths in canonical units
         run: |
           set -euo pipefail

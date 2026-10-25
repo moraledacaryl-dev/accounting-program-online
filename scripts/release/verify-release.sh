@@ -31,6 +31,11 @@ test "$(manifest_value frontend_env_sha256)" = "$(sha256sum "$FRONTEND_ENV" | aw
 test "$(manifest_value frontend_build_id)" = "$(cat "$RELEASE/frontend/.next/BUILD_ID")"
 test -x "$RELEASE/backend/.venv/bin/python"
 test -x "$RELEASE/frontend/node_modules/.bin/next"
+test "$(stat -c '%U:%G' "$RELEASE")" = "root:hiddenoasis"
+runuser -u hiddenoasis -- test -r "$RELEASE/frontend/.next/BUILD_ID"
+runuser -u hiddenoasis -- test -x "$RELEASE/backend/.venv/bin/python"
+runuser -u hiddenoasis -- test -x "$RELEASE/frontend/node_modules/.bin/next"
+runuser -u hiddenoasis -- test -w "$RELEASE/frontend/.next/cache/images"
 
 if "$RELEASE/frontend/node_modules/.bin/next" --version | grep -q '^Next.js '; then :; else exit 1; fi
 
