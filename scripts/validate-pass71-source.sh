@@ -7,7 +7,8 @@ for script in \
   scripts/release/prepare-release.sh \
   scripts/release/verify-release.sh \
   scripts/release/activate-release.sh \
-  scripts/release/rollback-release.sh
+  scripts/release/rollback-release.sh \
+  scripts/release/release-lock.sh
 do
   bash -n "$script"
 done
@@ -40,6 +41,13 @@ grep -Fq 'Persistent uploads: $DEPLOY_UPLOADS_DIR' scripts/release/activate-rele
 grep -Fq 'for _ in $(seq 1 30); do' scripts/release/rollback-release.sh
 grep -Fq 'curl -fsS http://127.0.0.1:8000/healthz >/dev/null 2>&1 && curl -fsSI http://127.0.0.1:3000 >/dev/null 2>&1 && break' scripts/release/rollback-release.sh
 grep -Fq 'sha256=' scripts/dr/backup-accounting.sh
+grep -Fq 'accounting_release_lock' scripts/dr/backup-accounting.sh
+grep -Fq 'accounting_release_lock' scripts/release/activate-release.sh
+grep -Fq 'accounting_release_lock' scripts/release/rollback-release.sh
+grep -Fq 'flock -n 200' .github/workflows/deploy-accounting.yml
+grep -Fq 'accounting-backup.timer' scripts/release/activate-release.sh
+grep -Fq 'OnCalendar=*-*-* *:30:00' deploy/systemd/accounting-backup.timer
+grep -Fq '/opt/accounting-current/scripts/dr/backup-accounting.sh' deploy/systemd/accounting-backup.service
 grep -Fq 'pg_restore --exit-on-error' scripts/dr/restore-rehearsal.sh
 grep -Fq 'merge-base --is-ancestor' scripts/release/prepare-release.sh
 grep -Fq 'backend_env_sha256' scripts/release/verify-release.sh

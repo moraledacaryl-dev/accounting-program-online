@@ -1,0 +1,16 @@
+[Unit]
+Description=Hidden Oasis Accounting database and uploads backup
+After=postgresql.service
+Requires=postgresql.service
+
+[Service]
+Type=oneshot
+User=root
+Group=root
+UMask=0077
+Environment=PYTHONDONTWRITEBYTECODE=1
+ExecStart=/bin/bash /opt/accounting-current/scripts/dr/backup-accounting.sh
+NoNewPrivileges=true
+PrivateTmp=true
+ProtectSystem=full
+ProtectHome=read-only

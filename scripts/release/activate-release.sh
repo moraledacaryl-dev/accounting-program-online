@@ -1,5 +1,8 @@
 #!/usr/bin/env bash
 set -euo pipefail
+umask 077
+source "$(dirname "$0")/release-lock.sh"
+accounting_release_lock
 
 if [ "$#" -ne 1 ]; then
   echo "Usage: $0 <40-character-git-sha>" >&2
@@ -60,6 +63,8 @@ install -o root -g root -m 0644 "$RELEASE/deploy/systemd/accounting-frontend.ser
 install -o root -g root -m 0644 "$RELEASE/deploy/systemd/accounting-operations-outbox.service" /etc/systemd/system/accounting-operations-outbox.service
 install -o root -g root -m 0644 "$RELEASE/deploy/systemd/accounting-beds24-reconcile.service" /etc/systemd/system/accounting-beds24-reconcile.service
 install -o root -g root -m 0644 "$RELEASE/deploy/systemd/accounting-beds24-reconcile.timer" /etc/systemd/system/accounting-beds24-reconcile.timer
+install -o root -g root -m 0644 "$RELEASE/deploy/systemd/accounting-backup.service" /etc/systemd/system/accounting-backup.service
+install -o root -g root -m 0644 "$RELEASE/deploy/systemd/accounting-backup.timer" /etc/systemd/system/accounting-backup.timer
 systemctl daemon-reload
 
 ln -sfn "$RELEASE" "${CURRENT_LINK}.new"
@@ -84,6 +89,8 @@ for _ in $(seq 1 30); do
 done
 curl -fsS http://127.0.0.1:8000/healthz >/dev/null
 curl -fsSI http://127.0.0.1:3000 >/dev/null
+systemctl enable --now accounting-backup.timer
+test "$(systemctl is-active accounting-backup.timer)" = active
 
 mkdir -p "$STATE_DIR"
 chmod 700 "$STATE_DIR"

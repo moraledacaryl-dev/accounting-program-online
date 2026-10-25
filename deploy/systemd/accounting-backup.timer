@@ -1,0 +1,11 @@
+[Unit]
+Description=Hourly Hidden Oasis Accounting database and uploads backup
+
+[Timer]
+OnCalendar=*-*-* *:30:00
+OnActiveSec=90s
+Persistent=true
+Unit=accounting-backup.service
+
+[Install]
+WantedBy=timers.target
