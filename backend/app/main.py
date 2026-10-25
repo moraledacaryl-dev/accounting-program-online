@@ -5,7 +5,9 @@ import shutil
 from uuid import uuid4
 
 from fastapi import Depends, FastAPI, Request
+from fastapi.exceptions import RequestValidationError
 from fastapi.middleware.cors import CORSMiddleware
+from fastapi.responses import JSONResponse
 from fastapi.staticfiles import StaticFiles
 from sqlalchemy import text
 from starlette.middleware.base import BaseHTTPMiddleware
@@ -53,6 +55,19 @@ app = FastAPI(
     redoc_url=None if settings.is_production else '/redoc',
     openapi_url=None if settings.is_production else '/openapi.json',
 )
+
+
+@app.exception_handler(RequestValidationError)
+async def request_validation_error(request: Request, exc: RequestValidationError):
+    # Pydantic errors may contain non-JSON NaN/Infinity input or entire private
+    # financial payloads. Keep actionable field/type/message details, without
+    # echoing rejected values or exception contexts into the response.
+    return JSONResponse(status_code=422, content={'detail': [
+        {'loc': error['loc'], 'msg': error['msg'], 'type': error['type']}
+        for error in exc.errors()
+    ]})
+
+
 allowed_origins = settings.cors_origin_list or ['*']
 allow_credentials = '*' not in allowed_origins
 

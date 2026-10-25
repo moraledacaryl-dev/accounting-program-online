@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import json
 import math
+from decimal import Decimal
 from datetime import datetime, timedelta, timezone
 from types import SimpleNamespace
 
@@ -16,6 +17,7 @@ from app.services.bir_service import ensure_date_unlocked
 from app.services.cashflow_service import FINANCIAL_ACCOUNT_TYPES, create_money_transaction, create_receivable
 from app.services.account_mapping_service import resolve_record_accounts
 from app.services.payable_adjustment_service import apply_purchase_return_adjustment
+from app.services.journal_integrity_service import money, validate_journal
 
 ALLOWED_EFFECTS = {
     'cash_in', 'cash_out', 'journal_only', 'receivable', 'payable', 'payable_adjustment',
@@ -54,13 +56,20 @@ def validate_review_payload(db: Session, payload: IntegrationReviewCreate | dict
     source_event_id = str(data.get('source_event_id') or '').strip()
     source_entity_type = str(data.get('source_entity_type') or '').strip()
     currency = str(data.get('currency') or 'PHP').strip().upper()
-    amount = float(data.get('amount') or 0)
     links = data.get('proposed_links') or {}
     journal = data.get('proposed_journal') or {}
     account_id = data.get('proposed_account_id')
 
     errors: list[str] = []
     warnings: list[str] = []
+
+    try:
+        amount = float(data.get('amount') or 0)
+        if not math.isfinite(amount):
+            raise ValueError()
+    except (ValueError, TypeError, OverflowError):
+        amount = 0
+        errors.append('amount must be a finite monetary number.')
 
     if not source_app:
         errors.append('source_app is required.')
@@ -100,12 +109,19 @@ def validate_review_payload(db: Session, payload: IntegrationReviewCreate | dict
         lines = _journal_lines(journal)
         if len(lines) < 2:
             errors.append('A journal proposal requires at least two lines.')
-        debit_total = 0.0
-        credit_total = 0.0
+        debit_total = Decimal(0)
+        credit_total = Decimal(0)
         for index, line in enumerate(lines, start=1):
+            if not isinstance(line, dict):
+                errors.append(f'Journal line {index} must be an object.')
+                continue
             code = str(line.get('account_code') or line.get('code') or '').strip()
-            debit = float(line.get('debit') or 0)
-            credit = float(line.get('credit') or 0)
+            try:
+                debit = money(line.get('debit'))
+                credit = money(line.get('credit'))
+            except ValueError:
+                errors.append(f'Journal line {index} requires finite monetary debit and credit values.')
+                continue
             if not code:
                 errors.append(f'Journal line {index} requires an account code.')
             if debit < 0 or credit < 0:
@@ -116,9 +132,9 @@ def validate_review_payload(db: Session, payload: IntegrationReviewCreate | dict
                 errors.append(f'Journal line {index} must contain a debit or credit amount.')
             debit_total += debit
             credit_total += credit
-        if round(debit_total, 2) != round(credit_total, 2):
-            errors.append('Proposed journal debits and credits must balance.')
-        if round(debit_total, 2) <= 0:
+        if debit_total != credit_total:
+            errors.append('Proposed journal debits and credits must balance exactly to four decimal places.')
+        if debit_total <= 0:
             errors.append('Proposed journal total must be greater than zero.')
         if amount and round(amount, 2) != round(debit_total, 2):
             warnings.append('Event amount differs from the proposed journal total.')
@@ -828,10 +844,17 @@ def accept_item(db: Session, item_id: int, decision: IntegrationReviewDecision, 
     elif effect == 'journal_only':
         journal = _loads(row.proposed_journal_json)
         lines = _journal_lines(journal)
-        debit_total = round(sum(float(line.get('debit') or 0) for line in lines), 2)
-        credit_total = round(sum(float(line.get('credit') or 0) for line in lines), 2)
-        if debit_total != credit_total or debit_total <= 0:
-            raise ValueError('Proposed journal must be balanced and greater than zero.')
+        pending_lines = [JournalLine(
+            account_code=str(line.get('account_code') or line.get('code') or '').strip(),
+            account_name=str(line.get('account_name') or line.get('name') or '').strip(),
+            debit=money(line.get('debit')),
+            credit=money(line.get('credit')),
+            memo=line.get('memo'),
+        ) for line in lines]
+        # Apply manual-ledger rules at acceptance as well as intake: source
+        # proposals may predate account deactivation or a validator correction.
+        # This must run before creating any posted entry or linked target.
+        debit_total, credit_total = validate_journal(db, transaction_date, pending_lines)
         entry = JournalEntry(
             entry_date=transaction_date,
             reference_no=source,
@@ -842,22 +865,16 @@ def accept_item(db: Session, item_id: int, decision: IntegrationReviewDecision, 
         )
         db.add(entry)
         db.flush()
-        for line in lines:
-            db.add(JournalLine(
-                journal_entry_id=entry.id,
-                account_code=str(line.get('account_code') or line.get('code') or '').strip(),
-                account_name=str(line.get('account_name') or line.get('name') or '').strip(),
-                debit=float(line.get('debit') or 0),
-                credit=float(line.get('credit') or 0),
-                memo=line.get('memo'),
-            ))
+        for line in pending_lines:
+            line.journal_entry_id = entry.id
+            db.add(line)
         record_audit(
             db,
             entity_type='journal_entry',
             entity_id=entry.id,
             action='posted_from_integration_review',
             user=_actor(username),
-            after={'reference_no': source, 'debit_total': debit_total, 'credit_total': credit_total},
+            after={'reference_no': source, 'debit_total': str(debit_total), 'credit_total': str(credit_total)},
             source_app=row.source_app,
             correlation_id=row.correlation_id,
         )
