@@ -33,6 +33,13 @@ def main():
             return result.stdout
 
         run("init")
+        recent = datetime.now(timezone.utc) - timedelta(minutes=5)
+        run("backup", "--time", recent.strftime("%Y-%m-%d %H:%M:%S"),
+            "--host", "hidden-oasis-accounting", "--tag", "scheduled",
+            "--tag", "source:accounting-" + recent.strftime("%Y%m%dT%H%M%SZ"), "--", str(source))
+        no_removal = json.loads(run("forget", "--dry-run", *POLICY))
+        if len(no_removal) != 1 or no_removal[0].get("remove") is not None:
+            raise RuntimeError("Synthetic single-snapshot retention shape changed")
         old = datetime.now(timezone.utc).replace(hour=2, minute=0, second=0, microsecond=0) - timedelta(days=55)
         for minute in range(6):
             when = old + timedelta(minutes=minute)
@@ -40,10 +47,6 @@ def main():
             run("backup", "--time", when.strftime("%Y-%m-%d %H:%M:%S"),
                 "--host", "hidden-oasis-accounting", "--tag", "scheduled",
                 "--tag", "source:accounting-" + stamp, "--", str(source))
-        recent = datetime.now(timezone.utc) - timedelta(minutes=5)
-        run("backup", "--time", recent.strftime("%Y-%m-%d %H:%M:%S"),
-            "--host", "hidden-oasis-accounting", "--tag", "scheduled",
-            "--tag", "source:accounting-" + recent.strftime("%Y%m%dT%H%M%SZ"), "--", str(source))
         before = json.loads(run("snapshots"))
         latest = max(before, key=lambda item: item["time"])["id"]
         groups = json.loads(run("forget", "--dry-run", *POLICY))

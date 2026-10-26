@@ -70,12 +70,21 @@ def retention_plan(client: Restic, *, now: datetime | None = None) -> tuple[dict
     if not isinstance(groups, list) or len(groups) != 1 or groups[0].get("host") != HOST:
         raise OffsiteError("Unexpected Accounting retention groups")
     group = groups[0]
-    kept = {item.get("id") for item in group.get("keep", [])}
-    removed = {item.get("id") for item in group.get("remove", [])}
+    keep_items = group.get("keep")
+    remove_items = group.get("remove")
+    # Restic serializes an empty removal list as null in its JSON dry run.
+    if remove_items is None:
+        remove_items = []
+    if not isinstance(keep_items, list) or not isinstance(remove_items, list) or not all(
+        isinstance(item, dict) for item in (*keep_items, *remove_items)
+    ):
+        raise OffsiteError("Unexpected Accounting retention plan")
+    kept = {item.get("id") for item in keep_items}
+    removed = {item.get("id") for item in remove_items}
     if (not kept or None in kept or None in removed or kept & removed
             or kept | removed != set(snapshots)
-            or len(kept) != len(group.get("keep", []))
-            or len(removed) != len(group.get("remove", []))):
+            or len(kept) != len(keep_items)
+            or len(removed) != len(remove_items)):
         raise OffsiteError("Accounting retention plan does not cover repository")
     if any((current - _snapshot_time(snapshots[identifier])).total_seconds() < 48 * 3600 for identifier in removed):
         raise OffsiteError("Accounting retention would remove a recent snapshot")
