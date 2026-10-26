@@ -89,7 +89,7 @@ def list_items(
     q: str | None = None,
     limit: int = Query(200, ge=1, le=1000),
     db: Session = Depends(get_db),
-    user=Depends(require_any_permissions('integrations.view', 'approvals.view')),
+    user=Depends(require_any_permissions('review_inbox.view', 'integrations.view', 'approvals.view')),
 ):
     return list_review_items(
         db,
@@ -110,7 +110,7 @@ def list_items_page(
     page: int = Query(1, ge=1),
     page_size: int = Query(25, ge=1, le=100),
     db: Session = Depends(get_db),
-    user=Depends(require_any_permissions('integrations.view', 'approvals.view')),
+    user=Depends(require_any_permissions('review_inbox.view', 'integrations.view', 'approvals.view')),
 ):
     """Read-only stable page of actionable/review history, with full filtered total."""
     return paginated_review_items(
@@ -122,7 +122,7 @@ def list_items_page(
 @router.get('/summary')
 def get_summary(
     db: Session = Depends(get_db),
-    user=Depends(require_any_permissions('integrations.view', 'approvals.view')),
+    user=Depends(require_any_permissions('review_inbox.view', 'integrations.view', 'approvals.view')),
 ):
     return summary(db)
 
@@ -142,7 +142,7 @@ def get_accepted_linkage_audit(
 def detail(
     item_id: int,
     db: Session = Depends(get_db),
-    user=Depends(require_any_permissions('integrations.view', 'approvals.view')),
+    user=Depends(require_any_permissions('review_inbox.view', 'integrations.view', 'approvals.view')),
 ):
     try:
         return _serialize(get_item(db, item_id))

@@ -37,8 +37,8 @@ export const ROLE_PERMISSION_FALLBACKS = {
     'cashflow.view', 'cashflow.money_in', 'cashflow.reconcile',
   ],
   cashier: [
-    'dashboard.view', 'folios.view', 'cashflow.view', 'cashflow.money_in', 'cashflow.reconcile',
-    'integrations.view',
+    'dashboard.view', 'review_inbox.view', 'folios.view', 'cashflow.view',
+    'cashflow.money_in', 'cashflow.reconcile',
   ],
   auditor: [
     'dashboard.view', 'bookings.view', 'folios.view', 'guests.view',
