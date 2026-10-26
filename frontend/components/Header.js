@@ -103,7 +103,7 @@ function SearchResults({ results, error, onOpen }) {
 export default function Header() {
   const pathname = usePathname();
   const router = useRouter();
-  const { mobileNavOpen, openMobileNav, user } = useAppShell();
+  const { mobileNavOpen, openMobileNav, user, can } = useAppShell();
   const profileRef = useRef(null);
   const desktopSearchRef = useRef(null);
   const mobileSearchRef = useRef(null);
@@ -261,9 +261,11 @@ export default function Header() {
           </button>
         )}
 
-        <Link href="/review-inbox" className="header-icon-button" aria-label="Open Review Inbox" title="Review Inbox">
-          <NavIcon name="review" size={18} />
-        </Link>
+        {(can('integrations.view') || can('approvals.view')) && (
+          <Link href="/review-inbox" className="header-icon-button" aria-label="Open Review Inbox" title="Review Inbox">
+            <NavIcon name="review" size={18} />
+          </Link>
+        )}
 
         <div className="profile-menu-wrap" ref={profileRef}>
           <button

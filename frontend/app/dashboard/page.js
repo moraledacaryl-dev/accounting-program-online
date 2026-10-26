@@ -121,6 +121,7 @@ function DashboardTable({ card }) {
 
 export default function DashboardPage() {
   const { user } = useAppShell();
+  const canAny = (...keys) => keys.some((key) => canAccess(user, key));
   const [summary, setSummary] = useState(null);
   const [error, setError] = useState('');
   const financeView = canAccess(user, 'reports.view') || canAccess(user, 'journals.view');
@@ -181,41 +182,41 @@ export default function DashboardPage() {
   ];
 
   const actionItems = [
-    ...(financeView ? [{
+    ...(canAny('reports.view') ? [{
       href: '/reconciliation-center',
       title: 'Review reconciliation workstreams',
       note: 'Journal evidence, cash close, integration intake, and period-close checks',
       tone: 'info', label: 'Open',
     }] : []),
-    ...(financeView ? [{ href: '/approvals', title: 'Review pending approvals', note: `${plain(summary?.pending_approvals || 0)} items awaiting approval`, tone: summary?.pending_approvals ? 'warn' : 'ok', label: summary?.pending_approvals ? 'Review' : 'Clear' }] : []),
-    {
+    ...(canAny('approvals.view') ? [{ href: '/approvals', title: 'Review pending approvals', note: `${plain(summary?.pending_approvals || 0)} items awaiting approval`, tone: summary?.pending_approvals ? 'warn' : 'ok', label: summary?.pending_approvals ? 'Review' : 'Clear' }] : []),
+    ...(canAny('review_inbox.act') ? [{
       href: '/review-inbox',
       title: 'Validate connected-app events',
       note: `${plain(pendingReview)} event${pendingReview === 1 ? '' : 's'} waiting for Accounting review`,
       tone: pendingReview > 0 ? 'warn' : 'ok',
       label: pendingReview > 0 ? 'Review' : 'Clear',
-    },
-    {
+    }] : []),
+    ...(canAny('folios.manage') ? [{
       href: '/room-folios',
       title: 'Resolve guest balances',
       note: `${plain(openFolioAlerts.length)} open folio exception${openFolioAlerts.length === 1 ? '' : 's'}`,
       tone: openFolioAlerts.length ? 'warn' : 'ok',
       label: openFolioAlerts.length ? 'Due' : 'Clear',
-    },
-    {
+    }] : []),
+    ...(canAny('bookings.view', 'cashflow.view', 'reports.view') ? [{
       href: '/channel-payouts',
       title: 'Reconcile channel settlements',
       note: 'Compare expected payout, commission, received amount, and variance',
       tone: 'info',
       label: 'Open',
-    },
-    {
+    }] : []),
+    ...(canAny('cashflow.reconcile') ? [{
       href: '/cashflow/daily-cash',
       title: 'Complete cash close',
       note: 'Count drawers, explain variances, and submit the daily close',
       tone: 'info',
       label: 'Open',
-    },
+    }] : []),
   ];
 
   const integrations = [
@@ -225,6 +226,7 @@ export default function DashboardPage() {
       tone: 'info',
       text: `${plain(summary?.low_stock_count || 0)} low-stock alert${Number(summary?.low_stock_count || 0) === 1 ? '' : 's'}. Stock quantities are maintained in Inventory & Procurement.`,
       href: '/inventory-items',
+      permission: 'inventory.view',
     },
     {
       name: 'Staff & Payroll',
@@ -232,6 +234,7 @@ export default function DashboardPage() {
       tone: 'info',
       text: `${plain(summary?.people_payroll?.payroll_periods_pending || 0)} payroll period${Number(summary?.people_payroll?.payroll_periods_pending || 0) === 1 ? '' : 's'} pending.`,
       href: '/payroll-periods',
+      permission: 'payroll_periods.view',
     },
     {
       name: 'POS Cloud',
@@ -239,6 +242,7 @@ export default function DashboardPage() {
       tone: 'info',
       text: `${plain((commandCenter.room_charge_review || []).length)} recent room-charge line${(commandCenter.room_charge_review || []).length === 1 ? '' : 's'} available for review.`,
       href: '/restaurant-ops',
+      permission: 'restaurant.view',
     },
     {
       name: 'Beds24',
@@ -246,8 +250,9 @@ export default function DashboardPage() {
       tone: String(beds24.status || '').toLowerCase().includes('fail') ? 'danger' : 'info',
       text: beds24.processed_at ? `Last processed: ${beds24.processed_at}. Check integration logs for current status.` : 'No successful sync time is available. Check integration logs.',
       href: '/integrations/beds24',
+      permission: 'integrations.view',
     },
-  ];
+  ].filter((item) => canAny(item.permission));
 
   return (
     <div className="dashboard-page dashboard-page--operational">
@@ -259,9 +264,9 @@ export default function DashboardPage() {
           {!!error && <div className="notice danger" style={{ marginTop: 12 }}>{error}</div>}
         </div>
         <div className="dashboard-actions">
-          {financeView ? <Link href="/reports" className="button-link primary-link">Review financial reports</Link> : <Link href="/bookings?create=1" className="button-link primary-link">New booking</Link>}
-          {financeView ? <Link href="/cashflow/daily-cash" className="button-link secondary-link">Daily cash close</Link> : <Link href="/bookings/calendar" className="button-link secondary-link">Open calendar</Link>}
-          <Link href="/start-of-day" className="button-link secondary-link">Start-of-day checks</Link>
+          {financeView ? canAny('reports.view') && <Link href="/reports" className="button-link primary-link">Review financial reports</Link> : canAny('bookings.create') && <Link href="/bookings?create=1" className="button-link primary-link">New booking</Link>}
+          {financeView ? canAny('cashflow.view') && <Link href="/cashflow/daily-cash" className="button-link secondary-link">Daily cash close</Link> : canAny('bookings.view') && <Link href="/bookings/calendar" className="button-link secondary-link">Open calendar</Link>}
+          {canAny('dashboard.view', 'cashflow.view') && <Link href="/start-of-day" className="button-link secondary-link">Start-of-day checks</Link>}
         </div>
       </section>
 
@@ -282,7 +287,7 @@ export default function DashboardPage() {
           <section className="hotel-performance-section">
             <div className="dashboard-section-heading">
               <div><div className="dashboard-eyebrow">Hotel performance</div><h2>{hotel.period_label || 'Current month'}</h2></div>
-              <Link href="/bookings/calendar" className="button-link secondary-link">Booking calendar</Link>
+              {canAny('bookings.view') && <Link href="/bookings/calendar" className="button-link secondary-link">Booking calendar</Link>}
             </div>
             <div className="hotel-kpis">
               <article><span>Occupancy MTD</span><strong>{hasHotelInventory ? percent(hotelMonth.occupancy_rate) : '—'}</strong><small>{hasHotelInventory ? delta(hotelMonth.occupancy_rate, previousHotelMonth.occupancy_rate, 'percent') : 'No active room inventory'}</small></article>
@@ -322,7 +327,7 @@ export default function DashboardPage() {
                   <h2>Today’s guest movement</h2>
                   <p>Arrivals, departures, and in-house stays affecting collections and settlement.</p>
                 </div>
-                <Link href="/bookings/calendar" className="button-link secondary-link">Calendar</Link>
+                {canAny('bookings.view') && <Link href="/bookings/calendar" className="button-link secondary-link">Calendar</Link>}
               </div>
               <div className="movement-tabs" role="group" aria-label="Guest movement">
                 {[
@@ -337,12 +342,17 @@ export default function DashboardPage() {
               </div>
               <div className="movement-list">
                 {rows.slice(0, 8).map((row) => (
-                  <Link href={`/bookings/${row.id}`} className="movement-row" key={`${activeTab}-${row.id}`}>
+                  (canAny('bookings.view') ? <Link href={`/bookings/${row.id}`} className="movement-row" key={`${activeTab}-${row.id}`}>
                     <span><strong>{row.guest_name || 'Guest not set'}</strong><small>{row.booking_ref || row.reference_no || `Booking #${row.id}`}</small></span>
                     <span><strong>{row.room_name || 'Room pending'}</strong><small>{row.check_in || '—'} to {row.check_out || '—'}</small></span>
                     <span><strong>{row.channel || 'Direct'}</strong><small>{String(row.status || activeTab).replaceAll('_', ' ')}</small></span>
                     <span className="movement-amount">{currency(row.folio_balance || 0)}<small>balance</small></span>
-                  </Link>
+                  </Link> : <div className="movement-row" key={`${activeTab}-${row.id}`}>
+                    <span><strong>{row.guest_name || 'Guest not set'}</strong><small>{row.booking_ref || row.reference_no || `Booking #${row.id}`}</small></span>
+                    <span><strong>{row.room_name || 'Room pending'}</strong><small>{row.check_in || '—'} to {row.check_out || '—'}</small></span>
+                    <span><strong>{row.channel || 'Direct'}</strong><small>{String(row.status || activeTab).replaceAll('_', ' ')}</small></span>
+                    <span className="movement-amount">{currency(row.folio_balance || 0)}<small>balance</small></span>
+                  </div>)
                 ))}
                 {!rows.length && <div className="empty-state"><strong>No {activeTab.replaceAll('_', '-')} records today</strong><span>There are no records requiring action in this view.</span></div>}
               </div>
@@ -364,7 +374,7 @@ export default function DashboardPage() {
           <section className="dashboard-panel dashboard-integrations-panel">
             <div className="dashboard-panel-head">
               <div><h2>Connected applications</h2><p>Retained records do not prove a live connection. Open an integration to verify its latest activity.</p></div>
-              <Link href="/review-inbox" className="button-link secondary-link">Open Review Inbox</Link>
+              {canAny('integrations.view', 'approvals.view') && <Link href="/review-inbox" className="button-link secondary-link">Open Review Inbox</Link>}
             </div>
             <div className="dashboard-integrations">
               {integrations.map((item) => (
