@@ -1,4 +1,5 @@
 const { test, expect } = require('@playwright/test');
+const { default: AxeBuilder } = require('@axe-core/playwright');
 
 const sourceItem = {
   id: 14, source_app: 'pos', source_event_id: 'synthetic-pos-refund-14',
@@ -83,6 +84,28 @@ test('Cashier can open the dedicated read-only Review Inbox without decision con
   await expect(page.getByText('Review Inbox approval permission is required', { exact: false })).toBeVisible();
   await expect(page.getByRole('button', { name: 'Accept into accounting' })).toHaveCount(0);
   await expect(page.getByRole('button', { name: 'Reject', exact: true })).toHaveCount(0);
+  expect(requests).toHaveLength(0);
+});
+
+test('received-source summary cards keep readable status text at desktop and mobile widths', async ({ page }) => {
+  const requests = [];
+  await mockReviewApi(page, requests);
+  await page.route('**/api/integration-review/summary', route => route.fulfill({
+    status: 200, contentType: 'application/json',
+    body: JSON.stringify({ needs_review: 1, by_status: { ready_for_review: 1 },
+      by_source: { pos: { needs_review: 1, validation_failed: 0, accepted: 0, total: 1 } } }),
+  }));
+  const violationsByWidth = [];
+  for (const width of [1440, 390]) {
+    await page.setViewportSize({ width, height: 844 });
+    await page.goto('/review-inbox');
+    await expect(page.locator('.review-source-coverage-card')).toHaveCount(1);
+    const screenshotDir = process.env.ACCOUNTING_AUDIT_SCREENSHOT_DIR;
+    if (screenshotDir) await page.screenshot({ path: `${screenshotDir}/review-source-coverage-${width}.png`, fullPage: true });
+    const audit = await new AxeBuilder({ page }).include('.review-source-coverage').withTags(['wcag2a', 'wcag2aa', 'wcag21aa']).analyze();
+    violationsByWidth.push({ width, violations: audit.violations.map(({ id, nodes }) => ({ id, targets: nodes.map(node => node.target) })) });
+  }
+  expect(violationsByWidth).toEqual([{ width: 1440, violations: [] }, { width: 390, violations: [] }]);
   expect(requests).toHaveLength(0);
 });
 
