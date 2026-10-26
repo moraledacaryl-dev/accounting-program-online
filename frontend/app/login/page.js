@@ -3,6 +3,17 @@
 import { useState } from 'react';
 import { login } from '../../lib/api';
 
+function safeReturnPath(candidate) {
+  if (!candidate || !candidate.startsWith('/') || candidate.startsWith('//')) return '/dashboard';
+  try {
+    const target = new URL(candidate, window.location.origin);
+    if (target.origin !== window.location.origin || target.pathname === '/login') return '/dashboard';
+    return `${target.pathname}${target.search}${target.hash}`;
+  } catch {
+    return '/dashboard';
+  }
+}
+
 export default function LoginPage() {
   const [username, setUsername] = useState('');
   const [password, setPassword] = useState('');
@@ -24,8 +35,7 @@ export default function LoginPage() {
     try {
       await login({ username: username.trim(), password });
       const searchParams = new URLSearchParams(window.location.search);
-      const next = searchParams.get('next') || '/';
-      window.location.href = next.startsWith('/') && !next.startsWith('//') ? next : '/';
+      window.location.href = safeReturnPath(searchParams.get('next'));
     } catch (requestError) {
       setError(requestError.message || 'Invalid username or password.');
       setBusy(false);
@@ -49,6 +59,7 @@ export default function LoginPage() {
             Username
             <input
               data-drawer-autofocus
+              autoFocus
               autoComplete="username"
               value={username}
               onChange={(event) => setUsername(event.target.value)}

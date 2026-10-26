@@ -19,7 +19,8 @@ for (const path of ['/', '/dashboard', '/staff-guide', '/journals']) {
     } finally {
       releaseSession();
     }
-    await expect(page).toHaveURL(/\/login$/);
+    await expect(page).toHaveURL(/\/login(?:\?.*)?$/);
+    expect(new URL(page.url()).searchParams.get('next')).toBe(path === '/' ? null : path);
     await expect(page.getByRole('button', { name: 'Sign in', exact: true })).toBeVisible();
     await expect(page.locator('.app-shell')).toHaveCount(0);
   });
@@ -35,7 +36,8 @@ test('session expiry during use removes the shell and opens sign-in', async ({ p
   await page.goto('/staff-guide');
   await expect(page.locator('.app-shell')).toBeVisible();
   await page.getByRole('textbox', { name: 'Search guests, bookings, folios, and records' }).fill('test');
-  await expect(page).toHaveURL(/\/login$/);
+  await expect(page).toHaveURL(/\/login(?:\?.*)?$/);
+  expect(new URL(page.url()).searchParams.get('next')).toBe('/staff-guide');
   await expect(page.locator('.app-shell')).toHaveCount(0);
   await expect(page.getByRole('button', { name: 'Sign in', exact: true })).toBeVisible();
 });
@@ -85,3 +87,39 @@ test('a forbidden request does not log out a valid session', async ({ page }) =>
   await expect(page).toHaveURL(/\/staff-guide$/);
   await expect(page.locator('.app-shell')).toBeVisible();
 });
+
+test('expired session returns to the requested page and filters after sign-in', async ({ page }) => {
+  let signedIn = false;
+  await page.route('**/api/**', route => {
+    const path = new URL(route.request().url()).pathname;
+    if (path === '/api/auth/login') {
+      signedIn = true;
+      return json(route, 200, { ok: true });
+    }
+    if (path === '/api/auth/me') return json(route, signedIn ? 200 : 401, signedIn ? owner : { detail: 'Session expired' });
+    return json(route, 200, []);
+  });
+  await page.goto('/staff-guide?section=workflows');
+  await expect(page).toHaveURL(/\/login\?/);
+  expect(new URL(page.url()).searchParams.get('next')).toBe('/staff-guide?section=workflows');
+  await page.getByRole('textbox', { name: 'Username', exact: true }).fill(owner.username);
+  await page.locator('input[autocomplete="current-password"]').fill('isolated-browser-fixture');
+  await page.getByRole('button', { name: 'Sign in', exact: true }).click();
+  await expect(page).toHaveURL(/\/staff-guide\?section=workflows$/);
+});
+
+for (const next of ['/\\external.example', '//external.example', 'https://external.example', '/login']) {
+  test(`sign-in rejects unsafe return target ${next}`, async ({ page }) => {
+    await page.route('**/api/**', route => {
+      const path = new URL(route.request().url()).pathname;
+      if (path === '/api/auth/login') return json(route, 200, { ok: true });
+      if (path === '/api/auth/me') return json(route, 200, owner);
+      return json(route, 200, []);
+    });
+    await page.goto(`/login?next=${encodeURIComponent(next)}`);
+    await page.getByRole('textbox', { name: 'Username', exact: true }).fill(owner.username);
+    await page.locator('input[autocomplete="current-password"]').fill('isolated-browser-fixture');
+    await page.getByRole('button', { name: 'Sign in', exact: true }).click();
+    await expect(page).toHaveURL('/dashboard');
+  });
+}
