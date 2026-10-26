@@ -28,7 +28,12 @@ export default function RouteGuard({ children }) {
 
   useEffect(() => {
     if (!loaded || pathname === '/login') return;
-    if (!user) { window.location.replace('/login'); return; }
+    if (!user) {
+      const returnPath = `${window.location.pathname}${window.location.search}${window.location.hash}`;
+      const next = pathname && pathname !== '/' ? `?next=${encodeURIComponent(returnPath)}` : '';
+      window.location.replace(`/login${next}`);
+      return;
+    }
     if (pathHasAccess(pathname, can)) return;
     const target = defaultRouteForUser(can);
     if (target && target !== pathname) window.location.replace(target);
