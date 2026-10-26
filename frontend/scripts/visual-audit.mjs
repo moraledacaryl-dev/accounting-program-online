@@ -8,7 +8,12 @@ const OUT = path.resolve('visual-audit');
 await fs.rm(OUT, { recursive: true, force: true });
 await fs.mkdir(OUT, { recursive: true });
 
-const browser = await chromium.launch({ headless: true });
+const browser = await chromium.launch({
+  headless: true,
+  ...(process.env.VISUAL_AUDIT_CHROME_PATH
+    ? { executablePath: process.env.VISUAL_AUDIT_CHROME_PATH }
+    : {}),
+});
 const context = await browser.newContext({
   viewport: { width: 1440, height: 1000 },
   deviceScaleFactor: 1,

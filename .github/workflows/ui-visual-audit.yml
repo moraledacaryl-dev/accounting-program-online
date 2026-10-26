@@ -99,8 +99,8 @@ jobs:
         working-directory: frontend
         run: |
           npm ci
-          npm install --no-save --package-lock=false playwright@1.55.0
-          npx playwright install --with-deps chromium
+          PLAYWRIGHT_SKIP_BROWSER_DOWNLOAD=1 npm install --no-save --package-lock=false playwright@1.55.0
+          command -v google-chrome
 
       - name: Build frontend
         working-directory: frontend
@@ -132,6 +132,8 @@ jobs:
 
       - name: Capture visual audit
         working-directory: frontend
+        env:
+          VISUAL_AUDIT_CHROME_PATH: /usr/bin/google-chrome
         run: node scripts/visual-audit.mjs
 
       - name: Upload screenshots
