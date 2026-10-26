@@ -1,5 +1,13 @@
 # Hidden Oasis Live Deployment Guide
 
+> **Historical clean-install blueprint.** This file predates the active
+> immutable-release deployment and the app launcher at `hiddenoasis.app`.
+> It does not describe the current production routing or release procedure.
+> Use [Accounting current production](ACCOUNTING_CURRENT_PRODUCTION.md) for
+> live URLs, guarded deployments, backup schedules and read-only checks.
+> In particular, do not run the manual source-copy/restart steps or create
+> test bookings/orders from this historical guide in production.
+
 This guide describes the hardened `/opt` layout for a clean Ubuntu 22.04
 deployment:
 
@@ -8,11 +16,10 @@ deployment:
 /opt/pos-cloud-online
 ```
 
-## Current Live Compatibility Profile
+## Historical Live Compatibility Profile
 
-The existing `hiddenoasis.app` host predates the hardened `/opt` layout. Until
-that host is migrated deliberately, use its current paths, ports, and unit
-names during updates:
+The previous `hiddenoasis.app` Accounting routing predated the hardened
+`/opt` layout. The following profile is retained for historical context only:
 
 ```text
 Accounting source: /root/accounting-program-online

@@ -5,28 +5,25 @@ This is the deployment copy for the live Hidden Oasis Accounting ERP.
 Live target:
 
 ```text
-Frontend: https://hiddenoasis.app
-Backend:  https://hiddenoasis.app/api
+Frontend: https://accounting.hiddenoasis.app
+Backend:  https://accounting.hiddenoasis.app/api
 Database: hiddenoasis_erp_live
 DB user:  hiddenoasis_erp_app
 ```
 
-It is deployed together with:
+It runs on the shared Hidden Oasis VPS alongside the separate POS application.
 
-```text
-/Users/carylmoraleda/pos-cloud-online
-```
-
-Server path:
+Server source path and active release pointer:
 
 ```text
 /opt/accounting-program-online
+/opt/accounting-current
 ```
 
-Primary deployment guide:
+Current production operations guide:
 
 ```text
-docs/HIDDENOASIS_LIVE_DEPLOYMENT.md
+docs/ACCOUNTING_CURRENT_PRODUCTION.md
 ```
 
 ## Current audit goals and reconciliation status
@@ -50,6 +47,6 @@ Deployment model:
 - nginx reverse proxy
 - Let's Encrypt HTTPS
 - systemd services
-- daily PostgreSQL backups
+- hourly local PostgreSQL/uploads backups and encrypted offsite snapshots
 
-Accounting remains the source of truth for catalog, categories, item/variant structure, financial accounts, receivables, cashflow, reconciliation, and reports. POS consumes this through `https://hiddenoasis.app/api`.
+Accounting remains the source of truth for catalog, categories, item/variant structure, financial accounts, receivables, cashflow, reconciliation, and reports. POS consumes this through `https://accounting.hiddenoasis.app/api`. The apex `https://hiddenoasis.app` is a static app launcher.

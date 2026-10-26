@@ -1,5 +1,10 @@
 # Accounting backup and release guards — October 25, 2026
 
+This records the October 25 local-backup pass. The owner subsequently approved
+an encrypted Accounting offsite repository and retention policy on October 26;
+see [Accounting current production](ACCOUNTING_CURRENT_PRODUCTION.md) for the
+active operator state.
+
 The existing backup script automatically removed database dumps, uploads
 archives and sidecars older than 14 days. No approved replacement retention or
 offsite policy exists for Accounting. This pass preserves all existing evidence

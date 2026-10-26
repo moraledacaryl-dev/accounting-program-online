@@ -1,8 +1,14 @@
 # Accounting encrypted offsite backup preparation
 
-This release contains an **inactive** upload job. Deploying the application
-does not install or enable `accounting-offsite.service` or its timer, create a
-Restic repository, upload business data, or delete local/cloud archives.
+The release contains a **disabled-by-default** upload job. Deploying the
+application alone does not install or enable `accounting-offsite.service` or
+its timer, create a Restic repository, upload business data, or delete
+local/cloud archives. On 2026-10-26, the owner separately approved operator
+activation: one encrypted snapshot was independently downloaded and restored
+into disposable PostgreSQL, a second exact-release snapshot passed upload and
+full repository data checks, and the hourly upload and weekly retention timers
+were enabled. The first scheduled runs and physical bucket usage still need
+ongoing monitoring.
 
 The job expects the latest complete Accounting `.dump`, `.uploads.tar.gz` and
 `.meta` set from the hourly local backup. It rechecks private ownership,
@@ -36,9 +42,9 @@ false. Before activation an owner/operator must:
 4. Install the service/timer files manually, with the timer still disabled.
    Run the disabled job and check `cloud_requests_sent=false`.
 5. Initialize only the intended encrypted repository, run one authorized
-   upload, independently download it, and restore the database/uploads and
-   application in isolation. Verify checksums and counts without logging
-   financial details.
+   upload, independently download it, and restore the database/uploads in
+   isolation. Verify checksums and counts without logging financial details.
+   A full application-on-restored-data exercise is a separate recovery test.
 6. Only after cloud recovery succeeds, set the three gates and `enabled` to
    true, enable the hourly timer, and inspect its next successful run and
    Backblaze physical usage. Set `initial_cloud_restore_verified` only after

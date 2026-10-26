@@ -27,13 +27,9 @@ jobs:
             nginx -T 2>&1 | grep -nE 'server_name|location[[:space:]]+/?api|proxy_pass|limit_except|deny|return[[:space:]]+405' | sed -n '1,260p' || true
             echo '=== direct backend health ==='
             curl -sS -D - -o /dev/null http://127.0.0.1:8000/healthz | sed -n '1,20p'
-            echo '=== direct backend login route with intentionally invalid credentials ==='
-            curl -sS -D - -o /tmp/direct-login-body -X POST http://127.0.0.1:8000/api/auth/login -H 'Content-Type: application/json' --data '{"username":"__routing_probe__","password":"__routing_probe__"}' || true
-            sed -n '1,20p' /tmp/direct-login-body || true
-            rm -f /tmp/direct-login-body
-            echo '=== public nginx login route with intentionally invalid credentials ==='
-            curl -sS -D - -o /tmp/public-login-body -X POST https://hiddenoasis.app/api/auth/login -H 'Content-Type: application/json' --data '{"username":"__routing_probe__","password":"__routing_probe__"}' || true
-            sed -n '1,20p' /tmp/public-login-body || true
-            rm -f /tmp/public-login-body
+            echo '=== direct backend JSON health ==='
+            curl -fsS -D - http://127.0.0.1:8000/api/healthz | sed -n '1,20p'
+            echo '=== public Accounting JSON health ==='
+            curl -fsS -D - https://accounting.hiddenoasis.app/api/healthz | sed -n '1,20p'
             echo '=== public OPTIONS ==='
-            curl -sS -D - -o /dev/null -X OPTIONS https://hiddenoasis.app/api/auth/login || true
+            curl -sS -D - -o /dev/null -X OPTIONS https://accounting.hiddenoasis.app/api/healthz || true
