@@ -82,6 +82,7 @@ jobs:
         run: |
           BOOTSTRAP="$(curl -fsS -X POST http://127.0.0.1:8000/api/auth/bootstrap)"
           ADMIN_PASSWORD="$(printf '%s' "$BOOTSTRAP" | python -c 'import json,sys; print(json.load(sys.stdin).get("temporary_password") or "admin123")')"
+          echo "::add-mask::$ADMIN_PASSWORD"
           echo "VISUAL_AUDIT_PASSWORD=$ADMIN_PASSWORD" >> "$GITHUB_ENV"
           curl -fsS -X POST http://127.0.0.1:8000/api/seed/demo
           LOGIN_BODY="$(python -c 'import json,sys; print(json.dumps({"username":"admin","password":sys.argv[1]}))' "$ADMIN_PASSWORD")"
