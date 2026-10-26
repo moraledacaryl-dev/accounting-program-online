@@ -374,7 +374,7 @@ export default function DashboardPage() {
           <section className="dashboard-panel dashboard-integrations-panel">
             <div className="dashboard-panel-head">
               <div><h2>Connected applications</h2><p>Retained records do not prove a live connection. Open an integration to verify its latest activity.</p></div>
-              {canAny('integrations.view', 'approvals.view') && <Link href="/review-inbox" className="button-link secondary-link">Open Review Inbox</Link>}
+              {canAny('review_inbox.view', 'integrations.view', 'approvals.view') && <Link href="/review-inbox" className="button-link secondary-link">Open Review Inbox</Link>}
             </div>
             <div className="dashboard-integrations">
               {integrations.map((item) => (

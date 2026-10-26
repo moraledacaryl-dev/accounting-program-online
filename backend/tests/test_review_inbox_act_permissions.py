@@ -69,3 +69,23 @@ def test_account_choices_are_available_only_to_cashflow_or_decision_reviewer(api
     actor.role, actor.permissions = role, permissions
     response = client.get('/financial-accounts/')
     assert response.status_code == expected
+
+
+@pytest.mark.parametrize('path,expected', [
+    ('', 200),
+    ('/page', 200),
+    ('/summary', 200),
+    ('/999', 404),
+    ('/accepted-linkage-audit', 403),
+])
+def test_dedicated_view_permission_reads_inbox_without_financial_decision_or_linkage_audit(api, path, expected):
+    client, actor = api
+    actor.role, actor.permissions = 'cashier', {'review_inbox.view'}
+    assert client.get(f'/integration-review{path}').status_code == expected
+
+
+@pytest.mark.parametrize('path', ['', '/page', '/summary', '/999'])
+def test_inbox_read_requires_a_view_permission(api, path):
+    client, actor = api
+    actor.role, actor.permissions = 'staff', set()
+    assert client.get(f'/integration-review{path}').status_code == 403

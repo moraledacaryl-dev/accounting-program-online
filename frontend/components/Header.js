@@ -261,7 +261,7 @@ export default function Header() {
           </button>
         )}
 
-        {(can('integrations.view') || can('approvals.view')) && (
+        {(can('review_inbox.view') || can('integrations.view') || can('approvals.view')) && (
           <Link href="/review-inbox" className="header-icon-button" aria-label="Open Review Inbox" title="Review Inbox">
             <NavIcon name="review" size={18} />
           </Link>

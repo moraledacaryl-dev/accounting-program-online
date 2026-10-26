@@ -8,6 +8,9 @@ module.exports = defineConfig({
   use: {
     baseURL: 'http://127.0.0.1:3101',
     headless: true,
+    launchOptions: process.env.PLAYWRIGHT_CHROME_PATH
+      ? { executablePath: process.env.PLAYWRIGHT_CHROME_PATH }
+      : {},
   },
   webServer: {
     command: 'npm run start -- -p 3101',

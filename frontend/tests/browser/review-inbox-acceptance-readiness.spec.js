@@ -70,6 +70,22 @@ test('payroll approver and integration operator have read-only review controls',
   }
 });
 
+test('Cashier can open the dedicated read-only Review Inbox without decision controls', async ({ page }) => {
+  const requests = [];
+  await mockReviewApi(page, requests, {
+    role: 'cashier', permissions: ['dashboard.view', 'review_inbox.view', 'cashflow.view'],
+  });
+  await page.goto('/review-inbox');
+  await expect(page.getByRole('heading', { name: 'Review Inbox' })).toBeVisible();
+  await expect(page.locator('.metric-card').first().locator('strong')).toHaveText('1');
+  await expect(page.getByRole('link', { name: 'Open Review Inbox' })).toBeVisible();
+  await page.getByRole('button', { name: 'Review', exact: true }).click();
+  await expect(page.getByText('Review Inbox approval permission is required', { exact: false })).toBeVisible();
+  await expect(page.getByRole('button', { name: 'Accept into accounting' })).toHaveCount(0);
+  await expect(page.getByRole('button', { name: 'Reject', exact: true })).toHaveCount(0);
+  expect(requests).toHaveLength(0);
+});
+
 test('revoked review permission removes posting controls after a rejected save', async ({ page }) => {
   const requests = [];
   const actor = {
