@@ -324,6 +324,13 @@ def _visible_review_query(db: Session, *, status=None, source_app=None, financia
     return query
 
 
+def actionable_review_count(db: Session) -> int:
+    """Count the same pending rows a reviewer can actually open in the queue."""
+    return _visible_review_query(db).filter(
+        IntegrationReviewItem.status.in_(['ready_for_review', 'validation_failed'])
+    ).count()
+
+
 def paginated_review_items(
     db: Session, *, status=None, source_app=None, financial_effect=None,
     q=None, page: int = 1, page_size: int = 25,

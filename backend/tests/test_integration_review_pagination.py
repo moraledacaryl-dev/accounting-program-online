@@ -1,4 +1,5 @@
 import json
+from types import SimpleNamespace
 
 import pytest
 from sqlalchemy import create_engine, event
@@ -81,6 +82,21 @@ def test_filters_and_legacy_list_exclude_hidden_rows_before_count_and_limit(db):
     assert paginated_review_items(db, source_app='staff', page_size=25)['total'] == 1
     assert paginated_review_items(db, q='pos-3', page_size=25)['total'] == 5
     assert paginated_review_items(db, page=200, page_size=25)['items'] == []
+
+
+def test_dashboard_pending_count_matches_the_actionable_review_queue(db):
+    from app.api import dashboard
+
+    add(db, 'payroll:25:Approved', source='staff', entity=25)
+    add(db, 'payroll:25:Paid', source='staff', entity=25)
+    add(db, 'pos-sale', source='pos')
+    add(db, 'inventory-check', source='inventory', status='validation_failed')
+    db.commit()
+
+    assert db.query(IntegrationReviewItem).count() == 4
+    assert summary(db)['needs_review'] == 3
+    assert paginated_review_items(db, page_size=25)['total'] == 3
+    assert dashboard.summary(db=db, user=SimpleNamespace(id=1, role='owner'))['pending_review'] == 3
 
 
 @pytest.mark.parametrize(('page', 'size'), [(0, 25), (1, 0), (1, 101)])
