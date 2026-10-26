@@ -211,7 +211,7 @@ export default function ReviewInboxPage() {
           </div>
           <div className="review-source-coverage-grid">
             {Object.entries(summary.by_source).map(([source, values]) => (
-              <button type="button" key={source} className="review-source-coverage-card"
+              <button type="button" key={source} className="review-source-coverage-card unstyled-button"
                 disabled={loading}
                 onClick={() => { const next = { ...filters, source_app: source }; setFilters(next); applyFilters(next); }}>
                 <strong>{source.replaceAll('_', ' ')}</strong>
