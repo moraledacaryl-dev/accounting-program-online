@@ -1,0 +1,19 @@
+[Unit]
+Description=Hidden Oasis Accounting encrypted offsite retention
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+Type=oneshot
+User=root
+Group=root
+UMask=0077
+Environment=PYTHONDONTWRITEBYTECODE=1
+ExecStart=/usr/bin/python3 /opt/accounting-current/scripts/dr/offsite_accounting_retention.py --apply
+NoNewPrivileges=true
+PrivateTmp=true
+ProtectSystem=strict
+ProtectHome=true
+CacheDirectory=hiddenoasis-accounting-offsite
+CacheDirectoryMode=0700
+ReadWritePaths=/run/hiddenoasis-accounting-release

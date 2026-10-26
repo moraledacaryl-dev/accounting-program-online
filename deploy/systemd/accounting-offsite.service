@@ -1,0 +1,19 @@
+[Unit]
+Description=Hidden Oasis Accounting encrypted offsite backup
+After=network-online.target postgresql.service
+Wants=network-online.target
+
+[Service]
+Type=oneshot
+User=root
+Group=root
+UMask=0077
+Environment=PYTHONDONTWRITEBYTECODE=1
+ExecStart=/usr/bin/python3 /opt/accounting-current/scripts/dr/offsite_accounting.py
+NoNewPrivileges=true
+PrivateTmp=true
+ProtectSystem=strict
+ProtectHome=true
+CacheDirectory=hiddenoasis-accounting-offsite
+CacheDirectoryMode=0700
+ReadWritePaths=/run/hiddenoasis-accounting-release

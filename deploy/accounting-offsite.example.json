@@ -1,0 +1,10 @@
+{
+  "enabled": false,
+  "account_caps_verified": false,
+  "recovery_key_custody_confirmed": false,
+  "retention_policy_approved": false,
+  "initial_cloud_restore_verified": false,
+  "repository": "s3:https://s3.us-west-004.backblazeb2.com/hidden-oasis-accounting-backups-20261026/accounting",
+  "password_file": "/etc/hiddenoasis/accounting-offsite-password",
+  "credentials_file": "/etc/hiddenoasis/accounting-offsite-credentials.json"
+}

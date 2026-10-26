@@ -45,6 +45,13 @@ jobs:
       - name: Reproduce restrictive-umask release access on isolated synthetic files
         run: sudo bash scripts/release/test-release-service-access.sh
 
+      - name: Verify pinned Restic and exercise synthetic retention and restore
+        run: |
+          set -euo pipefail
+          python3 scripts/dr/prepare-restic-binary.py "$RUNNER_TEMP/accounting-restic"
+          ACCOUNTING_TEST_RESTIC_BINARY="$RUNNER_TEMP/accounting-restic/restic" \
+            python3 scripts/dr/test-accounting-offsite-restic.py
+
       - name: Reject mutable production paths in canonical units
         run: |
           set -euo pipefail
