@@ -25,9 +25,10 @@ def snapshot(stamp: str, when: datetime, identifier: str) -> dict:
 
 
 class FakeClient:
-    def __init__(self, snapshots, *, remove):
+    def __init__(self, snapshots, *, remove, null_empty_removal=False):
         self.snapshots = snapshots
         self.remove = remove
+        self.null_empty_removal = null_empty_removal
         self.calls = []
 
     def run(self, *args):
@@ -37,9 +38,10 @@ class FakeClient:
         if args[0] == "check":
             return b"{}"
         if args[0] == "forget" and "--dry-run" in args:
+            removed = [x for x in self.snapshots if x["id"] in self.remove]
             return json.dumps([{"host": retention.HOST,
                                 "keep": [x for x in self.snapshots if x["id"] not in self.remove],
-                                "remove": [x for x in self.snapshots if x["id"] in self.remove]}]).encode()
+                                "remove": None if self.null_empty_removal and not removed else removed}]).encode()
         if args[0] == "forget" and "--prune" in args:
             return b"{}"
         raise AssertionError(args)
@@ -79,3 +81,8 @@ class AccountingRetentionContract(TestCase):
             with self.assertRaises(retention.OffsiteError):
                 retention.apply_retention(client, now=self.now)
             self.assertEqual([x[0] for x in client.calls], ["snapshots"])
+
+    def test_restic_null_empty_removal_is_safe_noop(self):
+        client = FakeClient([self.recent], remove=set(), null_empty_removal=True)
+        self.assertEqual(retention.apply_retention(client, now=self.now), 0)
+        self.assertEqual([x[0] for x in client.calls], ["snapshots", "check", "forget"])
