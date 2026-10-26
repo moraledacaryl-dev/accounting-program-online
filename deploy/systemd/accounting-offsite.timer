@@ -1,0 +1,10 @@
+[Unit]
+Description=Hourly Hidden Oasis Accounting encrypted offsite backup
+
+[Timer]
+OnCalendar=*-*-* *:40:00
+Persistent=true
+Unit=accounting-offsite.service
+
+[Install]
+WantedBy=timers.target
