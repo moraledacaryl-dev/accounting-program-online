@@ -1,12 +1,13 @@
 from __future__ import annotations
 
+from dataclasses import dataclass
 from datetime import date, datetime
 from decimal import Decimal, ROUND_HALF_UP
 
 from fastapi import APIRouter, Depends, HTTPException, Query
 from pydantic import BaseModel, Field, model_validator
 from sqlalchemy import func, or_
-from sqlalchemy.orm import Session
+from sqlalchemy.orm import Session, selectinload
 
 from app.api.channel import _post_commission_delta, _post_settlement_delta
 from app.api.deps import require_any_permissions
@@ -24,6 +25,45 @@ _PUBLISHED_ROOM_RATES = {
     'perch 1': Decimal('4200.00'), 'perch 2': Decimal('4300.00'),
     'crown': Decimal('3300.00'),
 }
+
+
+@dataclass
+class _RateContext:
+    snapshots: dict[int, tuple[str | None, str | None]]
+    mappings: dict[int, tuple[str | None, str | None]]
+    plans_by_room_type: dict[int, list[RatePlan]]
+
+
+def _rate_context(db: Session, bookings: list[Booking]) -> _RateContext:
+    """Load rate inputs for a page in bounded batches instead of per booking."""
+    context = _RateContext({}, {}, {})
+    booking_ids = [booking.id for booking in bookings if booking.id]
+    room_type_ids = {
+        room_type_id for booking in bookings
+        if (room_type_id := (booking.room_type_id or (booking.room.room_type_id if booking.room else None)))
+    }
+    # 500 parameters also works on SQLite versions with a low bind limit.
+    for start in range(0, len(booking_ids), 500):
+        ids = booking_ids[start:start + 500]
+        for booking_id, check_in, check_out in db.query(
+            ChannelBookingStaySnapshot.booking_id,
+            ChannelBookingStaySnapshot.ota_check_in,
+            ChannelBookingStaySnapshot.ota_check_out,
+        ).filter(ChannelBookingStaySnapshot.booking_id.in_(ids)).all():
+            context.snapshots[booking_id] = (check_in, check_out)
+        for booking_id, check_in, check_out in db.query(
+            Beds24BookingMap.local_booking_id,
+            Beds24BookingMap.beds24_check_in,
+            Beds24BookingMap.beds24_check_out,
+        ).filter(Beds24BookingMap.local_booking_id.in_(ids)).order_by(Beds24BookingMap.id.asc()).all():
+            context.mappings.setdefault(booking_id, (check_in, check_out))
+    if room_type_ids:
+        plans = db.query(RatePlan).filter(
+            RatePlan.room_type_id.in_(room_type_ids), RatePlan.is_active.is_(True),
+        ).all()
+        for plan in plans:
+            context.plans_by_room_type.setdefault(plan.room_type_id, []).append(plan)
+    return context
 
 
 class PayoutReconcileItem(BaseModel):
@@ -102,30 +142,36 @@ def _stay_nights(booking: Booking) -> int:
     return _date_range_nights(getattr(booking, 'check_in', None), getattr(booking, 'check_out', None)) or 1
 
 
-def _channel_stay_nights(db: Session, booking: Booking) -> int:
+def _channel_stay_nights(db: Session, booking: Booking, context: _RateContext | None = None) -> int:
     """Use immutable first-seen OTA dates; mutable Beds24/current booking dates are fallbacks only."""
     booking_id = getattr(booking, 'id', None)
     if booking_id:
-        snapshot = db.query(ChannelBookingStaySnapshot).filter(ChannelBookingStaySnapshot.booking_id == booking_id).first()
+        snapshot = context.snapshots.get(booking_id) if context else None
+        if context is None:
+            row = db.query(ChannelBookingStaySnapshot).filter(ChannelBookingStaySnapshot.booking_id == booking_id).first()
+            snapshot = (row.ota_check_in, row.ota_check_out) if row else None
         if snapshot:
-            nights = _date_range_nights(snapshot.ota_check_in, snapshot.ota_check_out)
+            nights = _date_range_nights(*snapshot)
             if nights is not None: return nights
-        mapping = db.query(Beds24BookingMap).filter(Beds24BookingMap.local_booking_id == booking_id).first()
+        mapping = context.mappings.get(booking_id) if context else None
+        if context is None:
+            row = db.query(Beds24BookingMap).filter(Beds24BookingMap.local_booking_id == booking_id).first()
+            mapping = (row.beds24_check_in, row.beds24_check_out) if row else None
         if mapping:
-            nights = _date_range_nights(mapping.beds24_check_in, mapping.beds24_check_out)
+            nights = _date_range_nights(*mapping)
             if nights is not None: return nights
     return _stay_nights(booking)
 
 
-def _normal_room_rate(db: Session, booking: Booking) -> Decimal:
+def _normal_room_rate(db: Session, booking: Booking, context: _RateContext | None = None) -> Decimal:
     booking_value = _money(booking.gross_amount)
-    nights = Decimal(_channel_stay_nights(db, booking))
+    nights = Decimal(_channel_stay_nights(db, booking, context))
     room_type_id = getattr(booking, 'room_type_id', None)
     if not room_type_id:
         room = getattr(booking, 'room', None)
         room_type_id = getattr(room, 'room_type_id', None) if room else None
     if room_type_id:
-        plans = db.query(RatePlan).filter(RatePlan.room_type_id == room_type_id).filter(RatePlan.is_active == True).all()
+        plans = context.plans_by_room_type.get(room_type_id, []) if context else db.query(RatePlan).filter(RatePlan.room_type_id == room_type_id).filter(RatePlan.is_active == True).all()
         standard_plans = [p for p in plans if _standard_plan_rank(p)[0] < 99 and _money(p.base_rate) > 0]
         if standard_plans:
             return _money(_money(min(standard_plans, key=_standard_plan_rank).base_rate) * nights)
@@ -146,17 +192,19 @@ def reconciliation_channels(db: Session = Depends(get_db), user=Depends(require_
 
 @router.get('/bookings')
 def payout_bookings(channel_id: int = Query(ge=1), search: str = Query(default='', max_length=120), db: Session = Depends(get_db), user=Depends(require_any_permissions('bookings.view', 'cashflow.view', 'reports.view'))):
-    query = (db.query(Booking, BookingChannel, ChannelPayoutBookingLink, ChannelPayout).join(BookingChannel, Booking.channel_id == BookingChannel.id).outerjoin(ChannelPayoutBookingLink, ChannelPayoutBookingLink.booking_id == Booking.id).outerjoin(ChannelPayout, ChannelPayout.id == ChannelPayoutBookingLink.payout_id).filter(Booking.channel_id == channel_id).filter(BookingChannel.is_active == True).filter(func.lower(func.coalesce(Booking.status, '')).notin_(['cancelled', 'canceled', 'no_show', 'noshow'])))
+    query = (db.query(Booking, BookingChannel, ChannelPayoutBookingLink, ChannelPayout).options(selectinload(Booking.room)).join(BookingChannel, Booking.channel_id == BookingChannel.id).outerjoin(ChannelPayoutBookingLink, ChannelPayoutBookingLink.booking_id == Booking.id).outerjoin(ChannelPayout, ChannelPayout.id == ChannelPayoutBookingLink.payout_id).filter(Booking.channel_id == channel_id).filter(BookingChannel.is_active == True).filter(func.lower(func.coalesce(Booking.status, '')).notin_(['cancelled', 'canceled', 'no_show', 'noshow'])))
     term = search.strip()
     if term:
         like = f'%{term}%'; clauses = [Booking.guest_name.ilike(like), Booking.external_booking_id.ilike(like)]
         if term.isdigit(): clauses.append(Booking.id == int(term))
         query = query.filter(or_(*clauses))
+    rows = query.order_by(Booking.check_out.desc(), Booking.id.desc()).limit(2000).all()
+    context = _rate_context(db, [booking for booking, _channel, _link, _payout in rows])
     out = []
-    for booking, channel, link, payout in query.order_by(Booking.check_out.desc(), Booking.id.desc()).limit(2000).all():
+    for booking, channel, link, payout in rows:
         if payout and str(payout.status or '').strip().lower() == 'paid': continue
         expected = _money(payout.gross_amount) if payout else _money(booking.gross_amount)
-        original = _normal_room_rate(db, booking)
+        original = _normal_room_rate(db, booking, context)
         difference = (original - expected).quantize(CENT, rounding=ROUND_HALF_UP)
         rate = ((difference / original * Decimal('100')).quantize(Decimal('0.01'), rounding=ROUND_HALF_UP) if original > 0 else Decimal('0.00'))
         out.append({'booking_id': booking.id, 'booking_ref': _booking_ref(booking), 'guest_name': booking.guest_name, 'room_name': booking.room_name, 'check_in': booking.check_in, 'check_out': booking.check_out, 'booking_status': booking.status, 'channel_id': channel.id, 'channel_name': channel.name, 'original_amount': float(original), 'expected_net_amount': float(expected), 'expected_commission_rate': float(rate), 'expected_difference_amount': float(difference), 'pending_payout_id': payout.id if payout else None, 'pending_actual_amount': float(_money(payout.net_amount)) if payout else None})
@@ -165,11 +213,13 @@ def payout_bookings(channel_id: int = Query(ge=1), search: str = Query(default='
 
 @router.get('/history')
 def reconciliation_history(channel_id: int | None = Query(default=None, ge=1), db: Session = Depends(get_db), user=Depends(require_any_permissions('bookings.view', 'cashflow.view', 'reports.view'))):
-    query = (db.query(ChannelPayoutBookingLink, ChannelPayout, Booking, BookingChannel).join(ChannelPayout, ChannelPayout.id == ChannelPayoutBookingLink.payout_id).join(Booking, Booking.id == ChannelPayoutBookingLink.booking_id).join(BookingChannel, BookingChannel.id == Booking.channel_id).filter(func.lower(ChannelPayout.status) == 'paid'))
+    query = (db.query(ChannelPayoutBookingLink, ChannelPayout, Booking, BookingChannel).options(selectinload(Booking.room)).join(ChannelPayout, ChannelPayout.id == ChannelPayoutBookingLink.payout_id).join(Booking, Booking.id == ChannelPayoutBookingLink.booking_id).join(BookingChannel, BookingChannel.id == Booking.channel_id).filter(func.lower(ChannelPayout.status) == 'paid'))
     if channel_id: query = query.filter(Booking.channel_id == channel_id)
+    rows = query.order_by(ChannelPayout.actual_payout_date.desc(), ChannelPayout.id.desc()).all()
+    context = _rate_context(db, [booking for _link, _payout, booking, _channel in rows])
     out = []
-    for link, payout, booking, channel in query.order_by(ChannelPayout.actual_payout_date.desc(), ChannelPayout.id.desc()).all():
-        expected, original, actual = _money(payout.gross_amount), _normal_room_rate(db, booking), _money(payout.net_amount)
+    for link, payout, booking, channel in rows:
+        expected, original, actual = _money(payout.gross_amount), _normal_room_rate(db, booking, context), _money(payout.net_amount)
         difference = _deduction_amount(original, expected)
         out.append({'id': payout.id, 'booking_id': booking.id, 'booking_ref': payout.booking_ref or _booking_ref(booking), 'guest_name': booking.guest_name, 'room_name': booking.room_name, 'check_in': booking.check_in, 'check_out': booking.check_out, 'channel_id': channel.id, 'channel_name': channel.name, 'payout_reference': link.payout_reference, 'gross_amount': float(original), 'expected_amount': float(expected), 'actual_amount': float(actual), 'deduction_amount': float(difference), 'deduction_percent': _deduction_percent(original, expected), 'payout_variance_amount': float(_deduction_amount(expected, actual)), 'actual_payout_date': payout.actual_payout_date, 'status': payout.status, 'notes': payout.notes})
     return out
