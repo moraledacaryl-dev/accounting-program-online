@@ -176,7 +176,7 @@ def reconciliation_history(channel_id: int | None = Query(default=None, ge=1), d
 
 
 @router.post('/reconcile')
-def reconcile_payout_batch(payload: PayoutReconcileBatch, db: Session = Depends(get_db), user=Depends(require_any_permissions('cashflow.money_in', 'cashflow.money_out', 'reports.view'))):
+def reconcile_payout_batch(payload: PayoutReconcileBatch, db: Session = Depends(get_db), user=Depends(require_any_permissions('cashflow.money_in', 'cashflow.money_out'))):
     channel = db.get(BookingChannel, payload.channel_id)
     if not channel or not channel.is_active: raise HTTPException(status_code=400, detail='Select an active booking channel.')
     allocated = sum((_money(item.actual_amount) for item in payload.items), Decimal('0'))
