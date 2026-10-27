@@ -267,13 +267,24 @@ class BookingUpdate(BaseModel):
     notes: str | None = None
 
 
+def _optional_payout_date(value: str | None) -> str | None:
+    if value in (None, ''):
+        return None
+    try:
+        if date.fromisoformat(value).isoformat() == value:
+            return value
+    except (TypeError, ValueError):
+        pass
+    raise ValueError('Use YYYY-MM-DD for payout dates.')
+
+
 class ChannelPayoutCreate(BaseModel):
     channel_id: int | None = None
     channel: str | None = None
     booking_ref: str | None = None
-    gross_amount: float = 0
-    commission_amount: float = 0
-    net_amount: float = 0
+    gross_amount: float = Field(default=0, ge=0, allow_inf_nan=False)
+    commission_amount: float = Field(default=0, ge=0, allow_inf_nan=False)
+    net_amount: float = Field(default=0, ge=0, allow_inf_nan=False)
     payment_method: str | None = 'ota_payout'
     auto_post_accounting: bool = False
     expected_payout_date: str | None = None
@@ -281,20 +292,30 @@ class ChannelPayoutCreate(BaseModel):
     status: str = 'pending'
     notes: str | None = None
 
+    @field_validator('expected_payout_date', 'actual_payout_date')
+    @classmethod
+    def validate_dates(cls, value):
+        return _optional_payout_date(value)
+
 
 class ChannelPayoutUpdate(BaseModel):
     channel_id: int | None = None
     channel: str | None = None
     booking_ref: str | None = None
-    gross_amount: float | None = None
-    commission_amount: float | None = None
-    net_amount: float | None = None
+    gross_amount: float | None = Field(default=None, ge=0, allow_inf_nan=False)
+    commission_amount: float | None = Field(default=None, ge=0, allow_inf_nan=False)
+    net_amount: float | None = Field(default=None, ge=0, allow_inf_nan=False)
     payment_method: str | None = None
     auto_post_accounting: bool = False
     expected_payout_date: str | None = None
     actual_payout_date: str | None = None
     status: str | None = None
     notes: str | None = None
+
+    @field_validator('expected_payout_date', 'actual_payout_date')
+    @classmethod
+    def validate_dates(cls, value):
+        return _optional_payout_date(value)
 
 
 class ChannelPayoutSettle(BaseModel):
@@ -303,6 +324,11 @@ class ChannelPayoutSettle(BaseModel):
     settlement_module_slug: str = 'finance'
     auto_post_accounting: bool = False
     notes: str | None = None
+
+    @field_validator('actual_payout_date')
+    @classmethod
+    def validate_date(cls, value):
+        return _optional_payout_date(value)
 
 class PayrollLineCreate(BaseModel):
     employee_id: int | None = None

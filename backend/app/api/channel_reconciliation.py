@@ -5,7 +5,7 @@ from datetime import date, datetime
 from decimal import Decimal, ROUND_HALF_UP
 
 from fastapi import APIRouter, Depends, HTTPException, Query
-from pydantic import BaseModel, Field, model_validator
+from pydantic import BaseModel, Field, field_validator, model_validator
 from sqlalchemy import func, or_
 from sqlalchemy.orm import Session, selectinload
 
@@ -81,6 +81,16 @@ class PayoutReconcileBatch(BaseModel):
     auto_post_accounting: bool = True
     notes: str | None = None
     items: list[PayoutReconcileItem] = Field(min_length=1, max_length=500)
+
+    @field_validator('actual_payout_date')
+    @classmethod
+    def valid_actual_payout_date(cls, value: str) -> str:
+        try:
+            if date.fromisoformat(value).isoformat() == value:
+                return value
+        except ValueError:
+            pass
+        raise ValueError('Use YYYY-MM-DD for the actual payout date.')
 
     @model_validator(mode='after')
     def unique_bookings(self):
