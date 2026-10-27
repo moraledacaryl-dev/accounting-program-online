@@ -186,9 +186,22 @@ export default function PayoutsPage() {
       const result = await request('/channel-reconciliation/reconcile', { method: 'POST', body: JSON.stringify(payload) });
       setNotice(`${result.booking_count} booking${result.booking_count === 1 ? '' : 's'} reconciled. ${money(result.allocated_amount)} recorded as channel payout.`);
       setSelected({}); setReference(''); setAmountReceived(''); setNotes('');
-      await Promise.all([loadBookings(channelId, search), loadHistory()]);
+      try {
+        await Promise.all([loadBookings(channelId, search), loadHistory()]);
+      } catch {
+        setError('Payout recorded, but the lists could not be refreshed. Refresh them before recording another payout.');
+      }
     } catch (err) {
-      setError(err.message || 'Failed to reconcile payout.');
+      if (err.status === 409) {
+        try {
+          await Promise.all([loadBookings(channelId, search), loadHistory()]);
+          setError('A selected booking was already recorded in another session. The list has been refreshed; review the remaining selections before trying again.');
+        } catch {
+          setError('A selected booking was already recorded in another session. The list could not be refreshed; refresh it before trying again.');
+        }
+      } else {
+        setError(err.message || 'Failed to reconcile payout.');
+      }
     } finally {
       setSaving(false);
     }
