@@ -155,11 +155,15 @@ def _hotel_performance(db: Session, today: date, active_room_count: int) -> dict
     history_start = (month_start - timedelta(days=365)).replace(day=1)
     rooms = db.query(Room).filter(Room.is_active.is_(True)).all()
     bookings = (
-        db.query(Booking)
+        db.query(Booking.check_in, Booking.check_out, Booking.gross_amount, Booking.room_id)
         .filter(
             ordinary_stay_condition(),
             Booking.check_in.isnot(None),
             Booking.check_out.isnot(None),
+            # Stored stay dates begin with ISO YYYY-MM-DD. Older/future stays
+            # cannot affect any of the thirteen displayed month buckets.
+            Booking.check_in < next_month.isoformat(),
+            Booking.check_out > history_start.isoformat(),
         )
         .all()
     )
