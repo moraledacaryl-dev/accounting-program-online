@@ -212,7 +212,7 @@ def payout_channel_options(db: Session = Depends(get_db), user=Depends(require_a
 def add_payout(
     payload: ChannelPayoutCreate,
     db: Session = Depends(get_db),
-    user=Depends(require_any_permissions('cashflow.money_in', 'cashflow.money_out', 'reports.view')),
+    user=Depends(require_any_permissions('cashflow.money_in', 'cashflow.money_out')),
 ):
     try:
         payload_data = payload.model_dump(exclude={'payment_method', 'auto_post_accounting'})
@@ -259,7 +259,7 @@ def update_payout(
     payout_id: int,
     payload: ChannelPayoutUpdate,
     db: Session = Depends(get_db),
-    user=Depends(require_any_permissions('cashflow.money_in', 'cashflow.money_out', 'reports.view')),
+    user=Depends(require_any_permissions('cashflow.money_in', 'cashflow.money_out')),
 ):
     obj = db.get(ChannelPayout, payout_id)
     if not obj:
@@ -314,7 +314,7 @@ def settle_payout(
     payout_id: int,
     payload: ChannelPayoutSettle,
     db: Session = Depends(get_db),
-    user=Depends(require_any_permissions('cashflow.money_in', 'cashflow.money_out', 'reports.view')),
+    user=Depends(require_any_permissions('cashflow.money_in', 'cashflow.money_out')),
 ):
     obj = db.get(ChannelPayout, payout_id)
     if not obj:

@@ -38,7 +38,7 @@ function groupHistory(rows) {
 
 export default function PayoutsPage() {
   const { can } = useCurrentUser();
-  const canReconcile = can('cashflow.money_in') || can('cashflow.money_out') || can('reports.view');
+  const canReconcile = can('cashflow.money_in') || can('cashflow.money_out');
   const [tab, setTab] = useState('awaiting');
   const [channels, setChannels] = useState([]);
   const [channelId, setChannelId] = useState('');
@@ -203,6 +203,7 @@ export default function PayoutsPage() {
           <div className="payout-hero-copy">
             <h1>Channel Payouts</h1>
             <p className="muted">Use the fixed standard room rate as the baseline. Expected payout can be entered or corrected manually, and actual payout starts equal to expected until the bank deposit differs.</p>
+            {!canReconcile && <p className="muted" role="status">Payouts are read-only for your role. A cashflow recording permission is required to record or change a payout.</p>}
           </div>
           <div className="payout-tabs" role="tablist" aria-label="Channel payout views">
             <button type="button" className={`payout-tab ${tab === 'awaiting' ? 'active' : ''}`} onClick={() => setTab('awaiting')}>Awaiting payout</button>
@@ -225,8 +226,8 @@ export default function PayoutsPage() {
             <label>Guest or booking ID
               <input value={search} placeholder="Search awaiting bookings" onChange={(e) => setSearch(e.target.value)} onKeyDown={(e) => { if (e.key === 'Enter') { e.preventDefault(); loadBookings(channelId, search).catch((err) => setError(err.message)); } }} />
             </label>
-            <label>Payout date<input type="date" value={payoutDate} onChange={(e) => setPayoutDate(e.target.value)} /></label>
-            <label>Statement / reference<input value={reference} placeholder="Optional" onChange={(e) => setReference(e.target.value)} /></label>
+            {canReconcile && <label>Payout date<input type="date" value={payoutDate} onChange={(e) => setPayoutDate(e.target.value)} /></label>}
+            {canReconcile && <label>Statement / reference<input value={reference} placeholder="Optional" onChange={(e) => setReference(e.target.value)} /></label>}
           </div>
           <div className="payout-kpis">
             <div className="payout-kpi"><span>Awaiting bookings</span><strong>{rows.length}</strong></div>
@@ -238,12 +239,12 @@ export default function PayoutsPage() {
 
         <section className="section">
           <div className="row wrap" style={{ justifyContent: 'space-between', marginBottom: 8 }}>
-            <div><h2>Bookings awaiting payout</h2><p className="muted small">Expected payout is editable for new or corrected data. Actual payout follows expected until you change the actual bank receipt.</p></div>
+            <div><h2>Bookings awaiting payout</h2><p className="muted small">{canReconcile ? 'Expected payout is editable for new or corrected data. Actual payout follows expected until you change the actual bank receipt.' : 'View expected payouts and recorded history. Recording requires a cashflow permission.'}</p></div>
             <button type="button" className="secondary" onClick={() => loadBookings(channelId, search).catch((err) => setError(err.message))}>Refresh</button>
           </div>
           <div className="table-wrap">
             <table className="table payout-table">
-              <thead><tr><th className="select-cell"><input aria-label="Select all bookings" type="checkbox" checked={rows.length > 0 && chosen.length === rows.length} onChange={(e) => toggleAll(e.target.checked)} /></th><th>Booking</th><th>Stay</th><th className="amount">Standard room rate</th><th className="amount">Expected payout</th><th className="amount">Actual payout</th><th className="amount">Difference vs room rate</th></tr></thead>
+              <thead><tr><th className="select-cell">{canReconcile && <input aria-label="Select all bookings" type="checkbox" checked={rows.length > 0 && chosen.length === rows.length} onChange={(e) => toggleAll(e.target.checked)} />}</th><th>Booking</th><th>Stay</th><th className="amount">Standard room rate</th><th className="amount">Expected payout</th><th className="amount">Actual payout</th><th className="amount">Difference vs room rate</th></tr></thead>
               <tbody>
                 {rows.map((row) => {
                   const entry = selected[row.booking_id] || {};
@@ -254,12 +255,12 @@ export default function PayoutsPage() {
                   const rate = num(row.original_amount) > 0 ? difference / num(row.original_amount) * 100 : null;
                   const variance = expected - actual;
                   return <tr key={row.booking_id} className={entry.checked ? 'selected' : ''}>
-                    <td className="select-cell"><input aria-label={`Select booking ${row.booking_ref}`} type="checkbox" checked={!!entry.checked} onChange={(e) => toggleRow(row, e.target.checked)} /></td>
+                    <td className="select-cell">{canReconcile && <input aria-label={`Select booking ${row.booking_ref}`} type="checkbox" checked={!!entry.checked} onChange={(e) => toggleRow(row, e.target.checked)} />}</td>
                     <td><div className="booking-primary">{row.guest_name || 'Unnamed Guest'}</div><div className="booking-secondary">{row.booking_ref} · {row.room_name || 'Room not set'}</div></td>
                     <td><div>{row.check_in || '—'} → {row.check_out || '—'}</div><div className="booking-secondary">{row.booking_status}</div></td>
                     <td className="amount">{money(row.original_amount)}</td>
-                    <td className="amount"><input aria-label={`Expected payout for ${row.booking_ref}`} className="payout-amount-input" type="number" min="0" step="0.01" inputMode="decimal" value={expectedValue} onChange={(e) => setExpected(row, e.target.value)} /><div className="payout-rate">{money(Math.abs(difference))} {difference >= 0 ? 'below' : 'above'} room rate</div></td>
-                    <td className="amount"><input aria-label={`Actual payout for ${row.booking_ref}`} className="payout-amount-input" type="number" min="0" step="0.01" inputMode="decimal" placeholder={expected.toFixed(2)} value={entry.actual ?? expectedValue} onChange={(e) => setActual(row, e.target.value)} />{Math.abs(variance) >= 0.005 && <div className="payout-rate">{money(Math.abs(variance))} {variance > 0 ? 'below' : 'above'} expected</div>}</td>
+                    <td className="amount">{canReconcile ? <input aria-label={`Expected payout for ${row.booking_ref}`} className="payout-amount-input" type="number" min="0" step="0.01" inputMode="decimal" value={expectedValue} onChange={(e) => setExpected(row, e.target.value)} /> : money(expected)}<div className="payout-rate">{money(Math.abs(difference))} {difference >= 0 ? 'below' : 'above'} room rate</div></td>
+                    <td className="amount">{canReconcile ? <input aria-label={`Actual payout for ${row.booking_ref}`} className="payout-amount-input" type="number" min="0" step="0.01" inputMode="decimal" placeholder={expected.toFixed(2)} value={entry.actual ?? expectedValue} onChange={(e) => setActual(row, e.target.value)} /> : money(actual)}{Math.abs(variance) >= 0.005 && <div className="payout-rate">{money(Math.abs(variance))} {variance > 0 ? 'below' : 'above'} expected</div>}</td>
                     <td className="amount"><div className="payout-deduction">{money(difference)}</div><div className="payout-rate">{rate === null ? '—' : `${pct(rate)} vs standard rate`}</div></td>
                   </tr>;
                 })}
