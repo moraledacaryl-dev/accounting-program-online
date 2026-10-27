@@ -311,7 +311,7 @@ export function importSetupWorkbook({ file, dryRun = true, replaceRecipeLines = 
   return request('/setup-imports/import', { method: 'POST', body: form });
 }
 
-export const fetchAttachments = ({ entityType = '', entityId = null, limit = 200 } = {}) => request(`/attachments/?limit=${encodeURIComponent(limit)}${entityType ? `&entity_type=${encodeURIComponent(entityType)}` : ''}${entityId ? `&entity_id=${encodeURIComponent(entityId)}` : ''}`);
+export const fetchAttachments = ({ entityType = '', entityId = null, limit = 200, beforeId = null } = {}) => request(`/attachments/?limit=${encodeURIComponent(limit)}${entityType ? `&entity_type=${encodeURIComponent(entityType)}` : ''}${entityId ? `&entity_id=${encodeURIComponent(entityId)}` : ''}${beforeId ? `&before_id=${encodeURIComponent(beforeId)}` : ''}`);
 export const deleteAttachment = (id) => request(`/attachments/${id}`, { method: 'DELETE' });
 
 function readFilenameFromDisposition(value) {

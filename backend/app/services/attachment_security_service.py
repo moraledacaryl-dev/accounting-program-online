@@ -45,6 +45,10 @@ ENTITY_ACCESS = {
     'stock_movement': ({'inventory.view', 'receiving.view'}, {'stock_movements.create', 'receiving.post'}),
     'sale_order': ({'restaurant.view'}, set()),
 }
+RECORD_READ_PERMISSION_KEYS = {
+    'cashflow.view', 'journals.view', 'reports.view', 'bir.view',
+    'inventory.view', 'restaurant.view',
+}
 EXTERNAL_OWNED_ATTACHMENT_ENTITIES = {
     'stock_movement': 'Inventory & Procurement',
     'sale_order': 'POS Cloud',
@@ -70,13 +74,14 @@ def can_access_attachment_entity(
     entity_obj,
     *,
     write: bool = False,
+    permission_keys: set[str] | None = None,
 ) -> bool:
     if getattr(user, 'role', None) in {'owner', 'admin'}:
         if write and entity_type in EXTERNAL_OWNED_ATTACHMENT_ENTITIES:
             return is_integration_username(getattr(user, 'username', None))
         return True
 
-    permissions = get_user_permission_keys(db, user)
+    permissions = permission_keys if permission_keys is not None else get_user_permission_keys(db, user)
     if entity_type == 'record':
         read_permissions, write_permissions = _record_permissions(entity_obj)
         module = (getattr(entity_obj, 'module_slug', None) or '').strip().lower()

@@ -27,7 +27,9 @@ from app.models.entities import (
     StockMovement,
 )
 from app.services.attachment_security_service import (
+    ENTITY_ACCESS,
     MAX_FILE_SIZE_BYTES,
+    RECORD_READ_PERMISSION_KEYS,
     authorize_attachment_entity,
     can_access_attachment_entity,
     enforce_upload_quota,
@@ -37,6 +39,7 @@ from app.services.attachment_security_service import (
     scan_quarantined_file,
     write_quarantine_file,
 )
+from app.services.permission_service import get_user_permission_keys
 
 router = APIRouter()
 
@@ -121,6 +124,7 @@ def list_attachments(
     entity_type: str | None = None,
     entity_id: int | None = None,
     limit: int = Query(200, ge=1, le=1000),
+    before_id: int | None = Query(default=None, ge=1),
 ):
     normalized_entity_type = _normalize_entity_type(entity_type) if entity_type else None
     if entity_id is not None and not normalized_entity_type:
@@ -136,21 +140,47 @@ def list_attachments(
         authorize_attachment_entity(db, user, normalized_entity_type, obj, write=False)
         q = q.filter(Attachment.entity_id == int(entity_id))
 
-    # Read authorization is evaluated per underlying resource so a global list can
-    # never become a cross-module attachment enumeration endpoint.
-    rows = q.order_by(Attachment.id.desc()).limit(min(limit * 5, 5000)).all()
+    permission_keys = None
+    if getattr(user, 'role', None) not in {'owner', 'admin'}:
+        permission_keys = get_user_permission_keys(db, user)
+        readable_types = {
+            kind for kind, (read_permissions, _write_permissions) in ENTITY_ACCESS.items()
+            if permission_keys.intersection(read_permissions)
+        }
+        if permission_keys.intersection(RECORD_READ_PERMISSION_KEYS):
+            readable_types.add('record')
+        if not readable_types:
+            return []
+        q = q.filter(Attachment.entity_type.in_(readable_types))
+
+    # A fixed recent-row cap can hide an older authorized file behind newer
+    # restricted files. Scan bounded ID pages until a full visible page or EOF.
     visible = []
-    for row in rows:
-        model = ALLOWED_ENTITY_TYPES.get(row.entity_type)
-        if not model:
-            continue
-        obj = db.get(model, int(row.entity_id))
-        if not obj:
-            continue
-        if can_access_attachment_entity(db, user, row.entity_type, obj, write=False):
-            visible.append(_serialize_attachment(row))
-            if len(visible) >= limit:
-                break
+    cursor = before_id
+    batch_size = min(max(limit, 100), 500)
+    while len(visible) < limit:
+        page = q
+        if cursor is not None:
+            page = page.filter(Attachment.id < cursor)
+        rows = page.order_by(Attachment.id.desc()).limit(batch_size).all()
+        if not rows:
+            break
+        for row in rows:
+            cursor = row.id
+            model = ALLOWED_ENTITY_TYPES.get(row.entity_type)
+            if not model:
+                continue
+            obj = db.get(model, int(row.entity_id))
+            if not obj:
+                continue
+            if can_access_attachment_entity(
+                db, user, row.entity_type, obj, write=False, permission_keys=permission_keys,
+            ):
+                visible.append(_serialize_attachment(row))
+                if len(visible) >= limit:
+                    break
+        if len(rows) < batch_size:
+            break
     return visible
 
 

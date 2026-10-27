@@ -22,6 +22,7 @@ const ENTITY_TYPES = [
 ];
 const HUMAN_UPLOAD_ENTITY_TYPES = ENTITY_TYPES.filter((type) => !['stock_movement', 'sale_order'].includes(type));
 const ATTACHMENT_ACCEPT = '.pdf,.jpg,.jpeg,.png,.csv,.xlsx,.docx';
+const PAGE_SIZE = 300;
 
 function currencyBytes(value) {
   const bytes = Number(value || 0);
@@ -34,6 +35,8 @@ export default function AttachmentsPage() {
   const confirmAction = useConfirmAction();
   const { can } = useCurrentUser();
   const [rows, setRows] = useState([]);
+  const [hasMore, setHasMore] = useState(false);
+  const [loadingOlder, setLoadingOlder] = useState(false);
   const [filters, setFilters] = useState({
     entity_type: '',
     entity_id: '',
@@ -76,8 +79,30 @@ export default function AttachmentsPage() {
   }
 
   async function load() {
-    const data = await fetchAttachments({ limit: 300 });
-    setRows(Array.isArray(data) ? data : []);
+    const data = await fetchAttachments({ limit: PAGE_SIZE });
+    const page = Array.isArray(data) ? data : [];
+    setRows(page);
+    setHasMore(page.length === PAGE_SIZE);
+  }
+
+  async function loadOlder() {
+    const beforeId = rows[rows.length - 1]?.id;
+    if (!hasMore || !beforeId || loadingOlder) return;
+    setLoadingOlder(true);
+    setError('');
+    try {
+      const data = await fetchAttachments({ limit: PAGE_SIZE, beforeId });
+      const page = Array.isArray(data) ? data : [];
+      setRows((current) => {
+        const knownIds = new Set(current.map((row) => row.id));
+        return [...current, ...page.filter((row) => !knownIds.has(row.id))];
+      });
+      setHasMore(page.length === PAGE_SIZE);
+    } catch (e) {
+      setError(e.message || 'Failed to load older attachments.');
+    } finally {
+      setLoadingOlder(false);
+    }
   }
 
   useEffect(() => {
@@ -188,6 +213,7 @@ export default function AttachmentsPage() {
 
         <section className="section">
           <h2>Filters</h2>
+          <p className="small muted">Filters apply to loaded files. Use “Load older files” to search earlier attachments.</p>
           <div className="form-grid">
             <label>
               Entity Type
@@ -227,9 +253,10 @@ export default function AttachmentsPage() {
                 </td>
               </tr>
             ))}
-            {!filteredRows.length && <tr><td colSpan="6" className="muted">No authorized attachments found.</td></tr>}
+            {!filteredRows.length && <tr><td colSpan="6" className="muted">{hasMore ? 'No matches in loaded files. Load older files to continue searching.' : 'No authorized attachments found.'}</td></tr>}
           </tbody>
         </table>
+        {hasMore && <button type="button" className="secondary" onClick={loadOlder} disabled={loadingOlder} style={{ marginTop: 12 }}>{loadingOlder ? 'Loading older files…' : 'Load older files'}</button>}
       </section>
     </div>
   );
