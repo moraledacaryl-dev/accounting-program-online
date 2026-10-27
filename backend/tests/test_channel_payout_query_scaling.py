@@ -71,3 +71,32 @@ def test_payout_pages_batch_rate_inputs_without_changing_amounts():
             assert history_statements <= 6
     finally:
         engine.dispose()
+
+
+def test_unpaid_booking_is_not_hidden_behind_two_thousand_paid_bookings():
+    engine = create_engine('sqlite://', connect_args={'check_same_thread': False}, poolclass=StaticPool)
+    Base.metadata.create_all(engine)
+    try:
+        with Session(engine) as db:
+            db.add(BookingChannel(id=1, code='SYNTH', name='Synthetic channel', is_active=True))
+            db.add_all([
+                Booking(id=booking_id, guest_name='Synthetic guest', channel_id=1,
+                        status='confirmed', check_in='2026-10-01', check_out='2026-10-02',
+                        gross_amount=900)
+                for booking_id in range(1, 2002)
+            ])
+            db.add_all([
+                ChannelPayout(id=booking_id, channel_id=1, channel='Synthetic channel',
+                              status=' PAID ' if booking_id == 2 else 'paid', gross_amount=900, net_amount=850)
+                for booking_id in range(2, 2002)
+            ])
+            db.add_all([
+                ChannelPayoutBookingLink(payout_id=booking_id, booking_id=booking_id)
+                for booking_id in range(2, 2002)
+            ])
+            db.commit()
+
+            pending = payout_bookings(channel_id=1, search='', db=db, user=None)
+            assert [row['booking_id'] for row in pending] == [1]
+    finally:
+        engine.dispose()
