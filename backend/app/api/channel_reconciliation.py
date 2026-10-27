@@ -241,15 +241,26 @@ def reconcile_payout_batch(payload: PayoutReconcileBatch, db: Session = Depends(
     allocated = sum((_money(item.actual_amount) for item in payload.items), Decimal('0'))
     if payload.amount_received is not None and abs(_money(payload.amount_received) - allocated) > CENT: raise HTTPException(status_code=400, detail='Allocated booking payouts must equal the bank payout amount before reconciliation.')
     try:
+        # Lock the complete batch in a stable order before checking links. Two
+        # operators must not both observe an unpaid booking and race to post it.
+        booking_ids = sorted(item.booking_id for item in payload.items)
+        locked_bookings = {
+            booking.id: booking for booking in db.query(Booking)
+            .filter(Booking.id.in_(booking_ids))
+            .order_by(Booking.id.asc())
+            .populate_existing()
+            .with_for_update()
+            .all()
+        }
         results = []
         for item in payload.items:
-            booking = db.get(Booking, item.booking_id)
+            booking = locked_bookings.get(item.booking_id)
             if not booking: raise ValueError(f'Booking {item.booking_id} was not found.')
             if booking.channel_id != channel.id: raise ValueError(f'Booking {item.booking_id} does not belong to {channel.name}.')
             if str(booking.status or '').strip().lower() in {'cancelled', 'canceled', 'no_show', 'noshow'}: raise ValueError(f'Booking {item.booking_id} is cancelled/no-show and cannot be reconciled.')
             existing_link = db.query(ChannelPayoutBookingLink).filter(ChannelPayoutBookingLink.booking_id == booking.id).first()
             existing = db.get(ChannelPayout, existing_link.payout_id) if existing_link else None
-            if existing and str(existing.status or '').strip().lower() == 'paid': raise ValueError(f'Booking {item.booking_id} is already marked paid by its channel.')
+            if existing and str(existing.status or '').strip().lower() == 'paid': raise HTTPException(status_code=409, detail=f'Booking {item.booking_id} is already marked paid by its channel. Refresh the awaiting list before trying again.')
             expected, actual = _money(item.expected_amount), _money(item.actual_amount)
             accounting_deduction = max(_deduction_amount(expected, actual), Decimal('0.00'))
             payout = existing or ChannelPayout()

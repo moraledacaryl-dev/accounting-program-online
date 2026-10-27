@@ -1,14 +1,18 @@
 from __future__ import annotations
 
 from concurrent.futures import ThreadPoolExecutor
-from threading import Barrier
+from threading import Barrier, Event, get_ident
 from uuid import uuid4
 
 import pytest
+from fastapi import HTTPException
+from sqlalchemy import event
 
+from app.api.channel_reconciliation import PayoutReconcileBatch, reconcile_payout_batch
 from app.db.database import SessionLocal, engine
+from app.models.channel_payout_reconciliation import ChannelPayoutBookingLink
 from app.models.entities import (
-    FinancialAccount, JournalEntry, MoneyTransaction, PayrollPeriod, PayrollPeriodLine,
+    Booking, BookingChannel, ChannelPayout, FinancialAccount, JournalEntry, MoneyTransaction, PayrollPeriod, PayrollPeriodLine,
     PurchaseOrder, PurchaseRequest, PurchaseRequestLine, Receivable, Supplier,
 )
 from app.schemas.cashflow import MoneyTransactionCreate, ReceivableCollectPayload, ReceivableCreate
@@ -50,6 +54,61 @@ def _run_concurrently(first, second):
             except Exception as exc:  # outcome is asserted by each test
                 results.append(('error', exc))
         return results
+
+
+def test_postgresql_concurrent_channel_payout_has_actionable_stale_result():
+    marker = uuid4().hex[:12]
+    with SessionLocal() as db:
+        channel = BookingChannel(code=f'RACE-{marker}', name=f'Race channel {marker}', is_active=True)
+        db.add(channel)
+        db.flush()
+        booking = Booking(guest_name=f'Synthetic race {marker}', channel_id=channel.id,
+                          status='confirmed', check_in='2026-10-01', check_out='2026-10-02',
+                          gross_amount=100)
+        db.add(booking)
+        db.commit()
+        channel_id, booking_id = channel.id, booking.id
+
+    payload = PayoutReconcileBatch(
+        channel_id=channel_id, actual_payout_date='2026-10-28',
+        auto_post_accounting=False,
+        items=[{'booking_id': booking_id, 'expected_amount': '100.00', 'actual_amount': '100.00'}],
+    )
+    first_inserted, second_read_link = Event(), Event()
+    thread_ids = {}
+
+    def observe_statement(_connection, _cursor, statement, _parameters, _context, _many):
+        sql = statement.lower()
+        ident = get_ident()
+        if ident == thread_ids.get('first') and sql.lstrip().startswith('insert into channel_payouts'):
+            first_inserted.set()
+            second_read_link.wait(timeout=1.5)
+        elif ident == thread_ids.get('second') and 'from channel_payout_booking_links' in sql:
+            second_read_link.set()
+
+    def submit(label):
+        thread_ids[label] = get_ident()
+        with SessionLocal() as db:
+            return reconcile_payout_batch(payload, db=db, user=None)
+
+    event.listen(engine, 'after_cursor_execute', observe_statement)
+    try:
+        with ThreadPoolExecutor(max_workers=2) as pool:
+            first = pool.submit(submit, 'first')
+            assert first_inserted.wait(timeout=10)
+            second = pool.submit(submit, 'second')
+            first_result = first.result(timeout=20)
+            with pytest.raises(HTTPException) as stale:
+                second.result(timeout=20)
+    finally:
+        event.remove(engine, 'after_cursor_execute', observe_statement)
+
+    assert first_result['booking_count'] == 1
+    assert stale.value.status_code == 409
+    assert 'already marked paid' in stale.value.detail
+    with SessionLocal() as db:
+        assert db.query(ChannelPayoutBookingLink).filter_by(booking_id=booking_id).count() == 1
+        assert db.query(ChannelPayout).filter_by(channel_id=channel_id).count() == 1
 
 
 def test_postgresql_concurrent_cash_out_cannot_double_spend_balance():
