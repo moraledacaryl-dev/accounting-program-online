@@ -239,7 +239,7 @@ export default function PayoutsPage() {
 
         <section className="section">
           <div className="row wrap" style={{ justifyContent: 'space-between', marginBottom: 8 }}>
-            <div><h2>Bookings awaiting payout</h2><p className="muted small">{canReconcile ? 'Expected payout is editable for new or corrected data. Actual payout follows expected until you change the actual bank receipt.' : 'View expected payouts and recorded history. Recording requires a cashflow permission.'}</p></div>
+            <div><h2>Bookings awaiting payout</h2><p className="muted small">{canReconcile ? 'Expected payout is editable for new or corrected data. Actual payout follows expected until you change the actual bank receipt.' : 'View expected payouts and recorded history. Recording requires a cashflow permission.'}</p>{rows.length >= 2000 && <p className="muted small" role="status">Showing the first 2,000 unpaid bookings. Search by guest or booking ID to find older bookings.</p>}</div>
             <button type="button" className="secondary" onClick={() => loadBookings(channelId, search).catch((err) => setError(err.message))}>Refresh</button>
           </div>
           <div className="table-wrap">

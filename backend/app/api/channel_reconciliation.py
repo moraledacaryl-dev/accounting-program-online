@@ -202,7 +202,7 @@ def reconciliation_channels(db: Session = Depends(get_db), user=Depends(require_
 
 @router.get('/bookings')
 def payout_bookings(channel_id: int = Query(ge=1), search: str = Query(default='', max_length=120), db: Session = Depends(get_db), user=Depends(require_any_permissions('bookings.view', 'cashflow.view', 'reports.view'))):
-    query = (db.query(Booking, BookingChannel, ChannelPayoutBookingLink, ChannelPayout).options(selectinload(Booking.room)).join(BookingChannel, Booking.channel_id == BookingChannel.id).outerjoin(ChannelPayoutBookingLink, ChannelPayoutBookingLink.booking_id == Booking.id).outerjoin(ChannelPayout, ChannelPayout.id == ChannelPayoutBookingLink.payout_id).filter(Booking.channel_id == channel_id).filter(BookingChannel.is_active == True).filter(func.lower(func.coalesce(Booking.status, '')).notin_(['cancelled', 'canceled', 'no_show', 'noshow'])))
+    query = (db.query(Booking, BookingChannel, ChannelPayoutBookingLink, ChannelPayout).options(selectinload(Booking.room)).join(BookingChannel, Booking.channel_id == BookingChannel.id).outerjoin(ChannelPayoutBookingLink, ChannelPayoutBookingLink.booking_id == Booking.id).outerjoin(ChannelPayout, ChannelPayout.id == ChannelPayoutBookingLink.payout_id).filter(Booking.channel_id == channel_id).filter(BookingChannel.is_active == True).filter(func.lower(func.coalesce(Booking.status, '')).notin_(['cancelled', 'canceled', 'no_show', 'noshow'])).filter(or_(ChannelPayout.id.is_(None), func.trim(func.lower(func.coalesce(ChannelPayout.status, ''))) != 'paid')))
     term = search.strip()
     if term:
         like = f'%{term}%'; clauses = [Booking.guest_name.ilike(like), Booking.external_booking_id.ilike(like)]
@@ -212,7 +212,6 @@ def payout_bookings(channel_id: int = Query(ge=1), search: str = Query(default='
     context = _rate_context(db, [booking for booking, _channel, _link, _payout in rows])
     out = []
     for booking, channel, link, payout in rows:
-        if payout and str(payout.status or '').strip().lower() == 'paid': continue
         expected = _money(payout.gross_amount) if payout else _money(booking.gross_amount)
         original = _normal_room_rate(db, booking, context)
         difference = (original - expected).quantize(CENT, rounding=ROUND_HALF_UP)
