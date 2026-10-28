@@ -100,3 +100,55 @@ def test_unpaid_booking_is_not_hidden_behind_two_thousand_paid_bookings():
             assert [row['booking_id'] for row in pending] == [1]
     finally:
         engine.dispose()
+
+
+def test_history_cursor_retrieves_older_payouts_without_gaps_or_duplicates():
+    engine = create_engine('sqlite://', connect_args={'check_same_thread': False}, poolclass=StaticPool)
+    Base.metadata.create_all(engine)
+    try:
+        with engine.begin() as connection:
+            connection.execute(BookingChannel.__table__.insert(), [
+                {'id': 1, 'code': 'SYNTH', 'name': 'Synthetic channel', 'is_active': True},
+            ])
+            connection.execute(Booking.__table__.insert(), [
+                {'id': booking_id, 'guest_name': 'Synthetic guest', 'channel_id': 1,
+                 'status': 'confirmed', 'check_in': '2026-10-01', 'check_out': '2026-10-02',
+                 'gross_amount': 900}
+                for booking_id in range(1, 451)
+            ])
+            connection.execute(ChannelPayout.__table__.insert(), [
+                {'id': booking_id, 'channel_id': 1, 'channel': 'Synthetic channel',
+                 'status': 'pending' if booking_id == 3 else (' PAID ' if booking_id == 2 else 'paid'),
+                 'gross_amount': 900, 'net_amount': 850,
+                 'actual_payout_date': None if booking_id <= 250 else f'2026-10-{1 + booking_id % 27:02d}'}
+                for booking_id in range(1, 451)
+            ])
+            connection.execute(ChannelPayoutBookingLink.__table__.insert(), [
+                {'booking_id': booking_id, 'payout_id': booking_id}
+                for booking_id in range(1, 451)
+            ])
+
+        with Session(engine) as db:
+            history = []
+            cursor = None
+            for _ in range(4):
+                page = reconciliation_history(
+                    channel_id=1, limit=200, db=db, user=None,
+                    before_date=(cursor['actual_payout_date'] or '') if cursor else None,
+                    before_id=cursor['id'] if cursor else None,
+                )
+                assert len(page) <= 200
+                history.extend(page)
+                if len(page) < 200:
+                    break
+                cursor = page[-1]
+
+            expected = sorted(
+                (booking_id for booking_id in range(1, 451) if booking_id != 3),
+                key=lambda booking_id: ('' if booking_id <= 250 else f'2026-10-{1 + booking_id % 27:02d}', booking_id),
+                reverse=True,
+            )
+            assert [row['id'] for row in history] == expected
+            assert len(history) == len({row['id'] for row in history}) == 449
+    finally:
+        engine.dispose()

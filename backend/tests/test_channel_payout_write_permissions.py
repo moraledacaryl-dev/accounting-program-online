@@ -69,3 +69,6 @@ def test_report_reader_retains_payout_history_access(api):
     client, _actor, _db = api
     assert client.get('/channel/payouts').status_code == 200
     assert client.get('/channel-reconciliation/history').status_code == 200
+    assert client.get('/channel-reconciliation/history?before_date=&before_id=7').status_code == 200
+    assert client.get('/channel-reconciliation/history?before_id=7').status_code == 400
+    assert client.get('/channel-reconciliation/history?limit=501').status_code == 422
