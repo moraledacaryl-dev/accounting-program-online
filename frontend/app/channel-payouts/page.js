@@ -45,6 +45,10 @@ export default function PayoutsPage() {
   const [channels, setChannels] = useState([]);
   const [channelId, setChannelId] = useState('');
   const [rows, setRows] = useState([]);
+  const [bookingsLoading, setBookingsLoading] = useState(false);
+  const [bookingsLoaded, setBookingsLoaded] = useState(false);
+  const [bookingsError, setBookingsError] = useState('');
+  const bookingsRequest = useRef(0);
   const [history, setHistory] = useState([]);
   const [historyHasMore, setHistoryHasMore] = useState(false);
   const [historyLoaded, setHistoryLoaded] = useState(false);
@@ -109,12 +113,28 @@ export default function PayoutsPage() {
     }
   }
 
-  async function loadBookings(nextChannelId = channelId, term = search) {
-    if (!nextChannelId) { setRows([]); return; }
+  async function loadBookings(nextChannelId = channelId, term = search, { clear = false } = {}) {
+    const requestId = ++bookingsRequest.current;
+    setBookingsError('');
+    if (clear) { setRows([]); setBookingsLoaded(false); }
+    if (!nextChannelId) { setRows([]); setBookingsLoaded(true); setBookingsLoading(false); return; }
+    setBookingsLoading(true);
     const params = new URLSearchParams({ channel_id: String(nextChannelId) });
     if (term.trim()) params.set('search', term.trim());
-    const data = await request(`/channel-reconciliation/bookings?${params.toString()}`);
-    setRows(Array.isArray(data) ? data : []);
+    try {
+      const data = await request(`/channel-reconciliation/bookings?${params.toString()}`);
+      if (requestId !== bookingsRequest.current) return;
+      if (!Array.isArray(data)) throw new Error('Channel bookings returned an unexpected response.');
+      setRows(data);
+      setBookingsLoaded(true);
+    } catch (err) {
+      if (requestId === bookingsRequest.current) {
+        setBookingsError(err.message || 'Failed to load bookings awaiting payout.');
+        throw err;
+      }
+    } finally {
+      if (requestId === bookingsRequest.current) setBookingsLoading(false);
+    }
   }
 
   useEffect(() => {
@@ -127,7 +147,7 @@ export default function PayoutsPage() {
   useEffect(() => {
     if (!channelId) return;
     setSelected({});
-    loadBookings(channelId, search).catch((err) => setError(err.message || 'Failed to load bookings awaiting payout.'));
+    loadBookings(channelId, search, { clear: true }).catch(() => {});
   }, [channelId]);
 
   const chosen = useMemo(() => rows.filter((row) => selected[row.booking_id]?.checked), [rows, selected]);
@@ -208,7 +228,7 @@ export default function PayoutsPage() {
   }
 
   async function reconcile() {
-    if (!completeAmounts || !allocationMatches || !channelId) return;
+    if (!completeAmounts || !allocationMatches || !channelId || bookingsLoading || bookingsError) return;
     setSaving(true); setError(''); setNotice('');
     try {
       const payload = {
@@ -279,7 +299,7 @@ export default function PayoutsPage() {
               </select>
             </label>
             <label>Guest or booking ID
-              <input value={search} placeholder="Search awaiting bookings" onChange={(e) => setSearch(e.target.value)} onKeyDown={(e) => { if (e.key === 'Enter') { e.preventDefault(); loadBookings(channelId, search).catch((err) => setError(err.message)); } }} />
+              <input value={search} placeholder="Search awaiting bookings" onChange={(e) => setSearch(e.target.value)} onKeyDown={(e) => { if (e.key === 'Enter') { e.preventDefault(); loadBookings(channelId, search).catch(() => {}); } }} />
             </label>
             {canReconcile && <label>Payout date<input type="date" value={payoutDate} onChange={(e) => setPayoutDate(e.target.value)} /></label>}
             {canReconcile && <label>Statement / reference<input value={reference} placeholder="Optional" onChange={(e) => setReference(e.target.value)} /></label>}
@@ -295,9 +315,10 @@ export default function PayoutsPage() {
         <section className="section">
           <div className="row wrap" style={{ justifyContent: 'space-between', marginBottom: 8 }}>
             <div><h2>Bookings awaiting payout</h2><p className="muted small">{canReconcile ? 'Expected payout is editable for new or corrected data. Actual payout follows expected until you change the actual bank receipt.' : 'View expected payouts and recorded history. Recording requires a cashflow permission.'}</p>{rows.length >= 2000 && <p className="muted small" role="status">Showing the first 2,000 unpaid bookings. Search by guest or booking ID to find older bookings.</p>}</div>
-            <button type="button" className="secondary" onClick={() => loadBookings(channelId, search).catch((err) => setError(err.message))}>Refresh</button>
+            <button type="button" className="secondary" onClick={() => loadBookings(channelId, search).catch(() => {})}>Refresh</button>
           </div>
-          <div className="table-wrap">
+          {!!bookingsError && <p className="error-text" role="alert">{bookingsError}</p>}
+          {rows.length > 0 ? <div className="table-wrap">
             <table className="table payout-table">
               <thead><tr><th className="select-cell">{canReconcile && <input aria-label="Select all bookings" type="checkbox" checked={rows.length > 0 && chosen.length === rows.length} onChange={(e) => toggleAll(e.target.checked)} />}</th><th>Booking</th><th>Stay</th><th className="amount">Standard room rate</th><th className="amount">Expected payout</th><th className="amount">Actual payout</th><th className="amount">Difference vs room rate</th></tr></thead>
               <tbody>
@@ -319,10 +340,9 @@ export default function PayoutsPage() {
                     <td className="amount"><div className="payout-deduction">{money(difference)}</div><div className="payout-rate">{rate === null ? '—' : `${pct(rate)} vs standard rate`}</div></td>
                   </tr>;
                 })}
-                {!rows.length && <tr><td colSpan="7" className="payout-empty">{loading ? 'Loading channel bookings…' : 'No unpaid bookings for this channel.'}</td></tr>}
               </tbody>
             </table>
-          </div>
+          </div> : <div className="payout-empty" role="status">{loading || bookingsLoading ? 'Loading channel bookings…' : !channelId ? 'No active booking channel.' : bookingsLoaded ? 'No unpaid bookings for this channel.' : 'Channel bookings could not be loaded. Refresh to try again.'}</div>}
         </section>
 
         {chosen.length > 0 && <section className="section payout-summary">
@@ -343,7 +363,7 @@ export default function PayoutsPage() {
           </div>
           <div className="payout-actions">
             <button type="button" className="secondary" onClick={() => setSelected({})}>Clear selection</button>
-            <button type="button" disabled={!canReconcile || !completeAmounts || !allocationMatches || saving} onClick={reconcile}>{saving ? 'Recording…' : `Record payout ${money(totals.actual)}`}</button>
+            <button type="button" disabled={!canReconcile || !completeAmounts || !allocationMatches || bookingsLoading || !!bookingsError || saving} onClick={reconcile}>{saving ? 'Recording…' : `Record payout ${money(totals.actual)}`}</button>
           </div>
         </section>}
       </>}
