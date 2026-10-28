@@ -44,6 +44,7 @@ export default function PayoutsPage() {
   const [tab, setTab] = useState('awaiting');
   const [channels, setChannels] = useState([]);
   const [channelId, setChannelId] = useState('');
+  const activeChannel = useRef('');
   const [rows, setRows] = useState([]);
   const [bookingsLoading, setBookingsLoading] = useState(false);
   const [bookingsLoaded, setBookingsLoaded] = useState(false);
@@ -69,7 +70,9 @@ export default function PayoutsPage() {
     const data = await request('/channel-reconciliation/channels');
     const available = Array.isArray(data) ? data : [];
     setChannels(available);
-    setChannelId((current) => current || (available[0]?.id ? String(available[0].id) : ''));
+    const firstChannel = available[0]?.id ? String(available[0].id) : '';
+    activeChannel.current = firstChannel;
+    setChannelId(firstChannel);
   }
 
   async function loadHistory() {
@@ -114,6 +117,7 @@ export default function PayoutsPage() {
   }
 
   async function loadBookings(nextChannelId = channelId, term = search, { clear = false } = {}) {
+    if (String(nextChannelId) !== activeChannel.current) return;
     const requestId = ++bookingsRequest.current;
     setBookingsError('');
     if (clear) { setRows([]); setBookingsLoaded(false); }
@@ -123,17 +127,17 @@ export default function PayoutsPage() {
     if (term.trim()) params.set('search', term.trim());
     try {
       const data = await request(`/channel-reconciliation/bookings?${params.toString()}`);
-      if (requestId !== bookingsRequest.current) return;
+      if (requestId !== bookingsRequest.current || String(nextChannelId) !== activeChannel.current) return;
       if (!Array.isArray(data)) throw new Error('Channel bookings returned an unexpected response.');
       setRows(data);
       setBookingsLoaded(true);
     } catch (err) {
-      if (requestId === bookingsRequest.current) {
+      if (requestId === bookingsRequest.current && String(nextChannelId) === activeChannel.current) {
         setBookingsError(err.message || 'Failed to load bookings awaiting payout.');
         throw err;
       }
     } finally {
-      if (requestId === bookingsRequest.current) setBookingsLoading(false);
+      if (requestId === bookingsRequest.current && String(nextChannelId) === activeChannel.current) setBookingsLoading(false);
     }
   }
 
@@ -147,6 +151,7 @@ export default function PayoutsPage() {
   useEffect(() => {
     if (!channelId) return;
     setSelected({});
+    setReference(''); setAmountReceived(''); setNotes('');
     loadBookings(channelId, search, { clear: true }).catch(() => {});
   }, [channelId]);
 
@@ -228,7 +233,7 @@ export default function PayoutsPage() {
   }
 
   async function reconcile() {
-    if (!completeAmounts || !allocationMatches || !channelId || bookingsLoading || bookingsError) return;
+    if (!completeAmounts || !allocationMatches || !channelId || String(channelId) !== activeChannel.current || bookingsLoading || bookingsError) return;
     setSaving(true); setError(''); setNotice('');
     try {
       const payload = {
@@ -247,14 +252,23 @@ export default function PayoutsPage() {
       };
       const result = await request('/channel-reconciliation/reconcile', { method: 'POST', body: JSON.stringify(payload) });
       setNotice(`${result.booking_count} booking${result.booking_count === 1 ? '' : 's'} reconciled. ${money(result.allocated_amount)} recorded as channel payout.`);
-      setSelected({}); setReference(''); setAmountReceived(''); setNotes('');
+      const stillOnSubmittedChannel = activeChannel.current === String(channelId);
+      if (stillOnSubmittedChannel) {
+        setSelected({}); setReference(''); setAmountReceived(''); setNotes('');
+      }
       try {
-        await Promise.all([loadBookings(channelId, search), loadHistory()]);
+        await Promise.all([stillOnSubmittedChannel ? loadBookings(channelId, search) : Promise.resolve(), loadHistory()]);
       } catch {
-        setError('Payout recorded, but the lists could not be refreshed. Refresh them before recording another payout.');
+        setError(stillOnSubmittedChannel
+          ? 'Payout recorded, but the lists could not be refreshed. Refresh them before recording another payout.'
+          : 'Payout recorded, but history could not be refreshed. Refresh it to view the latest payout.');
       }
     } catch (err) {
       if (err.status === 409) {
+        if (activeChannel.current !== String(channelId)) {
+          setError('A selected booking was already recorded in another session. Return to that channel and refresh its bookings before trying again.');
+          return;
+        }
         try {
           await Promise.all([loadBookings(channelId, search), loadHistory()]);
           setError('A selected booking was already recorded in another session. The list has been refreshed; review the remaining selections before trying again.');
@@ -293,7 +307,7 @@ export default function PayoutsPage() {
         <section className="section">
           <div className="payout-filter-grid">
             <label>Booking channel
-              <select value={channelId} onChange={(e) => setChannelId(e.target.value)} disabled={loading}>
+              <select value={channelId} onChange={(e) => { activeChannel.current = e.target.value; setChannelId(e.target.value); }} disabled={loading}>
                 {!channels.length && <option value="">No active channels</option>}
                 {channels.map((row) => <option key={row.id} value={row.id}>{row.name}{row.code ? ` · ${row.code}` : ''}</option>)}
               </select>
