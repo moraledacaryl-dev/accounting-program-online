@@ -1,10 +1,12 @@
 'use client';
 
-import { useEffect, useMemo, useState } from 'react';
+import { useEffect, useMemo, useRef, useState } from 'react';
 import { businessDateISO } from '../../lib/businessDate';
 import { request } from '../../lib/api';
 import { useCurrentUser } from '../../lib/useCurrentUser';
 import './channel-payouts.css';
+
+const HISTORY_PAGE_SIZE = 200;
 
 function money(value) {
   return Number(value || 0).toLocaleString('en-PH', { style: 'currency', currency: 'PHP', minimumFractionDigits: 2, maximumFractionDigits: 2 });
@@ -44,6 +46,10 @@ export default function PayoutsPage() {
   const [channelId, setChannelId] = useState('');
   const [rows, setRows] = useState([]);
   const [history, setHistory] = useState([]);
+  const [historyHasMore, setHistoryHasMore] = useState(false);
+  const [historyLoaded, setHistoryLoaded] = useState(false);
+  const [loadingOlderHistory, setLoadingOlderHistory] = useState(false);
+  const historyGeneration = useRef(0);
   const [search, setSearch] = useState('');
   const [selected, setSelected] = useState({});
   const [payoutDate, setPayoutDate] = useState(businessDateISO());
@@ -63,8 +69,44 @@ export default function PayoutsPage() {
   }
 
   async function loadHistory() {
-    const data = await request('/channel-reconciliation/history');
-    setHistory(Array.isArray(data) ? data : []);
+    const generation = ++historyGeneration.current;
+    setHistoryHasMore(false);
+    setHistoryLoaded(false);
+    const data = await request(`/channel-reconciliation/history?limit=${HISTORY_PAGE_SIZE}`);
+    if (!Array.isArray(data)) throw new Error('Payout history returned an unexpected response.');
+    if (generation !== historyGeneration.current) return;
+    const page = data;
+    setHistory(page);
+    setHistoryHasMore(page.length === HISTORY_PAGE_SIZE);
+    setHistoryLoaded(true);
+  }
+
+  async function loadOlderHistory() {
+    if (!historyHasMore || loadingOlderHistory || !history.length) return;
+    const generation = historyGeneration.current;
+    const last = history[history.length - 1];
+    const params = new URLSearchParams({
+      limit: String(HISTORY_PAGE_SIZE),
+      before_date: last.actual_payout_date || '',
+      before_id: String(last.id),
+    });
+    setLoadingOlderHistory(true);
+    setError('');
+    try {
+      const data = await request(`/channel-reconciliation/history?${params.toString()}`);
+      if (!Array.isArray(data)) throw new Error('Payout history returned an unexpected response.');
+      if (generation !== historyGeneration.current) return;
+      const page = data;
+      setHistory((current) => {
+        const seen = new Set(current.map((row) => row.id));
+        return [...current, ...page.filter((row) => !seen.has(row.id))];
+      });
+      setHistoryHasMore(page.length === HISTORY_PAGE_SIZE);
+    } catch (err) {
+      setError(err.message || 'Failed to load older payouts.');
+    } finally {
+      setLoadingOlderHistory(false);
+    }
   }
 
   async function loadBookings(nextChannelId = channelId, term = search) {
@@ -307,12 +349,13 @@ export default function PayoutsPage() {
       </>}
 
       {tab === 'history' && <section className="section">
-        <div style={{ marginBottom: 10 }}><h2>Payout history</h2><p className="muted small">History keeps the standard room-rate baseline, entered expected payout, actual receipt, and resulting differences.</p></div>
-        {!historyGroups.length && <div className="payout-empty">No reconciled booking payouts yet.</div>}
+        <div style={{ marginBottom: 10 }}><h2>Payout history</h2><p className="muted small">History keeps the standard room-rate baseline, entered expected payout, actual receipt, and resulting differences.</p>{historyLoaded && <p className="muted small" role="status">Showing {history.length} payout record{history.length === 1 ? '' : 's'}{historyHasMore ? '; older records are available below' : ''}.</p>}</div>
+        {!historyGroups.length && <div className="payout-empty">{loading ? 'Loading payout history…' : historyLoaded ? 'No reconciled booking payouts yet.' : 'Payout history could not be loaded. Refresh the page to try again.'}</div>}
         {historyGroups.map((group) => <div className="payout-history-batch" key={group.key}>
           <div className="payout-history-head"><strong>{group.channel}<br/><span>{group.reference}</span></strong><span>{group.date}</span><span>{group.rows.length} booking{group.rows.length === 1 ? '' : 's'}</span><span>Expected<br/><strong>{money(group.expected)}</strong></span><span>Received<br/><strong>{money(group.actual)}</strong></span></div>
           <div className="payout-history-body table-wrap"><table className="table"><thead><tr><th>Booking</th><th>Guest</th><th>Stay</th><th>Standard room rate</th><th>Expected payout</th><th>Actual payout</th><th>Difference vs room rate</th></tr></thead><tbody>{group.rows.map((row) => <tr key={row.id}><td>{row.booking_ref || `#${row.booking_id}`}</td><td>{row.guest_name || '—'}</td><td>{row.check_in || '—'} → {row.check_out || '—'}</td><td>{money(row.gross_amount)}</td><td>{money(row.expected_amount)}</td><td>{money(row.actual_amount)}</td><td>{money(row.deduction_amount)} <span className="muted">({pct(row.deduction_percent)})</span></td></tr>)}</tbody></table></div>
         </div>)}
+        {historyHasMore && <button type="button" className="secondary" disabled={loadingOlderHistory} onClick={loadOlderHistory}>{loadingOlderHistory ? 'Loading older payouts…' : 'Load older payouts'}</button>}
       </section>}
     </div>
   );

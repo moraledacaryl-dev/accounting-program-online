@@ -3,10 +3,11 @@ from __future__ import annotations
 from dataclasses import dataclass
 from datetime import date, datetime
 from decimal import Decimal, ROUND_HALF_UP
+from typing import Annotated
 
 from fastapi import APIRouter, Depends, HTTPException, Query
 from pydantic import BaseModel, Field, field_validator, model_validator
-from sqlalchemy import func, or_
+from sqlalchemy import and_, func, or_
 from sqlalchemy.orm import Session, selectinload
 
 from app.api.channel import _post_commission_delta, _post_settlement_delta
@@ -221,10 +222,25 @@ def payout_bookings(channel_id: int = Query(ge=1), search: str = Query(default='
 
 
 @router.get('/history')
-def reconciliation_history(channel_id: int | None = Query(default=None, ge=1), db: Session = Depends(get_db), user=Depends(require_any_permissions('bookings.view', 'cashflow.view', 'reports.view'))):
-    query = (db.query(ChannelPayoutBookingLink, ChannelPayout, Booking, BookingChannel).options(selectinload(Booking.room)).join(ChannelPayout, ChannelPayout.id == ChannelPayoutBookingLink.payout_id).join(Booking, Booking.id == ChannelPayoutBookingLink.booking_id).join(BookingChannel, BookingChannel.id == Booking.channel_id).filter(func.lower(ChannelPayout.status) == 'paid'))
+def reconciliation_history(
+    channel_id: Annotated[int | None, Query(ge=1)] = None,
+    before_date: Annotated[str | None, Query(max_length=50)] = None,
+    before_id: Annotated[int | None, Query(ge=1)] = None,
+    limit: Annotated[int, Query(ge=1, le=500)] = 200,
+    db: Session = Depends(get_db),
+    user=Depends(require_any_permissions('bookings.view', 'cashflow.view', 'reports.view')),
+):
+    if (before_date is None) != (before_id is None):
+        raise HTTPException(status_code=400, detail='History cursor requires both payout date and ID.')
+    query = (db.query(ChannelPayoutBookingLink, ChannelPayout, Booking, BookingChannel).options(selectinload(Booking.room)).join(ChannelPayout, ChannelPayout.id == ChannelPayoutBookingLink.payout_id).join(Booking, Booking.id == ChannelPayoutBookingLink.booking_id).join(BookingChannel, BookingChannel.id == Booking.channel_id).filter(func.trim(func.lower(ChannelPayout.status)) == 'paid'))
     if channel_id: query = query.filter(Booking.channel_id == channel_id)
-    rows = query.order_by(ChannelPayout.actual_payout_date.desc(), ChannelPayout.id.desc()).all()
+    payout_date = func.coalesce(ChannelPayout.actual_payout_date, '')
+    if before_id is not None:
+        query = query.filter(or_(
+            payout_date < before_date,
+            and_(payout_date == before_date, ChannelPayout.id < before_id),
+        ))
+    rows = query.order_by(payout_date.desc(), ChannelPayout.id.desc()).limit(limit).all()
     context = _rate_context(db, [booking for _link, _payout, booking, _channel in rows])
     out = []
     for link, payout, booking, channel in rows:
