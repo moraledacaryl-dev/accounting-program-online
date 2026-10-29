@@ -1,10 +1,11 @@
 """The offsite diagnostic must report only fixed stages, including on failure."""
 
 import importlib.util
-import json
+import subprocess
 import unittest
 from pathlib import Path
 from types import SimpleNamespace
+from unittest.mock import patch
 
 SCRIPT = Path(__file__).resolve().parents[2] / "scripts" / "dr" / "accounting_offsite_preflight.py"
 spec = importlib.util.spec_from_file_location("accounting_offsite_preflight", SCRIPT)
@@ -12,7 +13,7 @@ preflight = importlib.util.module_from_spec(spec)
 spec.loader.exec_module(preflight)
 
 
-def fake_offsite(*, failed_stage=None, used=100):
+def fake_offsite(*, failed_stage=None):
     def maybe_fail(stage):
         if stage == failed_stage:
             raise RuntimeError("private /path and token must stay hidden")
@@ -20,9 +21,8 @@ def fake_offsite(*, failed_stage=None, used=100):
     class Restic:
         def __init__(self, *_args):
             maybe_fail("repository")
-
-        def run(self, *_args):
-            return json.dumps({"total_size": used})
+            self.binary = Path("/usr/local/bin/restic")
+            self.environment = {"PATH": "/usr/bin"}
 
     def read_config(_path):
         maybe_fail("config")
@@ -44,23 +44,43 @@ def fake_offsite(*, failed_stage=None, used=100):
 
 class OffsitePreflightTests(unittest.TestCase):
     def test_success_and_capacity_guard(self):
-        self.assertEqual(preflight.diagnose(fake_offsite()), "repository_capacity_guard")
-        self.assertEqual(preflight.diagnose(fake_offsite(used=0)), "repository_capacity_guard")
-        large_budget = fake_offsite()
-        large_budget.REPOSITORY_BUDGET_BYTES = 100 * 1024**2
-        self.assertEqual(preflight.diagnose(large_budget), "preflight_pass")
+        offsite = fake_offsite()
+        offsite.REPOSITORY_BUDGET_BYTES = 100 * 1024**2
+        with patch.object(preflight.subprocess, "run", side_effect=[
+            subprocess.CompletedProcess([], 0, b"[]", b""),
+            subprocess.CompletedProcess([], 0, b'{"total_size":100}', b""),
+        ]):
+            self.assertEqual(preflight.diagnose(offsite), "preflight_pass")
+        with patch.object(preflight.subprocess, "run", side_effect=[
+            subprocess.CompletedProcess([], 0, b"[]", b""),
+            subprocess.CompletedProcess([], 0, b'{"total_size":100}', b""),
+        ]):
+            self.assertEqual(preflight.diagnose(fake_offsite()), "repository_capacity_guard")
 
     def test_private_exception_text_is_replaced_with_stage(self):
         for stage, expected in (
             ("config", "config_unverified"),
             ("source", "source_unverified"),
             ("key", "key_scope_unverified"),
-            ("repository", "repository_read_unverified"),
+            ("repository", "repository_client_unverified"),
         ):
             with self.subTest(stage=stage):
                 result = preflight.diagnose(fake_offsite(failed_stage=stage))
                 self.assertEqual(result, expected)
                 self.assertNotIn("private", result)
+
+    def test_restic_errors_are_classified_without_echoing_private_stderr(self):
+        for stderr, expected in (
+            (b"repository is already locked by /private/path", "repository_lock"),
+            (b"wrong password for repository", "repository_password"),
+            (b"Access Denied: credential SECRET 403", "repository_access"),
+            (b"connection timeout to private host", "repository_network"),
+            (b"unknown error token=PRIVATE", "repository_command_failed"),
+        ):
+            with self.subTest(expected=expected):
+                result = preflight.classify_restic_failure(stderr)
+                self.assertEqual(result, expected)
+                self.assertNotIn("PRIVATE", result)
 
 
 if __name__ == "__main__":

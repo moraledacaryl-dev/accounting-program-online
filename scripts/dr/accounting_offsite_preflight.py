@@ -6,6 +6,7 @@ from __future__ import annotations
 import importlib.util
 import json
 import os
+import subprocess
 from pathlib import Path
 
 ACTIVE_SCRIPT = Path("/opt/accounting-current/scripts/dr/offsite_accounting.py")
@@ -14,6 +15,49 @@ BACKUPS = Path("/var/backups/hiddenoasis/accounting")
 CURRENT = Path("/opt/accounting-current")
 CACHE = Path("/var/cache/hiddenoasis-accounting-offsite")
 RESTIC = Path("/usr/local/bin/restic")
+
+
+def classify_restic_failure(stderr: bytes) -> str:
+    """Map private command diagnostics to fixed, non-sensitive categories."""
+    message = stderr[:8192].decode("utf-8", errors="replace").lower()
+    if "locked" in message or "lock" in message:
+        return "repository_lock"
+    if "wrong password" in message or "no key found" in message:
+        return "repository_password"
+    if any(term in message for term in ("access denied", "unauthorized", "forbidden", "403")):
+        return "repository_access"
+    if any(term in message for term in ("timeout", "connection", "network", "temporary failure")):
+        return "repository_network"
+    if "not found" in message or "does not exist" in message:
+        return "repository_missing"
+    return "repository_command_failed"
+
+
+def read_repository(client: object, size: int, budget: int) -> str:
+    """Run read-only Restic commands without ever printing their output."""
+    for args in (("snapshots",), ("stats", "--mode", "raw-data")):
+        try:
+            result = subprocess.run(
+                [str(client.binary), "--json", *args], env=client.environment,
+                stdout=subprocess.PIPE, stderr=subprocess.PIPE,
+                check=False, timeout=120,
+            )
+        except (OSError, subprocess.TimeoutExpired):
+            return "repository_command_unavailable"
+        if result.returncode:
+            return classify_restic_failure(result.stderr)
+        if len(result.stdout) > 1024**2:
+            return "repository_output_unverified"
+        if args[0] == "stats":
+            try:
+                used = json.loads(result.stdout).get("total_size")
+            except (ValueError, AttributeError):
+                return "repository_stats_unverified"
+            if type(used) is not int or used < 0:
+                return "repository_stats_unverified"
+            if used + size + 64 * 1024**2 > budget:
+                return "repository_capacity_guard"
+    return "preflight_pass"
 
 
 def diagnose(offsite: object) -> str:
@@ -33,15 +77,9 @@ def diagnose(offsite: object) -> str:
         return "key_scope_unverified"
     try:
         client = offsite.Restic(RESTIC, config, CACHE)
-        stats = json.loads(client.run("stats", "--mode", "raw-data"))
-        used = stats.get("total_size")
-        if type(used) is not int or used < 0:
-            return "repository_stats_unverified"
-        if used + size + 64 * 1024**2 > offsite.REPOSITORY_BUDGET_BYTES:
-            return "repository_capacity_guard"
     except Exception:
-        return "repository_read_unverified"
-    return "preflight_pass"
+        return "repository_client_unverified"
+    return read_repository(client, size, offsite.REPOSITORY_BUDGET_BYTES)
 
 
 def main() -> int:
