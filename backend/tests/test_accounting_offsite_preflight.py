@@ -8,6 +8,7 @@ import unittest
 from pathlib import Path
 from types import SimpleNamespace
 from unittest.mock import patch
+from urllib.error import HTTPError
 
 SCRIPT = Path(__file__).resolve().parents[2] / "scripts" / "dr" / "accounting_offsite_preflight.py"
 spec = importlib.util.spec_from_file_location("accounting_offsite_preflight", SCRIPT)
@@ -47,6 +48,27 @@ def fake_offsite(*, failed_stage=None):
 
 
 class OffsitePreflightTests(unittest.TestCase):
+    def test_native_config_read_disposes_body_and_reports_only_fixed_status(self):
+        authorization = {
+            "authorizationToken": "private-token",
+            "apiInfo": {"storageApi": {
+                "downloadUrl": "https://f004.backblazeb2.com",
+                "bucketName": preflight.BUCKET_NAME,
+            }},
+        }
+        keys = {"access_key_id": "test-id", "secret_access_key": "private-secret"}
+        with patch.object(preflight, "urlopen", side_effect=[
+            io.BytesIO(json.dumps(authorization).encode()),
+            io.BytesIO(b"private-restic-config"),
+        ]) as opened:
+            self.assertEqual(preflight.native_config_read(keys), "native_config_read_pass")
+        self.assertTrue(opened.call_args_list[1].args[0].full_url.endswith("/accounting/config"))
+        with patch.object(preflight, "urlopen", side_effect=[
+            io.BytesIO(json.dumps(authorization).encode()),
+            HTTPError("https://f004.backblazeb2.com", 403, "private detail", None, None),
+        ]):
+            self.assertEqual(preflight.native_config_read(keys), "native_config_access_denied")
+
     def test_native_probe_requests_only_scoped_prefix_and_one_object(self):
         authorization = {
             "authorizationToken": "private-token",
@@ -68,12 +90,12 @@ class OffsitePreflightTests(unittest.TestCase):
     def test_success_and_capacity_guard(self):
         offsite = fake_offsite()
         offsite.REPOSITORY_BUDGET_BYTES = 100 * 1024**2
-        with patch.object(preflight, "native_repository_has_objects", return_value=True), patch.object(preflight.subprocess, "run", side_effect=[
+        with patch.object(preflight, "native_repository_has_objects", return_value=True), patch.object(preflight, "native_config_read", return_value="native_config_read_pass"), patch.object(preflight.subprocess, "run", side_effect=[
             subprocess.CompletedProcess([], 0, b"[]", b""),
             subprocess.CompletedProcess([], 0, b'{"total_size":100}', b""),
         ]):
             self.assertEqual(preflight.diagnose(offsite), "preflight_pass")
-        with patch.object(preflight, "native_repository_has_objects", return_value=True), patch.object(preflight.subprocess, "run", side_effect=[
+        with patch.object(preflight, "native_repository_has_objects", return_value=True), patch.object(preflight, "native_config_read", return_value="native_config_read_pass"), patch.object(preflight.subprocess, "run", side_effect=[
             subprocess.CompletedProcess([], 0, b"[]", b""),
             subprocess.CompletedProcess([], 0, b'{"total_size":100}', b""),
         ]):
@@ -87,7 +109,7 @@ class OffsitePreflightTests(unittest.TestCase):
             ("repository", "repository_client_unverified"),
         ):
             with self.subTest(stage=stage):
-                with patch.object(preflight, "native_repository_has_objects", return_value=True):
+                with patch.object(preflight, "native_repository_has_objects", return_value=True), patch.object(preflight, "native_config_read", return_value="native_config_read_pass"):
                     result = preflight.diagnose(fake_offsite(failed_stage=stage))
                 self.assertEqual(result, expected)
                 self.assertNotIn("private", result)
@@ -113,30 +135,13 @@ class OffsitePreflightTests(unittest.TestCase):
                 self.assertEqual(result, expected)
                 self.assertNotIn("PRIVATE", result)
 
-    def test_native_restic_probe_reads_existing_snapshot_without_emitting_secrets(self):
-        client = SimpleNamespace(binary=Path("/usr/local/bin/restic"), environment={
-            "RESTIC_PASSWORD_FILE": "/private/password", "AWS_ACCESS_KEY_ID": "old-id",
-            "AWS_SECRET_ACCESS_KEY": "old-secret",
-        })
-        keys = {"access_key_id": "new-id", "secret_access_key": "new-secret"}
-        with patch.object(preflight.subprocess, "run", return_value=subprocess.CompletedProcess(
-            [], 0, b'[{"id":"synthetic-snapshot"}]', b""
-        )) as invoked:
-            self.assertEqual(preflight.probe_native_restic(client, keys), "s3_denied_native_read_pass")
-        environment = invoked.call_args.kwargs["env"]
-        self.assertEqual(environment["RESTIC_REPOSITORY"], preflight.NATIVE_REPOSITORY)
-        self.assertNotIn("AWS_SECRET_ACCESS_KEY", environment)
-        self.assertEqual(environment["B2_ACCOUNT_KEY"], "new-secret")
-        self.assertNotIn("B2_ACCOUNT_KEY", client.environment)
-
-    def test_s3_access_denial_triggers_native_read_probe(self):
-        with patch.object(preflight, "native_repository_has_objects", return_value=True), patch.object(
+    def test_s3_access_denial_is_distinguished_from_native_config_read(self):
+        with patch.object(preflight, "native_repository_has_objects", return_value=True), patch.object(preflight, "native_config_read", return_value="native_config_read_pass"), patch.object(
             preflight.subprocess, "run", side_effect=[
                 subprocess.CompletedProcess([], 1, b"", b"Stat: 403 Forbidden"),
-                subprocess.CompletedProcess([], 0, b'[{"id":"synthetic-snapshot"}]', b""),
             ]
         ):
-            self.assertEqual(preflight.diagnose(fake_offsite()), "s3_denied_native_read_pass")
+            self.assertEqual(preflight.diagnose(fake_offsite()), "repository_access_object_read_native_config_pass")
 
 
 if __name__ == "__main__":
