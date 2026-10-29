@@ -51,6 +51,17 @@ monthly points, with a 48-hour recent-snapshot guard. The bucket's prior
 version lifecycle is seven days. Retention requires a verified cloud restore
 gate and performs a validated dry-run plan before any removal.
 
+The read-only `Accounting Backup Monitor` GitHub workflow runs daily at 08:15
+Manila and can also be dispatched manually. It verifies the newest local
+dump and uploads checksums, a backup age under three hours, at least 4 GiB of
+free backup disk, active/enabled timers, successful local/offsite service
+results, and a recent encrypted upload log. It reports the first scheduled
+weekly retention as pending until the November 2, 2026 04:50 Manila window;
+after a three-hour grace, absence of a successful scheduled apply fails the
+workflow. The monitor emits only aggregate state. It does not measure physical
+Backblaze account usage, prove an isolated restore, or establish a business
+recovery time.
+
 Useful read-only checks on the VPS:
 
 ```bash
