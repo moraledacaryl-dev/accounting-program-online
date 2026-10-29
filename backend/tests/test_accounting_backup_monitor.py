@@ -2,9 +2,11 @@
 
 import hashlib
 import importlib.util
+import io
 import json
 import tempfile
 import unittest
+from contextlib import redirect_stdout
 from datetime import datetime, timedelta, timezone
 from pathlib import Path
 from unittest.mock import patch
@@ -56,6 +58,20 @@ def journal_entry(message: dict, when: datetime) -> str:
 
 
 class AccountingBackupMonitorTests(unittest.TestCase):
+    def test_failure_codes_are_fixed_and_do_not_expose_exception_content(self):
+        for message, expected in (
+            ("No recent encrypted Accounting offsite success", "offsite_recent_success"),
+            ("sensitive /private/path", "runtime_or_metadata"),
+        ):
+            with self.subTest(expected=expected), patch.object(
+                monitor, "verify_latest_backup", side_effect=ValueError(message)
+            ):
+                output = io.StringIO()
+                with redirect_stdout(output):
+                    self.assertEqual(monitor.main(), 2)
+                self.assertIn(f"failure_code={expected}", output.getvalue())
+                self.assertNotIn(message, output.getvalue())
+
     def test_recent_backup_set_checks_both_checksums(self):
         now = datetime.now(timezone.utc).replace(microsecond=0)
         with tempfile.TemporaryDirectory() as scratch:

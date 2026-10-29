@@ -28,6 +28,24 @@ REQUIRED_FIELDS = frozenset({
     "format", "created_utc", "database", "sha256", "size_bytes",
     "release_sha", "alembic_revision", "uploads_archive", "uploads_sha256",
 })
+SAFE_FAILURE_CODES = {
+    "Backup directory is missing or unsafe": "backup_directory",
+    "No completed Accounting backup manifest": "backup_manifest_missing",
+    "Unexpected Accounting backup manifest": "backup_manifest_unsafe",
+    "Latest Accounting backup is not fresh": "backup_stale",
+    "Malformed Accounting backup manifest": "backup_manifest_malformed",
+    "Accounting backup set is missing or unsafe": "backup_set_missing",
+    "Accounting backup set is empty": "backup_set_empty",
+    "Accounting backup manifest does not match files": "backup_manifest_mismatch",
+    "Accounting backup checksum mismatch": "backup_checksum",
+    "Required Accounting timer is inactive": "timer_inactive",
+    "Required Accounting timer is disabled": "timer_disabled",
+    "Accounting backup service last result is not success": "service_result",
+    "Accounting backup service last exit is not zero": "service_exit",
+    "No recent encrypted Accounting offsite success": "offsite_recent_success",
+    "Accounting backup filesystem is below release threshold": "disk_free",
+    "Scheduled Accounting offsite retention has no recent successful apply": "retention_apply",
+}
 
 
 def _output(*args: str) -> str:
@@ -145,9 +163,11 @@ def main() -> int:
         print(f"ACCOUNTING BACKUP MONITOR: weekly_retention_run_observed={'YES' if retention_observed else 'NO'}")
         print("ACCOUNTING BACKUP MONITOR: EXECUTION PASS")
         return 0
-    except (OSError, ValueError, subprocess.SubprocessError):
-        # No backup path, business data, credential or journal message leaves the server.
-        print("ACCOUNTING BACKUP MONITOR: NOT_CERTIFIED; inspect timer, backup, offsite and disk state privately")
+    except (OSError, ValueError, subprocess.SubprocessError) as exc:
+        # Only fixed, reviewed codes leave the server; never print exception text,
+        # backup paths, business data, credentials or journal messages.
+        code = SAFE_FAILURE_CODES.get(str(exc), "runtime_or_metadata") if isinstance(exc, ValueError) else "runtime_or_metadata"
+        print(f"ACCOUNTING BACKUP MONITOR: NOT_CERTIFIED; failure_code={code}")
         return 2
 
 
