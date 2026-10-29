@@ -4,10 +4,14 @@
 from __future__ import annotations
 
 import importlib.util
+import base64
 import json
 import os
+import re
 import subprocess
 from pathlib import Path
+from urllib.parse import urlencode
+from urllib.request import Request, urlopen
 
 ACTIVE_SCRIPT = Path("/opt/accounting-current/scripts/dr/offsite_accounting.py")
 CONFIG = Path("/etc/hiddenoasis/accounting-offsite.json")
@@ -15,6 +19,41 @@ BACKUPS = Path("/var/backups/hiddenoasis/accounting")
 CURRENT = Path("/opt/accounting-current")
 CACHE = Path("/var/cache/hiddenoasis-accounting-offsite")
 RESTIC = Path("/usr/local/bin/restic")
+API_URL = re.compile(r"https://api[0-9]+\.backblazeb2\.com\Z")
+
+
+def native_repository_has_objects(keys: dict[str, str]) -> bool:
+    """Read at most one object name through B2 Native API; never return it."""
+    basic = base64.b64encode(
+        (keys["access_key_id"] + ":" + keys["secret_access_key"]).encode()
+    ).decode()
+    authorize = Request(
+        "https://api.backblazeb2.com/b2api/v3/b2_authorize_account",
+        headers={"Authorization": "Basic " + basic},
+    )
+    with urlopen(authorize, timeout=15) as response:
+        payload = response.read(16385)
+    if len(payload) > 16384:
+        raise ValueError("B2 authorization response too large")
+    authorization = json.loads(payload)
+    scope = authorization["apiInfo"]["storageApi"]
+    base = scope["apiUrl"].rstrip("/")
+    bucket = scope["bucketId"]
+    if not API_URL.fullmatch(base) or not isinstance(bucket, str) or not re.fullmatch(r"[0-9a-f]{24}", bucket):
+        raise ValueError("Unexpected B2 bucket identity")
+    query = urlencode({"bucketId": bucket, "prefix": "accounting/", "maxFileCount": 1})
+    request = Request(
+        base + "/b2api/v3/b2_list_file_names?" + query,
+        headers={"Authorization": authorization["authorizationToken"]},
+    )
+    with urlopen(request, timeout=15) as response:
+        body = response.read(16385)
+    if len(body) > 16384:
+        raise ValueError("B2 listing response too large")
+    files = json.loads(body)["files"]
+    if not isinstance(files, list) or len(files) > 1:
+        raise ValueError("Unexpected B2 listing response")
+    return len(files) == 1
 
 
 def classify_restic_failure(stderr: bytes) -> str:
@@ -25,6 +64,12 @@ def classify_restic_failure(stderr: bytes) -> str:
     if "wrong password" in message or "no key found" in message:
         return "repository_password"
     if any(term in message for term in ("access denied", "unauthorized", "forbidden", "403")):
+        if "listobjects" in message or "list objects" in message:
+            return "repository_access_object_list"
+        if "listbuckets" in message or "list buckets" in message:
+            return "repository_access_bucket_list"
+        if "headobject" in message or "stat:" in message:
+            return "repository_access_object_read"
         return "repository_access"
     if any(term in message for term in ("timeout", "connection", "network", "temporary failure")):
         return "repository_network"
@@ -75,6 +120,11 @@ def diagnose(offsite: object) -> str:
         offsite.verify_key_scope(config["keys"])
     except Exception:
         return "key_scope_unverified"
+    try:
+        if not native_repository_has_objects(config["keys"]):
+            return "native_repository_empty"
+    except Exception:
+        return "native_repository_list_unverified"
     try:
         client = offsite.Restic(RESTIC, config, CACHE)
     except Exception:
