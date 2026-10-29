@@ -40,8 +40,10 @@ SAFE_FAILURE_CODES = {
     "Accounting backup checksum mismatch": "backup_checksum",
     "Required Accounting timer is inactive": "timer_inactive",
     "Required Accounting timer is disabled": "timer_disabled",
-    "Accounting backup service last result is not success": "service_result",
-    "Accounting backup service last exit is not zero": "service_exit",
+    "Local backup service last result is not success": "local_service_result",
+    "Offsite backup service last result is not success": "offsite_service_result",
+    "Local backup service last exit is not zero": "local_service_exit",
+    "Offsite backup service last exit is not zero": "offsite_service_exit",
     "No recent encrypted Accounting offsite success": "offsite_recent_success",
     "Accounting backup filesystem is below release threshold": "disk_free",
     "Scheduled Accounting offsite retention has no recent successful apply": "retention_apply",
@@ -127,11 +129,14 @@ def check_runtime() -> tuple[bool, bool]:
             raise ValueError("Required Accounting timer is inactive")
         if _output("systemctl", "is-enabled", timer) != "enabled":
             raise ValueError("Required Accounting timer is disabled")
-    for service in ("accounting-backup.service", "accounting-offsite.service"):
+    for service, label in (
+        ("accounting-backup.service", "Local backup"),
+        ("accounting-offsite.service", "Offsite backup"),
+    ):
         if _output("systemctl", "show", "-p", "Result", "--value", service) != "success":
-            raise ValueError("Accounting backup service last result is not success")
+            raise ValueError(f"{label} service last result is not success")
         if _output("systemctl", "show", "-p", "ExecMainStatus", "--value", service) != "0":
-            raise ValueError("Accounting backup service last exit is not zero")
+            raise ValueError(f"{label} service last exit is not zero")
     if not _recent_pass("accounting-offsite.service", hours=3):
         raise ValueError("No recent encrypted Accounting offsite success")
     return True, _recent_pass(
