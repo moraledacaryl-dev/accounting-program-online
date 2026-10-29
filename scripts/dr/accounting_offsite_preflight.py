@@ -20,6 +20,7 @@ CURRENT = Path("/opt/accounting-current")
 CACHE = Path("/var/cache/hiddenoasis-accounting-offsite")
 RESTIC = Path("/usr/local/bin/restic")
 API_URL = re.compile(r"https://api[0-9]+\.backblazeb2\.com\Z")
+NATIVE_REPOSITORY = "b2:hidden-oasis-accounting-backups-20261026:accounting"
 
 
 def native_repository_has_objects(keys: dict[str, str]) -> bool:
@@ -105,6 +106,30 @@ def read_repository(client: object, size: int, budget: int) -> str:
     return "preflight_pass"
 
 
+def probe_native_restic(client: object, keys: dict[str, str]) -> str:
+    """Read the same repository with B2 native API if S3 access is denied."""
+    environment = client.environment.copy()
+    environment.pop("AWS_ACCESS_KEY_ID", None)
+    environment.pop("AWS_SECRET_ACCESS_KEY", None)
+    environment["RESTIC_REPOSITORY"] = NATIVE_REPOSITORY
+    environment["B2_ACCOUNT_ID"] = keys["access_key_id"]
+    environment["B2_ACCOUNT_KEY"] = keys["secret_access_key"]
+    try:
+        result = subprocess.run(
+            [str(client.binary), "--json", "snapshots"], env=environment,
+            stdout=subprocess.PIPE, stderr=subprocess.DEVNULL,
+            check=False, timeout=120,
+        )
+        if result.returncode or len(result.stdout) > 1024**2:
+            return "s3_denied_native_read_unverified"
+        snapshots = json.loads(result.stdout)
+        if not isinstance(snapshots, list) or not snapshots:
+            return "s3_denied_native_read_unverified"
+    except (OSError, ValueError, subprocess.TimeoutExpired):
+        return "s3_denied_native_read_unverified"
+    return "s3_denied_native_read_pass"
+
+
 def diagnose(offsite: object) -> str:
     try:
         config = offsite.read_config(CONFIG)
@@ -129,7 +154,10 @@ def diagnose(offsite: object) -> str:
         client = offsite.Restic(RESTIC, config, CACHE)
     except Exception:
         return "repository_client_unverified"
-    return read_repository(client, size, offsite.REPOSITORY_BUDGET_BYTES)
+    stage = read_repository(client, size, offsite.REPOSITORY_BUDGET_BYTES)
+    if stage.startswith("repository_access"):
+        return probe_native_restic(client, config["keys"])
+    return stage
 
 
 def main() -> int:

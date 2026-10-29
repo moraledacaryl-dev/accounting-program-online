@@ -28,7 +28,9 @@ def fake_offsite(*, failed_stage=None):
 
     def read_config(_path):
         maybe_fail("config")
-        return {"enabled": True, "keys": {"private": "never print"}}
+        return {"enabled": True, "keys": {
+            "access_key_id": "synthetic-id", "secret_access_key": "never-print",
+        }}
 
     def verified_source(_backups, _current):
         maybe_fail("source")
@@ -110,6 +112,31 @@ class OffsitePreflightTests(unittest.TestCase):
                 result = preflight.classify_restic_failure(stderr)
                 self.assertEqual(result, expected)
                 self.assertNotIn("PRIVATE", result)
+
+    def test_native_restic_probe_reads_existing_snapshot_without_emitting_secrets(self):
+        client = SimpleNamespace(binary=Path("/usr/local/bin/restic"), environment={
+            "RESTIC_PASSWORD_FILE": "/private/password", "AWS_ACCESS_KEY_ID": "old-id",
+            "AWS_SECRET_ACCESS_KEY": "old-secret",
+        })
+        keys = {"access_key_id": "new-id", "secret_access_key": "new-secret"}
+        with patch.object(preflight.subprocess, "run", return_value=subprocess.CompletedProcess(
+            [], 0, b'[{"id":"synthetic-snapshot"}]', b""
+        )) as invoked:
+            self.assertEqual(preflight.probe_native_restic(client, keys), "s3_denied_native_read_pass")
+        environment = invoked.call_args.kwargs["env"]
+        self.assertEqual(environment["RESTIC_REPOSITORY"], preflight.NATIVE_REPOSITORY)
+        self.assertNotIn("AWS_SECRET_ACCESS_KEY", environment)
+        self.assertEqual(environment["B2_ACCOUNT_KEY"], "new-secret")
+        self.assertNotIn("B2_ACCOUNT_KEY", client.environment)
+
+    def test_s3_access_denial_triggers_native_read_probe(self):
+        with patch.object(preflight, "native_repository_has_objects", return_value=True), patch.object(
+            preflight.subprocess, "run", side_effect=[
+                subprocess.CompletedProcess([], 1, b"", b"Stat: 403 Forbidden"),
+                subprocess.CompletedProcess([], 0, b'[{"id":"synthetic-snapshot"}]', b""),
+            ]
+        ):
+            self.assertEqual(preflight.diagnose(fake_offsite()), "s3_denied_native_read_pass")
 
 
 if __name__ == "__main__":
