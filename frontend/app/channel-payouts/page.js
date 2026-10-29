@@ -294,9 +294,9 @@ export default function PayoutsPage() {
             <p className="muted">Use the fixed standard room rate as the baseline. Expected payout can be entered or corrected manually, and actual payout starts equal to expected until the bank deposit differs.</p>
             {!canReconcile && <p className="muted" role="status">Payouts are read-only for your role. A cashflow recording permission is required to record or change a payout.</p>}
           </div>
-          <div className="payout-tabs" role="tablist" aria-label="Channel payout views">
-            <button type="button" className={`payout-tab ${tab === 'awaiting' ? 'active' : ''}`} onClick={() => setTab('awaiting')}>Awaiting payout</button>
-            <button type="button" className={`payout-tab ${tab === 'history' ? 'active' : ''}`} onClick={() => setTab('history')}>Payout history</button>
+          <div className="payout-tabs" role="group" aria-label="Channel payout views">
+            <button type="button" aria-pressed={tab === 'awaiting'} className={`payout-tab ${tab === 'awaiting' ? 'active' : ''}`} onClick={() => setTab('awaiting')}>Awaiting payout</button>
+            <button type="button" aria-pressed={tab === 'history'} className={`payout-tab ${tab === 'history' ? 'active' : ''}`} onClick={() => setTab('history')}>Payout history</button>
           </div>
         </div>
         {!!notice && <p className="success-text" style={{ marginTop: 12 }}>{notice}</p>}
