@@ -108,6 +108,19 @@ class AccountingBackupMonitorTests(unittest.TestCase):
             with self.assertRaisesRegex(ValueError, "inactive"):
                 monitor.check_runtime()
 
+    def test_failed_service_result_identifies_only_the_service(self):
+        def output(*args):
+            if args[:5] == ("systemctl", "show", "-p", "Result", "--value") and args[5] == "accounting-offsite.service":
+                return "exit-code"
+            return healthy_output(*args)
+        with patch.object(monitor, "_output", output):
+            with self.assertRaisesRegex(ValueError, "Offsite backup service last result"):
+                monitor.check_runtime()
+        self.assertEqual(
+            monitor.SAFE_FAILURE_CODES["Offsite backup service last result is not success"],
+            "offsite_service_result",
+        )
+
     def test_retention_dry_run_does_not_count_as_apply(self):
         def output(*args):
             if args[0] == "journalctl" and "retention" in args[2]:
