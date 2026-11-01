@@ -60,8 +60,9 @@ must be updated separately from the guarded application release. After exact
 SHA deployment, dispatch [Update Accounting Offsite Retention Timer](../.github/workflows/accounting-offsite-retention-timer-update.yml)
 with that active SHA; verify its timer remains enabled and the next due time.
 
-The read-only `Accounting Backup Monitor` GitHub workflow runs daily at 08:15
-Manila and can also be dispatched manually. It verifies the newest local
+The read-only `Accounting Backup Monitor` GitHub workflow runs daily at 13:15
+Manila, after the hourly offsite upload and Monday retention window, and can
+also be dispatched manually. It verifies the newest local
 dump and uploads checksums, a backup age under three hours, at least 4 GiB of
 free backup disk, active/enabled timers, successful local/offsite service
 results, and a recent encrypted upload log. It reports the first scheduled
