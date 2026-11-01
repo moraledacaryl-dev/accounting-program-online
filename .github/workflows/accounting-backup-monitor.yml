@@ -3,7 +3,8 @@ name: Accounting Backup Monitor (Read Only)
 on:
   workflow_dispatch:
   schedule:
-    - cron: '15 0 * * *'
+    # 13:15 Manila: after the 08:40 offsite upload and Monday 09:50 retention.
+    - cron: '15 5 * * *'
 
 permissions:
   contents: read

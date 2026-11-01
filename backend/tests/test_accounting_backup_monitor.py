@@ -141,6 +141,12 @@ class AccountingBackupMonitorTests(unittest.TestCase):
         self.assertFalse(monitor.retention_evidence_required(due + timedelta(hours=2)))
         self.assertTrue(monitor.retention_evidence_required(due + timedelta(hours=3)))
 
+    def test_daily_monitor_runs_after_first_retention_grace_and_post_reset_upload(self):
+        workflow = SCRIPT.parents[2] / ".github/workflows/accounting-backup-monitor.yml"
+        self.assertIn("cron: '15 5 * * *'", workflow.read_text())
+        first_monitor = datetime(2026, 11, 2, 5, 15, tzinfo=timezone.utc)
+        self.assertGreater(first_monitor, monitor.FIRST_RETENTION_DUE_UTC + timedelta(hours=3))
+
     def test_manual_retention_before_first_schedule_is_not_certified(self):
         prior_apply = journal_entry(
             {"status": "pass", "mode": "apply"},
