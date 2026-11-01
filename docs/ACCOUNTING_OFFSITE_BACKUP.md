@@ -16,6 +16,10 @@ current release SHA, age, size, both SHA-256 values, safe uploads archive
 members and the PostgreSQL archive catalog. It uses the same release lock as
 the backup and deployment programs. A repeated run for the same source tag
 reuses its existing Restic snapshot; it does not upload a duplicate.
+Each new upload also confirms that its exact snapshot ID can be read back
+from the cloud. Repository-wide `restic check` runs in the weekly retention
+job, after the daily Backblaze download allowance resets; it is not run after
+every hourly upload. The Monday timer is set to 09:50 Manila time.
 
 The repository is fixed to the separate private Accounting bucket and
 `accounting/` prefix in Backblaze US West 004. The Restic process receives

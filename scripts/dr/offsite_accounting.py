@@ -228,7 +228,14 @@ def upload_source(files: tuple[Path, ...], stamp: str, sha: str, size: int, clie
         summaries = [item for line in output.splitlines() if (item := json.loads(line)).get("message_type") == "summary"]
         if not summaries or not RESTIC_ID.fullmatch(summaries[-1].get("snapshot_id", "")):
             raise OffsiteError("Encrypted Accounting upload completion not verified")
-    client.run("check")
+        confirmed = json.loads(client.run("snapshots", "--tag", tag))
+        if (not isinstance(confirmed, list) or len(confirmed) != 1
+                or confirmed[0].get("id") != summaries[-1]["snapshot_id"]):
+            raise OffsiteError("Encrypted Accounting snapshot identity not verified")
+    # The weekly retention job runs repository-wide `restic check`. Running it
+    # after every hourly upload consumes the account's daily download allowance;
+    # a cap-exceeded incident then blocked offsite reads. Source hashes,
+    # archive/catalog validation and exact snapshot identity remain per upload.
 
 
 def main() -> int:
@@ -250,7 +257,7 @@ def main() -> int:
             verify_key_scope(config["keys"])
             client = Restic(Path("/usr/local/bin/restic"), config, Path("/var/cache/hiddenoasis-accounting-offsite"))
             upload_source(files, stamp, sha, size, client)
-        print('{"status":"pass","repository_metadata_verified":true,"archives_deleted":false}')
+        print('{"status":"pass","snapshot_identity_verified":true,"repository_check":"weekly_retention","archives_deleted":false}')
         return 0
     except Exception:
         print('{"status":"failed","detail":"Inspect source integrity, private credentials, account capacity and repository health"}')

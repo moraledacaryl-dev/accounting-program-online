@@ -10,6 +10,7 @@ from contextlib import redirect_stdout
 from datetime import datetime, timedelta, timezone
 from pathlib import Path
 from unittest.mock import patch
+from zoneinfo import ZoneInfo
 
 
 SCRIPT = Path(__file__).resolve().parents[2] / "scripts" / "dr" / "accounting_backup_monitor.py"
@@ -131,6 +132,12 @@ class AccountingBackupMonitorTests(unittest.TestCase):
 
     def test_first_scheduled_retention_window_has_a_grace_period(self):
         due = monitor.FIRST_RETENTION_DUE_UTC
+        timer = SCRIPT.parents[2] / "deploy/systemd/accounting-offsite-retention.timer"
+        self.assertIn("OnCalendar=Mon *-*-* 09:50:00 Asia/Manila", timer.read_text())
+        self.assertEqual(
+            due,
+            datetime(2026, 11, 2, 9, 50, tzinfo=ZoneInfo("Asia/Manila")).astimezone(timezone.utc),
+        )
         self.assertFalse(monitor.retention_evidence_required(due + timedelta(hours=2)))
         self.assertTrue(monitor.retention_evidence_required(due + timedelta(hours=3)))
 
