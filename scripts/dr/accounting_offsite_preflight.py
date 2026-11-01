@@ -10,7 +10,8 @@ import os
 import re
 import subprocess
 from pathlib import Path
-from urllib.parse import urlencode
+from urllib.error import HTTPError
+from urllib.parse import quote, urlencode
 from urllib.request import Request, urlopen
 
 ACTIVE_SCRIPT = Path("/opt/accounting-current/scripts/dr/offsite_accounting.py")
@@ -20,7 +21,8 @@ CURRENT = Path("/opt/accounting-current")
 CACHE = Path("/var/cache/hiddenoasis-accounting-offsite")
 RESTIC = Path("/usr/local/bin/restic")
 API_URL = re.compile(r"https://api[0-9]+\.backblazeb2\.com\Z")
-NATIVE_REPOSITORY = "b2:hidden-oasis-accounting-backups-20261026:accounting"
+DOWNLOAD_URL = re.compile(r"https://f[0-9]+\.backblazeb2\.com\Z")
+BUCKET_NAME = "hidden-oasis-accounting-backups-20261026"
 
 
 def native_repository_has_objects(keys: dict[str, str]) -> bool:
@@ -55,6 +57,44 @@ def native_repository_has_objects(keys: dict[str, str]) -> bool:
     if not isinstance(files, list) or len(files) > 1:
         raise ValueError("Unexpected B2 listing response")
     return len(files) == 1
+
+
+def native_config_read(keys: dict[str, str]) -> str:
+    """Check only the small Restic config object through B2 Native API."""
+    basic = base64.b64encode(
+        (keys["access_key_id"] + ":" + keys["secret_access_key"]).encode()
+    ).decode()
+    authorize = Request(
+        "https://api.backblazeb2.com/b2api/v3/b2_authorize_account",
+        headers={"Authorization": "Basic " + basic},
+    )
+    try:
+        with urlopen(authorize, timeout=15) as response:
+            payload = response.read(16385)
+        if len(payload) > 16384:
+            return "native_config_read_unverified"
+        authorization = json.loads(payload)
+        scope = authorization["apiInfo"]["storageApi"]
+        base = scope["downloadUrl"].rstrip("/")
+        if not DOWNLOAD_URL.fullmatch(base) or scope["bucketName"] != BUCKET_NAME:
+            return "native_config_read_unverified"
+        request = Request(
+            base + "/file/" + quote(BUCKET_NAME) + "/accounting/config",
+            headers={"Authorization": authorization["authorizationToken"]},
+        )
+        with urlopen(request, timeout=15) as response:
+            body = response.read(4097)
+        if not body or len(body) > 4096:
+            return "native_config_read_unverified"
+    except HTTPError as exc:
+        if exc.code == 403:
+            return "native_config_access_denied"
+        if exc.code == 404:
+            return "native_config_missing"
+        return "native_config_read_unverified"
+    except Exception:
+        return "native_config_read_unverified"
+    return "native_config_read_pass"
 
 
 def classify_restic_failure(stderr: bytes) -> str:
@@ -106,30 +146,6 @@ def read_repository(client: object, size: int, budget: int) -> str:
     return "preflight_pass"
 
 
-def probe_native_restic(client: object, keys: dict[str, str]) -> str:
-    """Read the same repository with B2 native API if S3 access is denied."""
-    environment = client.environment.copy()
-    environment.pop("AWS_ACCESS_KEY_ID", None)
-    environment.pop("AWS_SECRET_ACCESS_KEY", None)
-    environment["RESTIC_REPOSITORY"] = NATIVE_REPOSITORY
-    environment["B2_ACCOUNT_ID"] = keys["access_key_id"]
-    environment["B2_ACCOUNT_KEY"] = keys["secret_access_key"]
-    try:
-        result = subprocess.run(
-            [str(client.binary), "--json", "snapshots"], env=environment,
-            stdout=subprocess.PIPE, stderr=subprocess.DEVNULL,
-            check=False, timeout=120,
-        )
-        if result.returncode or len(result.stdout) > 1024**2:
-            return "s3_denied_native_read_unverified"
-        snapshots = json.loads(result.stdout)
-        if not isinstance(snapshots, list) or not snapshots:
-            return "s3_denied_native_read_unverified"
-    except (OSError, ValueError, subprocess.TimeoutExpired):
-        return "s3_denied_native_read_unverified"
-    return "s3_denied_native_read_pass"
-
-
 def diagnose(offsite: object) -> str:
     try:
         config = offsite.read_config(CONFIG)
@@ -150,13 +166,16 @@ def diagnose(offsite: object) -> str:
             return "native_repository_empty"
     except Exception:
         return "native_repository_list_unverified"
+    native_stage = native_config_read(config["keys"])
+    if native_stage != "native_config_read_pass":
+        return native_stage
     try:
         client = offsite.Restic(RESTIC, config, CACHE)
     except Exception:
         return "repository_client_unverified"
     stage = read_repository(client, size, offsite.REPOSITORY_BUDGET_BYTES)
     if stage.startswith("repository_access"):
-        return probe_native_restic(client, config["keys"])
+        return stage + "_native_config_pass"
     return stage
 
 
