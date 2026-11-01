@@ -19,21 +19,25 @@ spec.loader.exec_module(offsite)
 
 
 class FakeRestic:
-    def __init__(self, *, existing=False, used=0):
+    def __init__(self, *, existing=False, used=0, confirm_id=None):
         self.calls = []
         self.existing = existing
         self.used = used
+        self.uploaded = False
+        self.confirm_id = confirm_id
 
     def run(self, *args):
         self.calls.append(args)
         if args[0] == "snapshots":
-            return json.dumps([{"id": "a" * 64}] if self.existing else []).encode()
+            snapshot = ({"id": "a" * 64} if self.existing else
+                        {"id": self.confirm_id if self.confirm_id is not None else "b" * 64}
+                        if self.uploaded else None)
+            return json.dumps([snapshot] if snapshot else []).encode()
         if args[0] == "stats":
             return json.dumps({"total_size": self.used}).encode()
         if args[0] == "backup":
+            self.uploaded = True
             return (json.dumps({"message_type": "summary", "snapshot_id": "b" * 64}) + "\n").encode()
-        if args[0] == "check":
-            return b"{}"
         raise AssertionError(args)
 
 
@@ -159,11 +163,18 @@ class AccountingOffsitePreparation(TestCase):
         self.assertEqual(size, sum(x.stat().st_size for x in files))
         client = FakeRestic()
         offsite.upload_source(files, stamp, sha, size, client)
-        self.assertEqual([call[0] for call in client.calls], ["snapshots", "stats", "backup", "check"])
+        self.assertEqual([call[0] for call in client.calls], ["snapshots", "stats", "backup", "snapshots"])
         self.assertEqual(client.calls[2][-3:], tuple(map(str, files)))
         retry = FakeRestic(existing=True)
         offsite.upload_source(files, stamp, sha, size, retry)
-        self.assertEqual([call[0] for call in retry.calls], ["snapshots", "check"])
+        self.assertEqual([call[0] for call in retry.calls], ["snapshots"])
+
+    def test_upload_fails_when_cloud_snapshot_identity_disagrees_with_completion(self):
+        files, stamp, sha, size = self.verified()
+        client = FakeRestic(confirm_id="c" * 64)
+        with self.assertRaisesRegex(offsite.OffsiteError, "identity not verified"):
+            offsite.upload_source(files, stamp, sha, size, client)
+        self.assertEqual([call[0] for call in client.calls], ["snapshots", "stats", "backup", "snapshots"])
 
     def test_tampering_stale_and_incomplete_set_fail_closed(self):
         self.dump.write_bytes(b"synthetic custom archivE")

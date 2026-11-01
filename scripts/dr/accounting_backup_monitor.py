@@ -15,8 +15,8 @@ BACKUP_DIR = Path("/var/backups/hiddenoasis/accounting")
 MAX_BACKUP_AGE_SECONDS = 3 * 60 * 60
 MIN_FREE_BYTES = 4 * 1024**3
 # The weekly timer was enabled after its October 26 window; the first due
-# Monday window is November 2 at 04:50 Manila (November 1 at 20:50 UTC).
-FIRST_RETENTION_DUE_UTC = datetime(2026, 11, 1, 20, 50, tzinfo=timezone.utc)
+# Monday window is November 2 at 09:50 Manila (November 2 at 01:50 UTC).
+FIRST_RETENTION_DUE_UTC = datetime(2026, 11, 2, 1, 50, tzinfo=timezone.utc)
 TIMERS = (
     "accounting-backup.timer",
     "accounting-offsite.timer",

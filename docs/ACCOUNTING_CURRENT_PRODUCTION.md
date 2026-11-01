@@ -43,20 +43,27 @@ Accounting-only encrypted Restic repository hourly at minute 40. Its key is
 restricted to the Accounting bucket and `accounting/` prefix. A separate
 Mac-held recovery copy of the encryption password exists. The operator-gated
 configuration and working secrets are root-only and outside the app release.
+Each upload verifies local source hashes, PostgreSQL catalog, uploads archive,
+Restic's completion summary and the exact resulting cloud snapshot identity.
+The repository-wide `restic check` runs with weekly retention to reduce
+download allowance use after a confirmed daily-cap incident.
 See [Accounting offsite backup](ACCOUNTING_OFFSITE_BACKUP.md) for the safeguards.
 
-`accounting-offsite-retention.timer` runs weekly on Monday at 04:50 Manila
+`accounting-offsite-retention.timer` runs weekly on Monday at 09:50 Manila
 time. The owner-approved policy keeps 48 hourly, 30 daily, 12 weekly and 12
 monthly points, with a 48-hour recent-snapshot guard. The bucket's prior
 version lifecycle is seven days. Retention requires a verified cloud restore
 gate and performs a validated dry-run plan before any removal.
+The 09:50 Manila window falls after Backblaze's 00:00 UTC daily cap reset and
+after that morning's hourly backup/upload. The timer is operator-managed and
+must be updated separately from the guarded application release.
 
 The read-only `Accounting Backup Monitor` GitHub workflow runs daily at 08:15
 Manila and can also be dispatched manually. It verifies the newest local
 dump and uploads checksums, a backup age under three hours, at least 4 GiB of
 free backup disk, active/enabled timers, successful local/offsite service
 results, and a recent encrypted upload log. It reports the first scheduled
-weekly retention as pending until the November 2, 2026 04:50 Manila window;
+weekly retention as pending until the November 2, 2026 09:50 Manila window;
 after a three-hour grace, absence of a successful scheduled apply fails the
 workflow. The monitor emits only aggregate state. It does not measure physical
 Backblaze account usage, prove an isolated restore, or establish a business

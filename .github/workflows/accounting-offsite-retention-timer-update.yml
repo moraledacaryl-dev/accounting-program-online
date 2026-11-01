@@ -1,0 +1,65 @@
+name: Update Accounting Offsite Retention Timer
+
+on:
+  workflow_dispatch:
+    inputs:
+      release_sha:
+        description: 'Exact active Accounting release SHA'
+        required: true
+        type: string
+
+permissions:
+  contents: read
+
+jobs:
+  update-timer:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Update only the already-enabled retention timer on the exact release
+        uses: appleboy/ssh-action@029f5b4aeeeb58fdfe1410a5d17f967dacf36262
+        with:
+          host: ${{ secrets.SERVER_HOST }}
+          username: ${{ secrets.SERVER_USER }}
+          key: ${{ secrets.SERVER_SSH_KEY }}
+          port: ${{ secrets.SERVER_PORT }}
+          envs: RELEASE_SHA
+          script: |
+            set -euo pipefail
+            export PATH="/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin"
+            [[ "$RELEASE_SHA" =~ ^[0-9a-f]{40}$ ]]
+            UNIT=accounting-offsite-retention.timer
+            ACTIVE="$(readlink -f /opt/accounting-current)"
+            [[ "$ACTIVE" == "/opt/accounting-releases/$RELEASE_SHA" ]]
+            systemctl is-active --quiet "$UNIT"
+            systemctl is-enabled --quiet "$UNIT"
+            SOURCE="$ACTIVE/deploy/systemd/$UNIT"
+            TARGET="/etc/systemd/system/$UNIT"
+            test -f "$SOURCE" && test -f "$TARGET"
+            grep -Fqx 'OnCalendar=Mon *-*-* 09:50:00 Asia/Manila' "$SOURCE"
+            install -d -m 0700 /run/hiddenoasis-accounting-release
+            exec 200>/run/hiddenoasis-accounting-release/deployment.lock
+            flock -n 200 || { echo 'Accounting release or backup is busy.' >&2; exit 75; }
+            [[ "$(readlink -f /opt/accounting-current)" == "$ACTIVE" ]]
+            OLD="$(mktemp /run/hiddenoasis-accounting-release/retention-timer.XXXXXX)"
+            cp "$TARGET" "$OLD"
+            restore_on_failure() {
+              result=$?
+              if (( result != 0 )); then
+                install -m 0644 "$OLD" "$TARGET"
+                systemctl daemon-reload
+                systemctl restart "$UNIT" || true
+              fi
+              rm -f "$OLD"
+              exit "$result"
+            }
+            trap restore_on_failure EXIT
+            install -m 0644 "$SOURCE" "$TARGET"
+            systemctl daemon-reload
+            systemctl restart "$UNIT"
+            systemctl is-active --quiet "$UNIT"
+            systemctl is-enabled --quiet "$UNIT"
+            cmp -s "$SOURCE" "$TARGET"
+            systemctl list-timers --all "$UNIT" --no-pager
+            echo "Installed Accounting retention timer from exact active release $RELEASE_SHA"
+        env:
+          RELEASE_SHA: ${{ inputs.release_sha }}

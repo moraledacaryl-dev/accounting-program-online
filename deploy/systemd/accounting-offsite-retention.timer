@@ -2,7 +2,7 @@
 Description=Weekly Hidden Oasis Accounting offsite retention
 
 [Timer]
-OnCalendar=Mon *-*-* 04:50:00 Asia/Manila
+OnCalendar=Mon *-*-* 09:50:00 Asia/Manila
 Persistent=true
 Unit=accounting-offsite-retention.service
 
