@@ -56,7 +56,9 @@ version lifecycle is seven days. Retention requires a verified cloud restore
 gate and performs a validated dry-run plan before any removal.
 The 09:50 Manila window falls after Backblaze's 00:00 UTC daily cap reset and
 after that morning's hourly backup/upload. The timer is operator-managed and
-must be updated separately from the guarded application release.
+must be updated separately from the guarded application release. After exact
+SHA deployment, dispatch [Update Accounting Offsite Retention Timer](../.github/workflows/accounting-offsite-retention-timer-update.yml)
+with that active SHA; verify its timer remains enabled and the next due time.
 
 The read-only `Accounting Backup Monitor` GitHub workflow runs daily at 08:15
 Manila and can also be dispatched manually. It verifies the newest local
