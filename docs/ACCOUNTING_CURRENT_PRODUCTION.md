@@ -60,14 +60,17 @@ must be updated separately from the guarded application release. After exact
 SHA deployment, dispatch [Update Accounting Offsite Retention Timer](../.github/workflows/accounting-offsite-retention-timer-update.yml)
 with that active SHA; verify its timer remains enabled and the next due time.
 
-The read-only `Accounting Backup Monitor` GitHub workflow runs daily at 13:15
-Manila, after the hourly offsite upload and Monday retention window, and can
-also be dispatched manually. It verifies the newest local
+The read-only `Accounting Backup Monitor` GitHub workflow is scheduled daily at
+13:15 and 19:27 Manila. The first check follows the morning offsite upload and
+Monday retention window. The second gives another observation if GitHub skips
+the first schedule and checks for shared Backblaze download-cap failures later
+in the day. GitHub scheduled runs are still best-effort; the workflow can also
+be dispatched manually. It verifies the newest local
 dump and uploads checksums, a backup age under three hours, at least 4 GiB of
 free backup disk, active/enabled timers, successful local/offsite service
-results, and a recent encrypted upload log. It reports the first scheduled
-weekly retention as pending until the November 2, 2026 09:50 Manila window;
-after a three-hour grace, absence of a successful scheduled apply fails the
+results, and a recent encrypted upload log. It requires a successful scheduled
+weekly retention apply on or after the November 2, 2026 09:50 Manila window;
+after a three-hour grace, absence of that evidence fails the
 workflow. The monitor emits only aggregate state. It does not measure physical
 Backblaze account usage, prove an isolated restore, or establish a business
 recovery time.
