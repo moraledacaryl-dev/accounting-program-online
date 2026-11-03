@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 from datetime import datetime
+from uuid import uuid4
 
 from sqlalchemy import func, or_
 from sqlalchemy.orm import Session, selectinload
@@ -21,9 +22,14 @@ from app.schemas.cashflow import ReceivableCollectPayload, ReceivableCreate
 from app.schemas.events import EventActionPayload, EventBookingPayload, EventBookingUpdate, EventLinePayload, EventPaymentPayload
 from app.services.cashflow_service import _update_receivable_balance, collect_receivable, create_receivable
 from app.services.restaurant_service import create_approved_record
+from app.services.operations_outbox_service import enqueue_operations_event
 
 
 EVENT_STATUSES = {'draft', 'quoted', 'confirmed', 'completed', 'cancelled'}
+
+# The operational event bus only receives predefined venue names and service
+# categories. No customer names, prices, payment methods or line descriptions.
+OPS_EVENT_VENUES = {'Function Hall', 'Garden', 'Terrace', 'Cafe', 'Café', 'Pool', 'Restaurant'}
 EDITABLE_DIRECT_STATUSES = {'draft', 'quoted'}
 
 
@@ -53,6 +59,37 @@ def _as_float(value, default: float = 0.0) -> float:
 
 def _round(value) -> float:
     return round(float(value or 0), 4)
+
+
+def _enqueue_event_work(db: Session, event: EventBooking, change: str):
+    if change not in {'confirmed', 'changed', 'cancelled', 'completed'}:
+        raise ValueError('Unsupported event work state')
+    categories = {str(line.line_type or '').lower() for line in (event.lines or [])}
+    if any(any(term in str(line.description or '').lower() for term in
+               ('decor', 'design', 'backdrop', 'balloon', 'styling')) for line in (event.lines or [])):
+        categories.add('design')
+    services = sorted(categories.intersection({'venue', 'food', 'beverage', 'addon', 'package', 'design'}))
+    venue = str(event.venue or '').strip()
+    if venue not in OPS_EVENT_VENUES:
+        venue = 'Check venue in Accounting'
+    # Status changes have durable, different source event IDs. Each change
+    # becomes a review item rather than overwriting a running project.
+    stable_key = f'event-booking:{event.id}:confirmed' if change == 'confirmed' else \
+        f'event-booking:{event.id}:{change}:{uuid4().hex}'
+    return enqueue_operations_event(
+        db, event_id=stable_key, event_type=f'event.booking.{change}',
+        title=f'Event {change}', summary='Event requires operations review',
+        subject_type='event_booking', subject_id=event.id,
+        payload={
+            'booking_id': event.id,
+            'event_no': event.event_no,
+            'event_date': event.event_date,
+            'venue': venue,
+            'services': services,
+            'guest_count': max(0, int(event.guest_count or 0)),
+            'status': change,
+        },
+    )
 
 
 def _event_query(db: Session):
@@ -523,6 +560,7 @@ def update_event(db: Session, event_id: int, payload: EventBookingUpdate, userna
     _recompute_totals(db, event)
     if _norm(event.status) in {'confirmed', 'completed'}:
         _sync_financial_links(db, event, username)
+        _enqueue_event_work(db, event, 'changed')
     db.commit()
     return get_event(db, event.id)
 
@@ -543,6 +581,7 @@ def confirm_event(db: Session, event_id: int, payload: EventActionPayload, usern
     if payload.note:
         event.notes = f"{event.notes or ''}\nConfirmed: {payload.note}".strip()
     _sync_financial_links(db, event, username)
+    _enqueue_event_work(db, event, 'confirmed')
     db.flush()
     if commit:
         db.commit()
@@ -564,6 +603,7 @@ def complete_event(db: Session, event_id: int, payload: EventActionPayload, user
     if payload.note:
         event.notes = f"{event.notes or ''}\nCompleted: {payload.note}".strip()
     db.add(event)
+    _enqueue_event_work(db, event, 'completed')
     db.commit()
     return get_event(db, event.id)
 
@@ -602,6 +642,7 @@ def cancel_event(db: Session, event_id: int, payload: EventActionPayload, userna
         _sync_event_revenue_journal(db, record)
 
     db.add(event)
+    _enqueue_event_work(db, event, 'cancelled')
     db.commit()
     return get_event(db, event.id)
 
