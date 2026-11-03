@@ -27,6 +27,7 @@ from app.models.entities import (
 )
 from app.services.beds24_service import Beds24ApiError, fetch_beds24_bookings, load_beds24_settings
 from app.services.guest_service import POSITIVE_FOLIO_TYPES, ensure_booking_folio
+from app.services.operations_room_updates import enqueue_room_update
 
 
 STATUS_MAP = {
@@ -1442,6 +1443,7 @@ def sync_booking_payload(
     if bool(settings.get('auto_create_receivable_mirror')):
         _upsert_receivable_mirror(db, booking, booking_payload)
 
+    enqueue_room_update(db, booking)
     db.commit()
 
     message = f'Synced Beds24 booking {beds24_id} to ERP booking #{booking.id}.'
