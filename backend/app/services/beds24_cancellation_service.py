@@ -8,6 +8,7 @@ from sqlalchemy.orm import Session
 from app.core.business_clock import business_today
 from app.models.entities import Beds24BookingMap, Beds24SyncLog, Booking, BookingFolio, Receivable
 from app.services.beds24_service import fetch_beds24_bookings
+from app.services.operations_room_updates import enqueue_room_update
 from app.services.beds24_sync_service import _map_status
 
 CANCELLED_BOOKING_STATUSES = {'cancelled', 'canceled'}
@@ -105,6 +106,7 @@ def apply_beds24_cancellation(db: Session, payload: dict, *, source_type='status
     result['before_status'] = booking.status
     if str(booking.status or '').lower() in CANCELLED_BOOKING_STATUSES:
         result['receivables_closed'] = close_cancelled_stay_receivables(db, booking)
+        enqueue_room_update(db, booking)
         return result
     booking.status = 'cancelled'
     result['receivables_closed'] = close_cancelled_stay_receivables(db, booking)
@@ -114,6 +116,7 @@ def apply_beds24_cancellation(db: Session, payload: dict, *, source_type='status
         message=f'Applied status-only cancellation to booking #{booking.id}; identity and financial history preserved.',
         payload_json=json.dumps({'before_status': result['before_status'], 'after_status': 'cancelled'}),
     ))
+    enqueue_room_update(db, booking)
     db.flush()
     return {**result, 'action': 'cancelled', 'after_status': 'cancelled'}
 

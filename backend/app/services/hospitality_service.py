@@ -1,5 +1,7 @@
 from __future__ import annotations
 
+from app.services.operations_room_updates import enqueue_room_update
+
 from datetime import datetime
 
 from sqlalchemy import and_, func, or_
@@ -427,6 +429,7 @@ def create_booking_with_accounting(db: Session, payload, username: str | None = 
             )
             db.add(BookingAccountingLink(booking_id=booking.id, record_id=deposit_record.id, link_type='deposit_liability'))
 
+    enqueue_room_update(db, booking)
     db.commit()
 
     booking = (
@@ -638,6 +641,7 @@ def update_booking_with_accounting(db: Session, booking_id: int, payload, userna
                 db.add(BookingAccountingLink(booking_id=booking.id, record_id=dep_record.id, link_type='deposit_liability_adjustment'))
 
     db.add(booking)
+    enqueue_room_update(db, booking)
     db.commit()
 
     booking = (
