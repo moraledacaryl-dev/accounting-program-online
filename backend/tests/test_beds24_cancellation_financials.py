@@ -297,3 +297,25 @@ def test_explicit_retained_tax_is_not_cancelled_with_the_room(db):
     cancellation.apply_beds24_cancellation(db, payload()); db.commit()
     assert folio_balance_summary(folio)['balance'] == 180
     assert folio_balance_summary(folio)['cancellation_fees'] == 120
+
+
+def test_checkin_marker_is_published_to_operations_without_changing_financial_status(db, monkeypatch):
+    from app.core.settings import settings
+    from app.models.operations_outbox import OperationsOutboxEvent
+    monkeypatch.setattr(settings, 'operations_integration_enabled', True)
+    booking = setup_booking(db)
+    monkeypatch.setattr(sync, 'load_beds24_settings', lambda session: {
+        'auto_create_guest': True, 'auto_create_folio_mirror': False,
+        'auto_create_receivable_mirror': False, 'auto_link_room': True,
+        'auto_link_channel': True, 'auto_link_property': False,
+        'room_map_by_room_id': {}, 'room_map_by_unit_id': {}, 'channel_map_by_source': {},
+    })
+    original_amounts = (booking.gross_amount, booking.deposit_amount)
+    sync.sync_booking_payload(db, payload(status='confirmed', price=9000, deposit=4500,
+        infoItems=[{'code': 'CHECKIN', 'text': 'PRIVATE NOTE'}]))
+    event = db.query(OperationsOutboxEvent).order_by(OperationsOutboxEvent.id.desc()).first()
+    assert json.loads(event.envelope_json)['payload']['status'] == 'checked_in'
+    assert 'PRIVATE NOTE' not in event.envelope_json
+    assert 'PRIVATE NOTE' not in db.query(Beds24BookingMap).one().raw_snapshot
+    assert booking.status == 'confirmed'
+    assert (booking.gross_amount, booking.deposit_amount) == original_amounts

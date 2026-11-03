@@ -27,7 +27,7 @@ from app.models.entities import (
 )
 from app.services.beds24_service import Beds24ApiError, fetch_beds24_bookings, load_beds24_settings
 from app.services.guest_service import POSITIVE_FOLIO_TYPES, ensure_booking_folio
-from app.services.operations_room_updates import enqueue_room_update
+from app.services.operations_room_updates import beds24_room_status, enqueue_room_update
 
 
 STATUS_MAP = {
@@ -1427,7 +1427,9 @@ def sync_booking_payload(
     map_row.sync_status = 'synced'
     map_row.last_synced_at = _now_iso()
     map_row.last_error = None
-    map_row.raw_snapshot = _safe_json_dump(booking_payload)
+    # Info items can contain door codes and personal free text. The room event
+    # only needs CHECKIN/CHECKOUT, so do not persist the extra fields.
+    map_row.raw_snapshot = _safe_json_dump({key: value for key, value in booking_payload.items() if key != 'infoItems'})
     db.add(map_row)
 
     folio_result = None
@@ -1443,7 +1445,7 @@ def sync_booking_payload(
     if bool(settings.get('auto_create_receivable_mirror')):
         _upsert_receivable_mirror(db, booking, booking_payload)
 
-    enqueue_room_update(db, booking)
+    enqueue_room_update(db, booking, room_status=beds24_room_status(booking_payload, booking.status))
     db.commit()
 
     message = f'Synced Beds24 booking {beds24_id} to ERP booking #{booking.id}.'
@@ -1516,6 +1518,7 @@ def sync_booking_by_id(
             db,
             booking_id=booking_id,
             include_invoice_items=include_invoice_items,
+            include_info_items=True,
         )
         if not bookings:
             raise ValueError(f'Beds24 booking {booking_id} not found.')
@@ -1566,6 +1569,7 @@ def sync_recent_bookings(
         filter_value=filter_value,
         limit=safe_limit,
         include_invoice_items=include_invoice_items,
+        include_info_items=True,
     )
     results: list[dict[str, Any]] = []
     failed: list[dict[str, Any]] = []
@@ -1699,6 +1703,7 @@ def backfill_bookings_by_date_range(
                         arrival_to=chunk_to,
                         property_id=property_id,
                         include_invoice_items=include_invoice_items,
+                        include_info_items=True,
                     )
                     last_request_at = time.monotonic()
                 except Exception as exc:
