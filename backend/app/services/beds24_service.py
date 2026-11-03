@@ -359,6 +359,7 @@ def fetch_beds24_bookings(
     arrival_to: str | None = None,
     property_id: str | None = None,
     include_invoice_items: bool | None = None,
+    include_info_items: bool = False,
 ) -> tuple[list[dict[str, Any]], dict[str, Any], dict[str, Any]]:
     settings = load_beds24_settings(db)
     if not settings.get('enabled'):
@@ -392,6 +393,9 @@ def fetch_beds24_bookings(
     use_invoice_items = settings.get('include_invoice_items', True) if include_invoice_items is None else bool(include_invoice_items)
     if use_invoice_items:
         params['includeInvoiceItems'] = 'true'
+
+    if include_info_items:
+        params['includeInfoItems'] = 'true'
 
     try:
         payload = _api_get(base_url, '/bookings', headers={'token': token}, params=params)

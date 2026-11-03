@@ -20,7 +20,26 @@ def _day(value):
         return None
 
 
-def enqueue_room_update(db, booking):
+def beds24_room_status(payload, booking_status):
+    """Use explicit Beds24 markers only for the Operations room snapshot.
+
+    Accounting's booking status and financial records remain untouched.
+    Missing/invalid marker lists cannot establish occupancy.
+    """
+    if booking_status in {'cancelled', 'no_show'}:
+        return booking_status
+    items = payload.get('infoItems')
+    if not isinstance(items, list):
+        return None
+    codes = {str(item.get('code') or '').strip().upper() for item in items if isinstance(item, dict)}
+    if 'CHECKOUT' in codes:
+        return 'checked_out'
+    if 'CHECKIN' in codes:
+        return 'checked_in'
+    return None
+
+
+def enqueue_room_update(db, booking, room_status=None):
     db.flush()
     prefix = f'room-booking:{booking.id}:'
     facts = {
@@ -28,7 +47,7 @@ def enqueue_room_update(db, booking):
         'room_id': booking.room_id,
         'check_in': _day(booking.check_in),
         'check_out': _day(booking.check_out),
-        'status': booking.status if booking.status in STATUSES else 'unknown',
+        'status': (room_status if room_status in {'checked_in', 'checked_out'} and booking.status not in {'cancelled', 'no_show'} else booking.status) if booking.status in STATUSES else 'unknown',
         'origin': 'beds24' if booking.external_source == 'beds24' else 'accounting',
     }
     previous = db.query(OperationsOutboxEvent).filter(

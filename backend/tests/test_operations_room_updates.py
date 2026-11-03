@@ -80,3 +80,40 @@ def test_beds24_cancellation_worker_queues_status_without_financial_changes(db):
     envelope = json.loads(db.query(OperationsOutboxEvent).one().envelope_json)
     assert envelope['payload']['status'] == 'cancelled'
     assert booking.gross_amount == 9000 and booking.deposit_amount == 2000
+
+
+def test_beds24_markers_update_room_status_without_changing_accounting_booking(db):
+    from app.services.operations_room_updates import beds24_room_status
+    booking = Booking(guest_name='PRIVATE', room_name='Solace', status='confirmed',
+        check_in='2026-11-01', check_out='2026-11-06', gross_amount=9000,
+        deposit_amount=2000, external_source='beds24')
+    db.add(booking)
+    for items, expected in [
+        ([{'code': 'CHECKIN', 'text': 'PRIVATE NOTE'}], 'checked_in'),
+        ([{'code': 'CHECKIN'}, {'code': 'CHECKOUT'}], 'checked_out'),
+        ([], 'confirmed'),
+    ]:
+        marker = beds24_room_status({'infoItems': items}, booking.status)
+        event = enqueue_room_update(db, booking, room_status=marker)
+        assert json.loads(event.envelope_json)['payload']['status'] == expected
+        assert 'PRIVATE NOTE' not in event.envelope_json
+        assert (booking.status, booking.gross_amount, booking.deposit_amount) == ('confirmed', 9000, 2000)
+    assert beds24_room_status({'infoItems': [{'code': 'CHECKIN'}]}, 'cancelled') == 'cancelled'
+    assert beds24_room_status({}, 'confirmed') is None
+    assert beds24_room_status({'infoItems': None}, 'confirmed') is None
+
+
+def test_fetch_requests_info_items_only_when_requested(db, monkeypatch):
+    from app.services import beds24_service
+    settings_value = {'enabled': True, 'api_base_url': 'https://beds24.com/api/v2', 'include_invoice_items': False}
+    monkeypatch.setattr(beds24_service, 'load_beds24_settings', lambda db: settings_value)
+    monkeypatch.setattr(beds24_service, 'ensure_beds24_access_token', lambda db, settings, **kw: ('test', settings))
+    calls = []
+    def fetch(base, path, *, headers, params):
+        calls.append(params.copy())
+        return {'data': []}
+    monkeypatch.setattr(beds24_service, '_api_get', fetch)
+    beds24_service.fetch_beds24_bookings(db, include_info_items=True)
+    beds24_service.fetch_beds24_bookings(db)
+    assert calls[0]['includeInfoItems'] == 'true'
+    assert 'includeInfoItems' not in calls[1]
