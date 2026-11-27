@@ -1840,6 +1840,20 @@ def _account_day_expected_values(db: Session, account_id: int, target_date: str)
     return round(opening_balance, 4), round(expected_in, 4), round(expected_out, 4), round(expected_closing, 4)
 
 
+def _reconciliation_for_update(db: Session, reconciliation_id: int):
+    row = (db.query(CashReconciliation)
+           .filter(CashReconciliation.id == int(reconciliation_id))
+           .populate_existing().with_for_update().first())
+    if not row:
+        raise ValueError('Cash reconciliation not found.')
+    return row
+
+
+def ensure_reconciliation_editable(row: CashReconciliation):
+    if _normalize(row.status) == 'closed' or row.locked_at:
+        raise ValueError('Closed reconciliation cannot be edited. Reverse it first.')
+
+
 def create_cash_reconciliation(db: Session, payload: CashReconciliationCreate, username: str | None = None):
     ensure_default_financial_accounts(db)
 
@@ -1861,6 +1875,8 @@ def create_cash_reconciliation(db: Session, payload: CashReconciliationCreate, u
             CashReconciliation.reconciliation_date == recon_date,
             CashReconciliation.shift_name == ((payload.shift_name or '').strip() or None),
         )
+        .populate_existing()
+        .with_for_update()
         .first()
     )
     if not row:
@@ -1870,6 +1886,7 @@ def create_cash_reconciliation(db: Session, payload: CashReconciliationCreate, u
             shift_name=(payload.shift_name or '').strip() or None,
         )
     else:
+        ensure_reconciliation_editable(row)
         for line in list(row.lines or []):
             db.delete(line)
 
@@ -1945,9 +1962,9 @@ def list_cash_reconciliations(
 
 
 def update_cash_reconciliation(db: Session, reconciliation_id: int, payload: CashReconciliationCreate, username: str | None = None):
-    row = db.get(CashReconciliation, int(reconciliation_id))
-    if not row:
-        raise ValueError('Cash reconciliation not found.')
+    row = _reconciliation_for_update(db, reconciliation_id)
+    ensure_reconciliation_editable(row)
+    ensure_date_unlocked(db, row.reconciliation_date, scope='bir', action='update cash reconciliation in locked period')
 
     recon_date = _safe_date(payload.reconciliation_date or row.reconciliation_date)
     ensure_date_unlocked(db, recon_date, scope='bir', action='update cash reconciliation in locked period')
@@ -2006,9 +2023,7 @@ def update_cash_reconciliation(db: Session, reconciliation_id: int, payload: Cas
 
 
 def approve_cash_reconciliation(db: Session, reconciliation_id: int, payload: CashflowActionPayload, username: str | None = None):
-    row = db.get(CashReconciliation, int(reconciliation_id))
-    if not row:
-        raise ValueError('Cash reconciliation not found.')
+    row = _reconciliation_for_update(db, reconciliation_id)
     if _normalize(row.status) in {'closed', 'reversed'}:
         raise ValueError('Closed/reversed reconciliation cannot be approved.')
     row.status = 'reviewed'
@@ -2024,9 +2039,7 @@ def approve_cash_reconciliation(db: Session, reconciliation_id: int, payload: Ca
 
 
 def close_cash_reconciliation(db: Session, reconciliation_id: int, payload: CashflowActionPayload, username: str | None = None):
-    row = db.get(CashReconciliation, int(reconciliation_id))
-    if not row:
-        raise ValueError('Cash reconciliation not found.')
+    row = _reconciliation_for_update(db, reconciliation_id)
     if _normalize(row.status) == 'reversed':
         raise ValueError('Reversed reconciliation cannot be closed.')
     if abs(float(row.variance or 0)) >= 0.01 and not (payload.reason or row.notes or '').strip():
@@ -2047,9 +2060,7 @@ def close_cash_reconciliation(db: Session, reconciliation_id: int, payload: Cash
 
 
 def reverse_cash_reconciliation(db: Session, reconciliation_id: int, payload: CashflowActionPayload, username: str | None = None):
-    row = db.get(CashReconciliation, int(reconciliation_id))
-    if not row:
-        raise ValueError('Cash reconciliation not found.')
+    row = _reconciliation_for_update(db, reconciliation_id)
     if _normalize(row.status) == 'reversed':
         raise ValueError('Reconciliation already reversed.')
     row.status = 'reversed'

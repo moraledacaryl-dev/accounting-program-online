@@ -2,6 +2,7 @@ from calendar import monthrange
 from datetime import datetime
 
 from fastapi import APIRouter, Depends, HTTPException
+from sqlalchemy import func
 from sqlalchemy.orm import Session
 from app.core.business_clock import business_today
 from app.db.database import get_db
@@ -15,18 +16,49 @@ from app.schemas.common import (
 )
 from app.api.deps import require_permissions
 from app.services.restaurant_service import create_approved_record
+from app.services.journal_integrity_service import money
 
 router = APIRouter()
 
 
 def _monthly_depreciation(asset: Asset) -> float:
-    cost = float(asset.acquisition_cost or 0)
-    salvage = float(asset.salvage_value or 0)
+    cost = money(asset.acquisition_cost)
+    salvage = money(asset.salvage_value)
     life = int(asset.useful_life_months or 0)
-    depreciable = max(cost - salvage, 0.0)
+    depreciable = max(cost - salvage, money(0))
     if life <= 0:
         return 0.0
-    return round(depreciable / life, 4)
+    return float(money(depreciable / life))
+
+
+def _asset_for_update(db: Session, asset_id: int) -> Asset:
+    asset = (db.query(Asset).filter(Asset.id == asset_id)
+             .populate_existing().with_for_update().first())
+    if not asset:
+        raise HTTPException(status_code=404, detail='Asset not found')
+    return asset
+
+
+def _asset_was_disposed(db: Session, asset: Asset) -> bool:
+    return ((asset.operational_status or '').strip().lower() == 'disposed'
+            or db.query(AssetDisposalLog.id).filter(AssetDisposalLog.asset_id == asset.id).first() is not None)
+
+
+def _bounded_depreciation(db: Session, asset: Asset, requested_amount: float | None) -> float:
+    # The caller holds the asset lock through both the log and journal commit.
+    # Include all depreciation logs, including entries without automatic posting.
+    if _asset_was_disposed(db, asset):
+        raise ValueError('Disposed assets cannot be depreciated.')
+    depreciable = max(money(asset.acquisition_cost) - money(asset.salvage_value), money(0))
+    accumulated = money(db.query(func.coalesce(func.sum(AssetDepreciationLog.amount), 0))
+                        .filter(AssetDepreciationLog.asset_id == asset.id).scalar())
+    remaining = max(money(depreciable - accumulated), money(0))
+    if requested_amount is None:
+        return float(min(money(_monthly_depreciation(asset)), remaining))
+    amount = money(requested_amount)
+    if amount > remaining:
+        raise ValueError(f'Depreciation amount exceeds the remaining depreciable value of {remaining:.4f} for {asset.name}.')
+    return float(amount)
 
 
 def _period_end(period_key: str) -> str:
@@ -125,9 +157,7 @@ def add_asset(payload: AssetCreate, db: Session = Depends(get_db), user=Depends(
 
 @router.put('/assets/{asset_id}')
 def update_asset(asset_id: int, payload: AssetUpdate, db: Session = Depends(get_db), user=Depends(require_permissions('assets.manage'))):
-    obj = db.get(Asset, asset_id)
-    if not obj:
-        raise HTTPException(status_code=404, detail='Asset not found')
+    obj = _asset_for_update(db, asset_id)
     for k,v in payload.model_dump(exclude_unset=True).items():
         setattr(obj, k, v)
     db.add(obj); db.commit(); db.refresh(obj)
@@ -150,9 +180,7 @@ def depreciate_asset(
     db: Session = Depends(get_db),
     user=Depends(require_permissions('assets.manage')),
 ):
-    asset = db.get(Asset, asset_id)
-    if not asset:
-        raise HTTPException(status_code=404, detail='Asset not found')
+    asset = _asset_for_update(db, asset_id)
 
     existing = db.query(AssetDepreciationLog).filter(
         AssetDepreciationLog.asset_id == asset.id,
@@ -166,7 +194,11 @@ def depreciate_asset(
     except ValueError as e:
         raise HTTPException(status_code=400, detail=str(e))
 
-    amount = float(payload.amount if payload.amount is not None else _monthly_depreciation(asset))
+    try:
+        amount = _bounded_depreciation(db, asset, payload.amount)
+    except ValueError as e:
+        db.rollback()
+        raise HTTPException(status_code=400, detail=str(e))
     if amount <= 0:
         raise HTTPException(status_code=400, detail='Depreciation amount must be greater than zero.')
 
@@ -220,9 +252,13 @@ def depreciate_batch(
     except ValueError as e:
         raise HTTPException(status_code=400, detail=str(e))
 
-    assets = db.query(Asset).filter(Asset.operational_status != 'Disposed').order_by(Asset.id.asc()).all()
+    assets = (db.query(Asset).filter(func.lower(func.trim(Asset.operational_status)) != 'disposed')
+              .order_by(Asset.id.asc()).populate_existing().with_for_update().all())
     created = []
     skipped = []
+    planned = []
+    # Validate the entire batch before creating any financial records. A manual
+    # amount that exceeds one asset's remaining value rejects the whole request.
     for asset in assets:
         already = db.query(AssetDepreciationLog).filter(
             AssetDepreciationLog.asset_id == asset.id,
@@ -231,11 +267,20 @@ def depreciate_batch(
         if already:
             skipped.append({'asset_id': asset.id, 'reason': 'already_depreciated'})
             continue
-        amount = float(payload.amount if payload.amount is not None else _monthly_depreciation(asset))
-        if amount <= 0:
-            skipped.append({'asset_id': asset.id, 'reason': 'no_depreciable_amount'})
+        if _asset_was_disposed(db, asset):
+            skipped.append({'asset_id': asset.id, 'reason': 'disposed'})
             continue
+        try:
+            amount = _bounded_depreciation(db, asset, payload.amount)
+        except ValueError as e:
+            db.rollback()
+            raise HTTPException(status_code=400, detail=str(e))
+        if amount <= 0:
+            skipped.append({'asset_id': asset.id, 'reason': 'fully_depreciated' if _monthly_depreciation(asset) > 0 else 'no_depreciable_amount'})
+            continue
+        planned.append((asset, amount))
 
+    for asset, amount in planned:
         record = None
         if payload.auto_post_accounting:
             record = create_approved_record(
@@ -350,9 +395,10 @@ def dispose_asset(
     db: Session = Depends(get_db),
     user=Depends(require_permissions('assets.manage')),
 ):
-    asset = db.get(Asset, asset_id)
-    if not asset:
-        raise HTTPException(status_code=404, detail='Asset not found')
+    asset = _asset_for_update(db, asset_id)
+    if _asset_was_disposed(db, asset):
+        db.rollback()
+        raise HTTPException(status_code=409, detail='Asset has already been disposed.')
 
     tx_date = payload.disposal_date or business_today()
     income_record = None

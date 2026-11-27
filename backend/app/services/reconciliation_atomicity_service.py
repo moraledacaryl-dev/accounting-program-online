@@ -12,6 +12,7 @@ from app.services.cashflow_service import (
     _safe_date,
     _serialize_reconciliation,
     ensure_default_financial_accounts,
+    ensure_reconciliation_editable,
 )
 
 
@@ -56,6 +57,8 @@ def create_cash_reconciliation_uncommitted(
             CashReconciliation.reconciliation_date == recon_date,
             CashReconciliation.shift_name == shift_name,
         )
+        .populate_existing()
+        .with_for_update()
         .first()
     )
     if not row:
@@ -65,6 +68,7 @@ def create_cash_reconciliation_uncommitted(
             shift_name=shift_name,
         )
     else:
+        ensure_reconciliation_editable(row)
         for line in list(row.lines or []):
             db.delete(line)
 
