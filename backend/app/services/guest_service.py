@@ -645,10 +645,23 @@ def create_folio(db: Session, payload: BookingFolioCreate):
     return get_folio(db, row.id)
 
 
-def update_folio(db: Session, folio_id: int, payload: BookingFolioUpdate):
-    row = db.get(BookingFolio, int(folio_id))
+def _locked_folio(db: Session, folio_id: int) -> BookingFolio:
+    # Status transitions and line mutations serialize on the same parent row.
+    row = (db.query(BookingFolio).options(selectinload(BookingFolio.lines))
+           .filter(BookingFolio.id == int(folio_id))
+           .populate_existing().with_for_update().first())
     if not row:
         raise ValueError('Folio not found.')
+    return row
+
+
+def _ensure_folio_lines_editable(folio: BookingFolio):
+    if (folio.status or 'open').strip().lower() in {'settled', 'closed', 'cancelled'}:
+        raise ValueError('Closed or settled folio lines cannot be changed. Reopen the folio first.')
+
+
+def update_folio(db: Session, folio_id: int, payload: BookingFolioUpdate):
+    row = _locked_folio(db, folio_id)
     data = payload.model_dump(exclude_unset=True)
     if 'guest_id' in data:
         guest_id = data.get('guest_id')
@@ -667,9 +680,7 @@ def update_folio(db: Session, folio_id: int, payload: BookingFolioUpdate):
 
 
 def set_folio_status(db: Session, folio_id: int, payload: BookingFolioAction):
-    row = db.get(BookingFolio, int(folio_id))
-    if not row:
-        raise ValueError('Folio not found.')
+    row = _locked_folio(db, folio_id)
     status = _norm(payload.status)
     if status not in {'open', 'reviewed', 'pending_settlement', 'settled', 'closed', 'cancelled', 'reopened'}:
         raise ValueError('Invalid folio status.')
@@ -686,11 +697,8 @@ def set_folio_status(db: Session, folio_id: int, payload: BookingFolioAction):
 
 
 def add_folio_line(db: Session, folio_id: int, payload: BookingFolioLineCreate, username: str | None = None):
-    folio = db.get(BookingFolio, int(folio_id))
-    if not folio:
-        raise ValueError('Folio not found.')
-    if (folio.status or 'open') in {'settled', 'closed', 'cancelled'}:
-        raise ValueError('Closed or settled folios cannot accept new lines. Reopen the folio first.')
+    folio = _locked_folio(db, folio_id)
+    _ensure_folio_lines_editable(folio)
 
     qty = float(payload.quantity or 0)
     if qty <= 0:
@@ -723,6 +731,7 @@ def update_folio_line(db: Session, folio_line_id: int, payload: BookingFolioLine
     row = db.get(BookingFolioLine, int(folio_line_id))
     if not row:
         raise ValueError('Folio line not found.')
+    _ensure_folio_lines_editable(_locked_folio(db, row.folio_id))
     data = payload.model_dump(exclude_unset=True)
 
     for key in (
@@ -758,9 +767,7 @@ def delete_folio_line(db: Session, folio_line_id: int):
     if not row:
         raise ValueError('Folio line not found.')
     folio_id = row.folio_id
-    folio = db.get(BookingFolio, int(folio_id))
-    if folio and (folio.status or 'open') in {'settled', 'closed', 'cancelled'}:
-        raise ValueError('Closed or settled folio lines cannot be deleted.')
+    _ensure_folio_lines_editable(_locked_folio(db, folio_id))
     if row.external_source or row.linked_money_transaction_id or row.linked_receivable_id or row.linked_payable_id:
         raise ValueError('Linked or external folio lines cannot be deleted. Reverse the line instead.')
     db.delete(row)
@@ -772,9 +779,8 @@ def reverse_folio_line(db: Session, folio_line_id: int, payload, username: str |
     original = db.get(BookingFolioLine, int(folio_line_id))
     if not original:
         raise ValueError('Folio line not found.')
-    folio = db.get(BookingFolio, int(original.folio_id))
-    if not folio:
-        raise ValueError('Folio not found.')
+    folio = _locked_folio(db, original.folio_id)
+    _ensure_folio_lines_editable(folio)
     reversal_key = f'reversal:{original.id}'
     duplicate = db.query(BookingFolioLine).filter(
         BookingFolioLine.folio_id == folio.id,
@@ -816,8 +822,9 @@ def transfer_folio_line(db: Session, folio_line_id: int, payload, username: str 
         raise ValueError('Folio line or target folio not found.')
     if original.folio_id == target.id:
         raise ValueError('Target folio must be different.')
-    if (target.status or 'open') in {'settled','closed','cancelled'}:
-        raise ValueError('Target folio is not open.')
+    # Stable ordering also prevents opposite-direction transfers deadlocking.
+    for folio_id in sorted({original.folio_id, target.id}):
+        _ensure_folio_lines_editable(_locked_folio(db, folio_id))
     transfer_key = f'transfer:{original.id}:{target.id}'
     if db.query(BookingFolioLine).filter(BookingFolioLine.external_line_key == transfer_key).first():
         raise ValueError('This line has already been transferred to the selected folio.')
@@ -839,9 +846,7 @@ def transfer_folio_line(db: Session, folio_line_id: int, payload, username: str 
 
 
 def settle_folio(db: Session, folio_id: int, payload):
-    folio = db.get(BookingFolio, int(folio_id))
-    if not folio:
-        raise ValueError('Folio not found.')
+    folio = _locked_folio(db, folio_id)
     summary = folio_balance_summary(folio)
     tolerance = abs(float(payload.tolerance or 0))
     if abs(float(summary['balance'])) > tolerance:
