@@ -6,12 +6,12 @@ import json
 
 ROOT=Path(__file__).resolve().parents[1]
 CONTRACT=ROOT/'docs/training/source-contract.json'
-def digest(path):return hashlib.sha256(path.read_bytes()).hexdigest()
+def digest(path):return hashlib.sha256(path.read_bytes().replace(b'\r\n',b'\n')).hexdigest()
 def sources():
     files=list((ROOT/'backend/app').rglob('*.py'))+list((ROOT/'shared').glob('*.json'))
     for folder in ('app','components','lib'):
         files.extend(path for path in (ROOT/'frontend'/folder).rglob('*.js')
-            if 'training' not in path.as_posix().lower())
+            if 'training' not in path.relative_to(ROOT).as_posix().lower())
     files.extend(ROOT/name for name in ('frontend/package-lock.json','backend/requirements.lock.txt','frontend/next.config.js','backend/training-requirements.txt'))
     return {path.relative_to(ROOT).as_posix():digest(path) for path in sorted(files)}
 def main():
