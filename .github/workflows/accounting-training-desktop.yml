@@ -10,7 +10,21 @@ on:
       - '.github/workflows/accounting-training-desktop.yml'
 permissions: {contents: read}
 jobs:
+  source-checks:
+    name: Training source and evidence checks
+    runs-on: ubuntu-latest
+    env: {PYTHONPATH: backend, PGUSER: '', PGPASSWORD: '', PGHOST: '', PGDATABASE: ''}
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ github.event.pull_request.head.sha || github.sha }}
+      - uses: actions/setup-python@v5
+        with: {python-version: '3.12'}
+      - run: python scripts/training-source-contract.py
+      - run: pip install -r backend/training-requirements.txt pytest==9.1.1 httpx==0.28.1
+      - run: python -m pytest backend/training/tests -q
   build:
+    needs: source-checks
     strategy:
       fail-fast: false
       matrix: {os: [macos-latest, macos-15-intel, windows-latest]}
@@ -35,8 +49,6 @@ jobs:
       - run: npm ci
         working-directory: frontend
       - run: python scripts/training-source-contract.py
-      - run: python -m pytest backend/training/tests -q
-        env: {PYTHONPATH: backend}
       - run: npm run build
         working-directory: frontend
         env: {NEXT_PUBLIC_ACCOUNTING_TRAINING: '1', NEXT_TELEMETRY_DISABLED: '1'}

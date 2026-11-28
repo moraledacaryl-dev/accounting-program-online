@@ -197,7 +197,7 @@
     "frontend/app/cashflow/ledger/page.js": "d23ebe539bf2f8779f861e8778c52b5b26df66c8994b4bdf233ce9a069545746",
     "frontend/app/cashflow/money-in/page.js": "a0710d09dc6d9cf2bca9e40c50bd9b3024898ba44aac58d124654300e9e7c80b",
     "frontend/app/cashflow/money-out/page.js": "63b6a29c3e6372cade6e6943fa3d0c1910d027a098d5f7bfe6f935a7e2b5cc5c",
-    "frontend/app/cashflow/page.js": "68b7fc8fa82fa93ab07b4923e144cd423b666f20baa7c8f52c3f3c980ff5be51",
+    "frontend/app/cashflow/page.js": "04a8e17ef9fea8a3cad756e887f42f71e328081d493853a47ae7f193d5cc82a1",
     "frontend/app/cashflow/payables/page.js": "152c97d97f0363c27c14cfcaa75da41afac39fd78882c8457a40a1ad89b68934",
     "frontend/app/cashflow/receivables/page.js": "da67a981564b464ec05e021e4bef792d10e6ff2b9b5c56177a0b49effc6535e7",
     "frontend/app/cashflow/reconciliation/page.js": "ea77b08b86c032ff45b04a2f439e13d19ae2472b13bd629452bedafd8b02088c",
