@@ -26,6 +26,19 @@ const routeGroups = {
   integrations: ['/integrations/beds24', '/integrations/payroll', '/restaurant-ops', '/inventory-items', '/inventory-reconciliation', '/stock-movements', '/menu-items', '/menu-categories', '/recipes', '/staff-meals', '/setup-imports', '/employees', '/attendance', '/payroll-periods', '/payroll-periods/1', '/payroll'],
   administration: ['/room-types', '/rooms', '/room-setup', '/rate-plans', '/room-package-rules', '/booking-channels', '/channels', '/users', '/roles-permissions', '/master-data', '/taxonomy-admin', '/system-settings', '/staff-guide'],
 };
+// The standalone course has its own navigation. Its pages must stay inactive
+// in a production build and are covered separately from operational ownership.
+const standaloneTrainingRoutes = [
+  ['/training', 'Open Accounting Training'],
+  ['/training/assessments', 'Final checks are available in Accounting Training'],
+  ['/training/management', 'Trainer review is available only in Accounting Training.'],
+];
+for (const [route, message] of standaloneTrainingRoutes) test(`training route is inactive in production ${route}`, async ({page}) => {
+  await fixture(page);
+  await page.goto(route);
+  await expect(page.getByText(message,{exact:true})).toBeVisible();
+  await expect(page.locator('input, form')).toHaveCount(0);
+});
 for (const [group, routes] of Object.entries(routeGroups)) for (const route of routes) {
   test(`navigation ownership ${route}`, async ({ page }) => {
     await fixture(page);
@@ -40,7 +53,7 @@ for (const [group, routes] of Object.entries(routeGroups)) for (const route of r
 test('inventory includes every static and dynamic page source', () => {
   const root = path.resolve(__dirname, '../../app');
   const sourceRoutes = fs.readdirSync(root, { recursive: true }).filter(p => p.endsWith('page.js')).map(p => '/' + p.replace(/\/page\.js$|^page\.js$/g, '').replace(/\[(id|accountId)\]/g, '1'));
-  const reviewed = Object.values(routeGroups).flat();
+  const reviewed = [...Object.values(routeGroups).flat(), ...standaloneTrainingRoutes.map(([route])=>route)];
   for (const route of sourceRoutes) {
     if (['/login', '/workspace/[module]', '/records/[module]'].includes(route)) continue;
     expect(reviewed, `Missing route audit: ${route}`).toContain(route);
