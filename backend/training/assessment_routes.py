@@ -60,6 +60,8 @@ def practical_results(store,root,learner,row):
         finally:engine.dispose()
         score=evidence.get("practical_score",100 if ok else 0)
         critical=evidence.get("critical_pass",bool(ok))
+        if attempt['status']!='passed':
+            score=0;critical=False;evidence={**evidence,'correction':'Complete this task and use Check my work before submitting the final.'}
         if attempt["hints"]:
             score=0;critical=False;evidence={**evidence,"correction":"This final task used a hint. Start a fresh independent task in this final check."}
         correction=employee_feedback(evidence.get("correction", ""),lesson,values(lesson,"independent")) if score<100 else None

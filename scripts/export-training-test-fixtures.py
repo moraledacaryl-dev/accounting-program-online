@@ -10,6 +10,6 @@ from training.paths import PATHS
 
 print(json.dumps({'lessons':[{**public_lesson(row), 'answer':row.answer,
     'observation':practical_question(row,'guided')[1],
-    'variants':{mode:{**public_lesson(row,mode),'answer':row.answer,'observation':practical_question(row,mode)[1]} for mode in ('guided','assisted','independent')}} for row in LESSONS],
+    'variants':{mode:{**public_lesson(row,mode,include_steps=True),'answer':row.answer,'observation':practical_question(row,mode)[1]} for mode in ('guided','assisted','independent')}} for row in LESSONS],
     'exams':{path.id:{module or 'final':{q.id:q.answer for q in blueprint(path.id,module)['questions']}
         for module in sorted({row.module for row in LESSONS if row.id in path.lessons})+[None]} for path in PATHS}}))

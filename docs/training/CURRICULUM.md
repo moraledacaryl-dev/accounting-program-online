@@ -1,6 +1,6 @@
 # Accounting Training curriculum
 
-Version 2026.11.28.1: 35 distinct source-backed lessons in 13 modules.
+Version 2026.11.28.2: 35 distinct source-backed lessons in 13 modules.
 
 | Module | Lesson | Assigned roles |
 | --- | --- | --- |

@@ -1,7 +1,7 @@
 """Source-backed Accounting lessons. Every pass also needs saved business evidence."""
 from training.lesson_types import Lesson, Step
 
-VERSION = '2026.11.28.1'
+VERSION = '2026.11.28.2'
 ROLE_NAMES = {'cashier':'Cashier', 'front_desk':'Front Desk', 'accounting_admin':'Accounting',
               'manager':'Manager', 'auditor':'Auditor', 'owner':'Owner'}
 ROLES = tuple(ROLE_NAMES)

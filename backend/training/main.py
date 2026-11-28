@@ -129,7 +129,7 @@ def create_training_app(root: Path, *, guard_network: bool = True):
     @router.get("/catalogue")
     def catalogue():
         return {"version": VERSION, "roles": ROLE_NAMES, "paths":public_paths(),
-            "lessons": [public_lesson(lesson) for lesson in LESSONS], "capstones": CAPSTONES,
+            "lessons": [public_lesson(lesson,include_steps=False) for lesson in LESSONS], "capstones": CAPSTONES,
             "environment": "isolated-training", "modules": MODULES}
 
     @router.post("/enrol")
@@ -161,7 +161,7 @@ def create_training_app(root: Path, *, guard_network: bool = True):
         attempt = store.attempt(learner["id"])
         if attempt and attempt["curriculum_version"] != VERSION:
             attempt = None
-        lesson_payload=public_lesson(BY_ID[attempt["lesson_id"]],attempt["mode"]) if attempt and attempt["lesson_id"] in BY_ID else None
+        lesson_payload=public_lesson(BY_ID[attempt["lesson_id"]],attempt["mode"],include_steps=attempt['mode']=='guided' or attempt['hints']>0) if attempt and attempt["lesson_id"] in BY_ID else None
         inspected = False
         if attempt and attempt["lesson_id"] in BY_ID:
             path=root / f"attempt-{attempt['id']}.sqlite"
@@ -217,7 +217,9 @@ def create_training_app(root: Path, *, guard_network: bool = True):
     def checkpoint(payload: Checkpoint, request: Request):
         _, attempt = current_attempt(request)
         lesson = BY_ID[attempt["lesson_id"]]
-        if payload.step > len(public_lesson(lesson, attempt["mode"])["steps"]):
+        if attempt['mode']!='guided' and not attempt['hints']:
+            raise HTTPException(403,'Request a recorded hint before using a guided checkpoint.')
+        if payload.step > len(lesson.steps):
             raise HTTPException(422, "Invalid lesson checkpoint")
         with store.connect() as db:
             expression="?" if payload.revisit else "MAX(checkpoint,?)"
@@ -228,9 +230,12 @@ def create_training_app(root: Path, *, guard_network: bool = True):
     def hint(request: Request):
         _, attempt = current_attempt(request)
         with store.connect() as db:
-            db.execute("UPDATE attempts SET hints=hints+1 WHERE id=? AND status='active'", (attempt["id"],))
+            changed=db.execute("UPDATE attempts SET hints=hints+1 WHERE id=? AND status='active'", (attempt["id"],)).rowcount
+            if not changed:
+                raise HTTPException(409,'This attempt is preserved. Start a fresh practice before requesting guidance.')
+            hints=db.execute('SELECT hints FROM attempts WHERE id=?',(attempt['id'],)).fetchone()[0]
         store.event(attempt["id"], "hint", {})
-        return {"lesson": public_lesson(BY_ID[attempt["lesson_id"]], attempt["mode"])}
+        return {"lesson": public_lesson(BY_ID[attempt["lesson_id"]], attempt["mode"],include_steps=True),'hints':hints}
 
     @router.post("/check")
     def check(payload: Check, request: Request):
@@ -280,6 +285,17 @@ def create_training_app(root: Path, *, guard_network: bool = True):
         message = employee_feedback(message, lesson, values(lesson,attempt["mode"]))
         evidence.update(knowledge=knowledge, practical=practical, curriculum_version=VERSION)
         with store.connect() as db:
+            # Serialize pass recording with hint release. A hint arriving while
+            # the source records are verified must still disqualify independence.
+            db.execute('BEGIN IMMEDIATE')
+            latest=db.execute('SELECT status,hints,evidence FROM attempts WHERE id=?',(attempt['id'],)).fetchone()
+            if latest['status']=='passed':
+                return {'passed':True,'message':'This attempt has already passed.','evidence':json.loads(latest['evidence'])}
+            if latest['status']!='active':
+                raise HTTPException(409,'This practice changed. Return to the course to continue the current task.')
+            if attempt['mode']=='independent' and latest['hints']>0:
+                passed=False
+                message='You used guidance in this independent attempt. Practise with the hint, then start a fresh independent assessment.'
             if passed:
                 db.execute("UPDATE attempts SET status='passed',completed_at=CURRENT_TIMESTAMP,evidence=? WHERE id=? AND status='active'", (json.dumps(evidence), attempt["id"]))
             else:

@@ -86,13 +86,14 @@ def inspection_endpoint(lesson, db=None):
         'read-inbox':'/api/integration-review/page', 'read-bir':'/api/bir/books',
     }.get(lesson.id)
 
-def public_lesson(lesson, mode='guided'):
+def public_lesson(lesson, mode='guided', *, include_steps=None):
     data=values(lesson,mode)
     result=asdict(lesson)
     result.pop('answer',None)
     for key in ('route','situation','concept','example','rule','question','correction'):
         result[key]=_format(result[key],data)
-    result['steps']=[{key:_format(value,data) for key,value in asdict(step).items()} for step in lesson.steps]
+    show_steps=mode=='guided' if include_steps is None else include_steps
+    result['steps']=[{key:_format(value,data) for key,value in asdict(step).items()} for step in lesson.steps] if show_steps else []
     result.update(reference=data['reference'], practical_question=practical_question(lesson,mode)[0],
         inspection_route=result['route'], inspection_api_path=inspection_endpoint(lesson),
         curriculum_version=VERSION, practice_file_name=None)
@@ -217,7 +218,7 @@ def recover_checkpoint(db, lesson, mode, checkpoint, actions):
     # Uncommitted forms reopen from their first action; saved form drafts are
     # restored in the browser. Actual successful source actions skip only their
     # already-saved segment. The database verifier remains authoritative.
-    actual=public_lesson(lesson,mode)['steps']
+    actual=public_lesson(lesson,mode,include_steps=True)['steps']
     for index,step in reversed(list(enumerate(actual))):
         if step['outcome'] and any(row['path'].rstrip('/')==('/api'+step['outcome']).rstrip('/')
             and (row['status']==step['outcome_status'] if step['outcome_status'] else 200<=row['status']<300) for row in actions):
@@ -250,7 +251,7 @@ def verify(db, lesson, mode, actions=()):
         rows=db.query(MoneyTransaction).filter_by(reference_no=data['reference']).all()
         direction='out' if id=='payment' else 'in'
         expected=5000+(-1 if direction=='out' else 1)*data['amount']
-        result=len(rows)==1 and eq(rows[0].amount,data['amount']) and rows[0].direction==direction and rows[0].financial_account_id==IDS['cash'] and rows[0].created_by=='training_actor' and rows[0].status=='posted' and eq(cash.current_balance,expected)
+        result=len(rows)==1 and eq(rows[0].amount,data['amount']) and rows[0].direction==direction and rows[0].financial_account_id==IDS['cash'] and rows[0].created_by=='training_actor' and rows[0].status=='posted' and eq(cash.current_balance,expected) and ' '.join((rows[0].counterparty_name or '').split()).casefold()==' '.join(data['counterparty'].split()).casefold()
         if id=='receipt-with-journal' and result:
             journal=db.get(JournalEntry,rows[0].journal_entry_id) if rows[0].journal_entry_id else None
             result=bool(journal and journal.status=='posted' and len(journal.lines)>=2 and eq(sum(line.debit for line in journal.lines),data['amount']) and eq(sum(line.credit for line in journal.lines),data['amount']))
@@ -305,7 +306,7 @@ def verify(db, lesson, mode, actions=()):
         result=len(rows)==1 and eq(rows[0].proceeds_amount,data['amount']) and rows[0].income_record_id is not None and db.get(Asset,IDS['asset']).operational_status=='Disposed' and db.query(JournalEntry).count()==1
     evidence={'source_verified':bool(result),'reference':data['reference'],'curriculum_version':VERSION,
               'critical_pass':bool(result),'practical_score':100 if result else 0}
-    if not result:evidence['correction']='The saved source evidence does not yet match the practice document. Check the account, amount, reference and status. Use Reset this practice if an incorrect posting was saved; your earlier attempt stays in history.'
+    if not result:evidence['correction']='The saved source evidence does not yet match the practice document. Check the payer/payee, account, amount, reference and status. Use Reset this practice if an incorrect posting was saved; your earlier attempt stays in history.'
     return bool(result),evidence
 
 def practice_csv(*args):return None

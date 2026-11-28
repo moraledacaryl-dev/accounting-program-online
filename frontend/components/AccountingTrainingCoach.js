@@ -19,7 +19,6 @@ export function AccountingTrainingCoach() {
     const [feedback, setFeedback] = useState("");
     const [passed, setPassed] = useState(false);
     const [busy, setBusy] = useState(false);
-    const [showHint, setShowHint] = useState(false);
     const [expanded, setExpanded] = useState(true);
     const [missing, setMissing] = useState(false);
     const [navigationInstruction, setNavigationInstruction] = useState("");
@@ -28,7 +27,6 @@ export function AccountingTrainingCoach() {
     const readPaths = useRef(new Map());
     const coachRef = useRef(null);
     const loadedAttempt = useRef(undefined);
-    const guideRef = useRef(null);
     const visible = trainingEnabled && !pathname.startsWith("/training");
     const load = useCallback(async () => {
         if (!visible)
@@ -55,7 +53,7 @@ export function AccountingTrainingCoach() {
     }, [visible]);
     useEffect(() => { void load(); }, [load, pathname]);
     const lesson = profile?.lesson;
-    const guided = profile?.attempt?.mode === "guided" || showHint;
+    const guided = profile?.attempt?.mode === "guided" || (profile?.attempt?.hints || 0) > 0;
     const current = guided ? lesson?.steps[step] : undefined;
     const showTaskAmount = false;
     useEffect(() => { coachRef.current?.scrollTo({ top: 0, behavior: "instant" }); }, [current?.instruction]);
@@ -303,8 +301,7 @@ export function AccountingTrainingCoach() {
     } }
     async function hint() { setBusy(true); try {
         const result = await api("/training/hint", { method: "POST" });
-        guideRef.current = result.lesson;
-        setShowHint(true);
+        setProfile(previous => ({...previous,lesson:result.lesson,attempt:{...previous.attempt,hints:result.hints}}));
         setExpanded(true);
     }
     catch (exception) {

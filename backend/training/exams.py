@@ -10,7 +10,7 @@ from training.curriculum import BY_ID, VERSION
 from training.paths import BY_PATH
 from training.employee_copy import employee_text
 
-ASSESSMENT_VERSION="2026.11.28.1"
+ASSESSMENT_VERSION="2026.11.28.2"
 
 
 @dataclass(frozen=True)

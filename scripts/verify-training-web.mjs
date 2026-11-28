@@ -9,5 +9,5 @@ if(!rewrites.some(rule=>rule.source==="/api/:path*"&&rule.destination==="http://
 const home=fs.readFileSync(path.join(root,"server/app/index.html"),"utf8");
 if(!home.includes('/training'))throw new Error("Build does not open the training course");
 const contract=fs.readFileSync(path.resolve(import.meta.dirname,'../docs/training/source-contract.json'));
-fs.writeFileSync(path.join(root,"standalone/accounting-training-build.json"),JSON.stringify({environment:"isolated-training",api_origin:"http://127.0.0.1:8420",format:"next-standalone",curriculum_version:'2026.11.28.1',source_commit:execFileSync('git',['rev-parse','HEAD'],{cwd:path.resolve(import.meta.dirname,'..'),encoding:'utf8'}).trim(),source_contract_sha256:createHash('sha256').update(contract).digest('hex')})+"\n");
+fs.writeFileSync(path.join(root,"standalone/accounting-training-build.json"),JSON.stringify({environment:"isolated-training",api_origin:"http://127.0.0.1:8420",format:"next-standalone",curriculum_version:'2026.11.28.2',source_commit:execFileSync('git',['rev-parse','HEAD'],{cwd:path.resolve(import.meta.dirname,'..'),encoding:'utf8'}).trim(),source_contract_sha256:createHash('sha256').update(contract).digest('hex')})+"\n");
 console.log("Verified standalone training routing and recorded build identity");

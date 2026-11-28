@@ -1,5 +1,5 @@
 """Plain-language feedback shared by learning and final checks."""
-COPY_VERSION = '2026.11.28.1'
+COPY_VERSION = '2026.11.28.2'
 
 def employee_text(value):
     return str(value)

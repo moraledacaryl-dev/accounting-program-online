@@ -19,7 +19,7 @@ def main():
     actual=sources()
     if args.record_reviewed_source:
         CONTRACT.parent.mkdir(parents=True,exist_ok=True)
-        CONTRACT.write_text(json.dumps({'accounting_baseline':'ad1a350b87cb19f09533043143f44dbb532b9cff','curriculum_version':'2026.11.28.1','reviewed_training_ui_fixes':['cash-count form retains and submits actual entered count','folio route reads Next dynamic parameters through useParams'],'files':actual},indent=2)+'\n')
+        CONTRACT.write_text(json.dumps({'accounting_baseline':'e4a1c2ef65fca898f5aba843cda812e219b982dd','curriculum_version':'2026.11.28.2','reviewed_training_ui_fixes':['cash-count form retains and submits actual entered count','folio route reads Next dynamic parameters through useParams'],'files':actual},indent=2)+'\n')
     else:
         expected=json.loads(CONTRACT.read_text())['files']
         changed=sorted(name for name in set(expected)|set(actual) if expected.get(name)!=actual.get(name))
