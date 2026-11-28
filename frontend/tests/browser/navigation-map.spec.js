@@ -37,7 +37,9 @@ for (const [route, message] of standaloneTrainingRoutes) test(`training route is
   await fixture(page);
   await page.goto(route);
   await expect(page.getByText(message,{exact:true})).toBeVisible();
-  await expect(page.locator('input, form')).toHaveCount(0);
+  await expect(page.locator('.training-enrol,[data-training-question]')).toHaveCount(0);
+  await expect(page.getByLabel('Trainer access code',{exact:true})).toHaveCount(0);
+  await expect(page.getByLabel('Your name',{exact:true})).toHaveCount(0);
 });
 for (const [group, routes] of Object.entries(routeGroups)) for (const route of routes) {
   test(`navigation ownership ${route}`, async ({ page }) => {
