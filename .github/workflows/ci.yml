@@ -209,7 +209,7 @@ jobs:
         working-directory: frontend
         run: |
           set -euo pipefail
-          PLAYWRIGHT_SKIP_BROWSER_DOWNLOAD=1 npm install --no-save --package-lock=false @playwright/test@1.55.0 @axe-core/playwright@4.10.2
+          PLAYWRIGHT_SKIP_BROWSER_DOWNLOAD=1 npm install --no-save --package-lock=false @playwright/test@1.55.1 @axe-core/playwright@4.10.2
           command -v google-chrome
 
       - name: Run browser regression blocker

@@ -181,7 +181,7 @@
     "backend/requirements.lock.txt": "e039a125900c54312a4e5c4d10ab8f06e7894cd8fef4803991408ae344c3feba",
     "backend/training-requirements.txt": "936b03cd7aa40a57a88ae9070387f8e56b1ba06ef8b4867de25015a91c47882b",
     "frontend/next.config.js": "a5dd90be3d88cdbdde673e1528bcdda089b31a2c5744ce9fbcc7157336c1e13a",
-    "frontend/package-lock.json": "c7c156597dbe01cee6c83a92a53a3548a2db93e36fe24bfb44d7dd085dcebad0",
+    "frontend/package-lock.json": "0912077df6d4f7995c8cbe10540107c442ab35258ea7835cb0ba1556327a5d66",
     "shared/module_index.json": "e8769b0f25bf5c6f9b81365f2b20bf8c5864bc6d51e0c52ca5c6144399017852",
     "shared/taxonomy.json": "392f7594108da42451bd5868bae1b52e30e6194ca1a2de5c33e0ceda63415908"
   }
