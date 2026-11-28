@@ -27,7 +27,7 @@ for folder in (stage,web):
 args=[sys.executable,"-m","PyInstaller","--noconfirm","--clean","--onedir","--name","Hidden Oasis Accounting Training",
     "--paths",str(ROOT/"backend"),"--collect-submodules","app","--collect-submodules","training",
     "--collect-submodules","uvicorn","--collect-submodules","sqlalchemy",
-    "--hidden-import","passlib.handlers.pbkdf2","--hidden-import","email_validator","--collect-submodules","jwt",
+    "--hidden-import","passlib.handlers.pbkdf2","--hidden-import","passlib.handlers.bcrypt","--collect-submodules","bcrypt","--collect-submodules","tzdata","--collect-data","tzdata","--collect-submodules","jwt",
     "--add-data",str(stage/"backend")+os.pathsep+"backend",
     "--add-data",str(stage/"shared")+os.pathsep+"shared",
     "--add-data",str(stage/"runtime")+os.pathsep+"runtime",

@@ -12,7 +12,7 @@ def sources():
     for folder in ('app','components','lib'):
         files.extend(path for path in (ROOT/'frontend'/folder).rglob('*.js')
             if 'training' not in path.as_posix().lower())
-    files.extend(ROOT/name for name in ('frontend/package-lock.json','backend/requirements.lock.txt','frontend/next.config.js'))
+    files.extend(ROOT/name for name in ('frontend/package-lock.json','backend/requirements.lock.txt','frontend/next.config.js','backend/training-requirements.txt'))
     return {path.relative_to(ROOT).as_posix():digest(path) for path in sorted(files)}
 def main():
     parser=argparse.ArgumentParser();parser.add_argument('--record-reviewed-source',action='store_true');args=parser.parse_args()

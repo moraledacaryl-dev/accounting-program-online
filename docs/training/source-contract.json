@@ -179,6 +179,7 @@
     "backend/app/workers/beds24_cancellation_reconcile_worker.py": "924dfd8d9deba0f89a35c11373ae92aa45fb30bdc1c4fb02e0d8a30360562eb1",
     "backend/app/workers/operations_outbox_worker.py": "b5b9914d00bb840b300c841ebf389adf79c41ce1e465f8fa6290e74132380759",
     "backend/requirements.lock.txt": "e039a125900c54312a4e5c4d10ab8f06e7894cd8fef4803991408ae344c3feba",
+    "backend/training-requirements.txt": "936b03cd7aa40a57a88ae9070387f8e56b1ba06ef8b4867de25015a91c47882b",
     "frontend/next.config.js": "a5dd90be3d88cdbdde673e1528bcdda089b31a2c5744ce9fbcc7157336c1e13a",
     "frontend/package-lock.json": "c7c156597dbe01cee6c83a92a53a3548a2db93e36fe24bfb44d7dd085dcebad0",
     "shared/module_index.json": "e8769b0f25bf5c6f9b81365f2b20bf8c5864bc6d51e0c52ca5c6144399017852",

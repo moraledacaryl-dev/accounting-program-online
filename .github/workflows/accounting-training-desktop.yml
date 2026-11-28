@@ -31,7 +31,7 @@ jobs:
         with: {python-version: '3.12'}
       - uses: actions/setup-node@v4
         with: {node-version: '22'}
-      - run: pip install -r backend/requirements-test.txt pyinstaller==6.16.0
+      - run: pip install -r backend/training-requirements.txt pytest==9.1.1 httpx==0.28.1 pyinstaller==6.16.0
       - run: npm ci
         working-directory: frontend
       - run: python scripts/training-source-contract.py
