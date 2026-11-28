@@ -12,6 +12,8 @@ const securityHeaders = [
 
 const nextConfig = {
   reactStrictMode: true,
+  ...(process.env.NEXT_PUBLIC_ACCOUNTING_TRAINING==='1'?{output:'standalone'}:{}),
+  async rewrites(){return process.env.NEXT_PUBLIC_ACCOUNTING_TRAINING==='1'?[{source:'/api/:path*',destination:'http://127.0.0.1:8420/api/:path*'}]:[];},
   poweredByHeader: false,
   outputFileTracingRoot: path.join(__dirname),
   async headers() {

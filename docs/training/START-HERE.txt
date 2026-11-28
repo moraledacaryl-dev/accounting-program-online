@@ -1,0 +1,29 @@
+HIDDEN OASIS — ACCOUNTING TRAINING
+
+1. Extract the package for your computer into its own folder.
+2. Open Hidden Oasis Accounting Training. Its course opens in your browser.
+3. Enter your name and select the responsibilities assigned by your trainer.
+4. Open a lesson: Guided practice → Try with help available → Independent assessment.
+5. Finish the applicable module checks, then the duty-course final.
+
+Use the fictional names, amounts and references supplied by each task.
+The highlighted controls are the actual Accounting screens. The app checks
+saved Accounting records, balances and links before awarding a pass.
+
+Everything runs locally. No production sign-in, bank connection, live database,
+internet connection, Python installation or Node installation is required.
+Keep the training application running while you work in the browser.
+
+Saved transactions and completed results survive reopening the app. Unsaved
+form fields restart when the page reloads; the guide returns to a safe point.
+"Reset this practice" creates fresh fictional records and keeps earlier history.
+"Download my progress" exports your local learning evidence.
+Sign out before a different employee uses the same browser.
+
+These packages follow the existing unsigned training-app distribution model.
+macOS packages have an ad-hoc signature and are not notarized. If macOS blocks
+the trusted app, use System Settings → Privacy & Security → Open Anyway.
+Windows may show an unknown-publisher prompt. Ask your trainer to confirm the
+package checksum before using an exception.
+
+For trainer access, recovery, assessment rules and known coverage, see TRAINER.md.

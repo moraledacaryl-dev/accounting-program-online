@@ -2,6 +2,7 @@
 import { businessDateISO } from '../../../lib/businessDate';
 
 import Link from 'next/link';
+import { useParams } from 'next/navigation';
 import { useEffect, useMemo, useState } from 'react';
 import {
   createRoomFolioLine,
@@ -72,7 +73,8 @@ function todayIso() {
   return businessDateISO();
 }
 
-export default function RoomFolioDetailPage({ params }) {
+export default function RoomFolioDetailPage() {
+  const params = useParams();
   const confirmAction = useConfirmAction();
   const inputAction = useInputAction();
   const folioId = Number(params.id);
