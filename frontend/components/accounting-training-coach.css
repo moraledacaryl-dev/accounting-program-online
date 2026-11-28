@@ -5,3 +5,7 @@
 .accounting-training-coach .accounting-training-current-instruction{font-size:16px;line-height:1.5}.accounting-training-banner>a{display:inline-flex;align-items:center;min-height:44px}@media(max-width:759px){.accounting-training-banner{gap:8px;padding:5px 8px}}
 body:has(.accounting-training-banner) .workspace-drawer-backdrop{top:54px}
 @media(max-width:759px){body:has(.accounting-training-coach) .workspace-drawer-backdrop{inset:54px 0 44dvh}body:has(.accounting-training-coach) .workspace-drawer{height:100%;max-height:100%}}
+.accounting-training-coach button{background:white!important;color:#284e37!important;border:1px solid #9fae97!important;border-radius:5px!important;padding:8px 12px!important}
+.accounting-training-coach button.accounting-training-check{background:#23593f!important;color:white!important;border-color:#23593f!important}
+.accounting-training-coach button.accounting-training-text-button{background:transparent!important;border:0!important;padding:3px 0!important;color:#215d43!important}
+.accounting-training-network-notice{position:fixed;inset:68px 16px auto auto;width:min(420px,calc(100vw - 32px));z-index:24000;padding:20px;border:1px solid #b57b42;border-radius:8px;background:#fff9ee;color:#173c30;box-shadow:0 12px 40px #122d3633}

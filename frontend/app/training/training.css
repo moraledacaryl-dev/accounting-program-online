@@ -8,3 +8,12 @@
 .training-reference li {margin:8px 0}
 .training-reference dt {font-weight:650;margin-top:16px}
 .training-reference dd {margin:4px 0 12px;max-width:72ch}
+/* The operational foundation uses a deliberately strong global button rule.
+   Keep course controls scoped and readable without changing source screens. */
+.accounting-training button{background:#fff!important;color:#20523f!important;border:1px solid #aabdaf!important;border-radius:6px!important;padding:10px 18px!important}
+.accounting-training button.training-primary{background:#205b45!important;color:#fff!important;border-color:#205b45!important}
+.accounting-training .training-tabs button{background:transparent!important;color:#52655e!important;border:0!important;border-radius:0!important;padding:12px 0!important;border-bottom:3px solid transparent!important}
+.accounting-training .training-tabs button[aria-current]{color:#17432e!important;border-bottom-color:#265a42!important;font-weight:700}
+.accounting-training button.training-lesson-title{background:transparent!important;border:0!important;padding:0!important;color:#15352e!important;min-height:44px;text-align:left}
+.accounting-training button.training-open{background:transparent!important;border:0!important;padding:4px 12px!important}
+.accounting-training .training-simulations button,.accounting-training button.training-back{background:transparent!important;border:0!important}
