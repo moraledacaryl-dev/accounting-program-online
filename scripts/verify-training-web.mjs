@@ -1,0 +1,13 @@
+import fs from "node:fs";
+import path from "node:path";
+import {execFileSync} from 'node:child_process';
+import {createHash} from 'node:crypto';
+const root=path.resolve(import.meta.dirname,"../frontend/.next");
+const manifest=JSON.parse(fs.readFileSync(path.join(root,"routes-manifest.json"),"utf8"));
+const rewrites=Array.isArray(manifest.rewrites)?manifest.rewrites:Object.values(manifest.rewrites).flat();
+if(!rewrites.some(rule=>rule.source==="/api/:path*"&&rule.destination==="http://127.0.0.1:8420/api/:path*"))throw new Error("Build is not connected to the isolated training API");
+const home=fs.readFileSync(path.join(root,"server/app/index.html"),"utf8");
+if(!home.includes('/training'))throw new Error("Build does not open the training course");
+const contract=fs.readFileSync(path.resolve(import.meta.dirname,'../docs/training/source-contract.json'));
+fs.writeFileSync(path.join(root,"standalone/accounting-training-build.json"),JSON.stringify({environment:"isolated-training",api_origin:"http://127.0.0.1:8420",format:"next-standalone",curriculum_version:'2026.11.28.2',source_commit:execFileSync('git',['rev-parse','HEAD'],{cwd:path.resolve(import.meta.dirname,'..'),encoding:'utf8'}).trim(),source_contract_sha256:createHash('sha256').update(contract).digest('hex')})+"\n");
+console.log("Verified standalone training routing and recorded build identity");

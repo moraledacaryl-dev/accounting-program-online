@@ -1,5 +1,7 @@
+import {trainingAttempt,forgetTrainingAttempt} from './training-session';
 const API_BASE = process.env.NEXT_PUBLIC_API_BASE || '/api';
-const CSRF_COOKIE_NAME = 'erp_csrf';
+const TRAINING = process.env.NEXT_PUBLIC_ACCOUNTING_TRAINING === '1';
+const CSRF_COOKIE_NAME = TRAINING ? 'accounting_training_csrf' : 'erp_csrf';
 const CSRF_HEADER_NAME = 'X-CSRF-Token';
 const CSRF_EXEMPT_PATHS = new Set(['/auth/login', '/auth/integration/token', '/auth/csrf']);
 const UNSAFE_METHODS = new Set(['POST', 'PUT', 'PATCH', 'DELETE']);
@@ -18,7 +20,7 @@ async function ensureCsrfHeader(path, method, headers) {
   let csrfToken = getCookie(CSRF_COOKIE_NAME);
   if (!csrfToken) {
     try {
-      const res = await fetch(`${API_BASE}/auth/csrf`, { cache: 'no-store', credentials: 'include' });
+      const res = await fetch(`${API_BASE}/auth/csrf`, { cache: 'no-store', credentials: 'include', headers: TRAINING ? {'X-Training-Attempt':trainingAttempt()||'', 'X-Requested-With':'HiddenOasisAccountingTraining'} : {} });
       if (res.ok) {
         const data = await res.json().catch(() => null);
         csrfToken = data?.csrf_token || getCookie(CSRF_COOKIE_NAME);
@@ -32,11 +34,18 @@ async function ensureCsrfHeader(path, method, headers) {
 
 async function request(path, init = {}) {
   const headers = { ...(init.headers || {}) };
+  if(TRAINING){
+    if(API_BASE!=='/api')throw new Error('Training cannot use an external API address.');
+    headers['X-Requested-With']='HiddenOasisAccountingTraining';
+    if(typeof window!=='undefined')headers['X-Training-Attempt']=trainingAttempt()||'';
+  }
   if (!(init.body instanceof FormData) && init.body && !headers['Content-Type']) headers['Content-Type'] = 'application/json';
   await ensureCsrfHeader(path, init.method, headers);
   const res = await fetch(`${API_BASE}${path}`, { cache: 'no-store', credentials: 'include', ...init, headers });
   let data = null;
   try { data = await res.json(); } catch { data = null; }
+  if(TRAINING && res.headers.get('x-accounting-environment')!=='isolated-training')throw new Error('This server did not identify itself as isolated Accounting Training.');
+  if(TRAINING && typeof window!=='undefined' && !path.startsWith('/training/'))window.dispatchEvent(new CustomEvent('accounting-training-action',{detail:{path,method:init.method||'GET',status:res.status}}));
   if (res.status === 401 && !CSRF_EXEMPT_PATHS.has(path) && typeof window !== 'undefined') {
     window.dispatchEvent(new Event('accounting:session-expired'));
   }
@@ -68,7 +77,11 @@ export { API_BASE, request, readApiMessage };
 
 export const bootstrap = () => request('/auth/bootstrap', { method: 'POST' });
 export const login = (payload) => request('/auth/login', { method: 'POST', body: JSON.stringify(payload) });
-export const logout = () => request('/auth/logout', { method: 'POST' });
+export const logout = async () => {
+  if(!TRAINING)return request('/auth/logout', {method:'POST'});
+  await request('/training/sign-out',{method:'POST'});forgetTrainingAttempt();
+  window.location.assign('/training');
+};
 export const me = () => request('/auth/me');
 
 export const getDashboard = () => request('/dashboard/summary');

@@ -1,0 +1,176 @@
+name: Accounting training unsigned desktop builds
+on:
+  workflow_dispatch:
+  pull_request:
+    paths:
+      - 'backend/**'
+      - 'frontend/**'
+      - 'scripts/*training*'
+      - 'docs/training/source-contract.json'
+      - '.github/workflows/accounting-training-desktop.yml'
+permissions: {contents: read}
+jobs:
+  source-checks:
+    name: Training source and evidence checks
+    runs-on: ubuntu-latest
+    env: {PYTHONPATH: backend, PGUSER: '', PGPASSWORD: '', PGHOST: '', PGDATABASE: ''}
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ github.event.pull_request.head.sha || github.sha }}
+      - uses: actions/setup-python@v5
+        with: {python-version: '3.12'}
+      - run: python scripts/training-source-contract.py
+      - run: pip install -r backend/training-requirements.txt pytest==9.1.1 httpx==0.28.1
+      - run: python -m pytest backend/training/tests -q
+  build:
+    needs: source-checks
+    strategy:
+      fail-fast: false
+      matrix: {os: [macos-latest, macos-15-intel, windows-latest]}
+    runs-on: ${{ matrix.os }}
+    # Hosted Windows exports PostgreSQL defaults. Smoke tests intentionally
+    # provide no DB credentials; the runtime continues to reject nonempty ones.
+    env:
+      PGUSER: ''
+      PGPASSWORD: ''
+      PGHOST: ''
+      PGDATABASE: ''
+    timeout-minutes: 35
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ github.event.pull_request.head.sha || github.sha }}
+      - uses: actions/setup-python@v5
+        with: {python-version: '3.12'}
+      - uses: actions/setup-node@v4
+        with: {node-version: '22'}
+      - run: pip install -r backend/training-requirements.txt pytest==9.1.1 httpx==0.28.1 pyinstaller==6.16.0
+      - run: npm ci
+        working-directory: frontend
+      - run: python scripts/training-source-contract.py
+      - run: npm run build
+        working-directory: frontend
+        env: {NEXT_PUBLIC_ACCOUNTING_TRAINING: '1', NEXT_TELEMETRY_DISABLED: '1'}
+      - name: Prepare web assets
+        shell: python
+        run: |
+          from pathlib import Path
+          import shutil
+          target=Path('frontend/.next/standalone')
+          shutil.copytree('frontend/.next/static',target/'.next/static',dirs_exist_ok=True)
+          if Path('frontend/public').exists(): shutil.copytree('frontend/public',target/'public',dirs_exist_ok=True)
+      - run: node scripts/verify-training-web.mjs
+      - run: python scripts/build-accounting-training-desktop.py
+      - name: Verify macOS bundle before use
+        if: runner.os == 'macOS'
+        run: codesign --verify --deep --strict 'dist/Hidden Oasis Accounting Training.app'
+      - name: Verify frozen API starts without Python, database credentials or production endpoints
+        shell: python
+        run: |
+          from pathlib import Path
+          import json, os, subprocess, time
+          from urllib.request import urlopen
+          if os.name=='nt': executable=Path('dist/Hidden Oasis Accounting Training/Hidden Oasis Accounting Training.exe')
+          else: executable=Path('dist/Hidden Oasis Accounting Training.app/Contents/MacOS/Hidden Oasis Accounting Training')
+          data=Path(os.environ['RUNNER_TEMP'])/'desktop-smoke'/'accounting-training'
+          child=subprocess.Popen([str(executable.resolve()),'--training-api','--data',str(data)],cwd=Path(os.environ['RUNNER_TEMP']))
+          try:
+            for _ in range(100):
+              if child.poll() is not None: raise RuntimeError('Frozen API exited')
+              try:
+                with urlopen('http://127.0.0.1:8420/api/training/catalogue',timeout=1) as response:
+                  assert json.load(response)['environment']=='isolated-training'
+                break
+              except OSError: time.sleep(.25)
+            else: raise RuntimeError('Frozen API did not become ready')
+          finally: child.terminate();child.wait(timeout=10)
+      - name: Start complete native launcher for employee workflow checks
+        shell: python
+        run: |
+          from pathlib import Path
+          import json, os, subprocess, time
+          from urllib.request import urlopen
+          temp=Path(os.environ['RUNNER_TEMP'])
+          executable=Path('dist/Hidden Oasis Accounting Training/Hidden Oasis Accounting Training.exe') if os.name=='nt' else Path('dist/Hidden Oasis Accounting Training.app/Contents/MacOS/Hidden Oasis Accounting Training')
+          log=open(temp/'native-training.log','w')
+          child=subprocess.Popen([str(executable.resolve())],env={**os.environ,'LOCALAPPDATA':str(temp/'native-learner-state'),'ACCOUNTING_TRAINING_NO_BROWSER':'1'},stdout=log,stderr=log)
+          (temp/'native-training.pid').write_text(str(child.pid))
+          with open(os.environ['GITHUB_ENV'],'a',encoding='utf-8') as envfile:
+            envfile.write(f"TRAINING_MANAGER_KEY_PATH={temp/'native-learner-state'/'HiddenOasis'/'accounting-training'/'manager-key'}\n")
+          for _ in range(100):
+            if child.poll() is not None:
+              error=temp/'native-learner-state'/'HiddenOasis'/'accounting-training'/'launcher-error.log'
+              if error.exists(): print(error.read_text())
+              raise RuntimeError('Native launcher exited; inspect native-training.log')
+            try:
+              with urlopen('http://127.0.0.1:3420/api/training/catalogue',timeout=1) as response:
+                assert json.load(response)['environment']=='isolated-training'
+              break
+            except OSError: time.sleep(.25)
+          else: raise RuntimeError('Complete native app did not become ready')
+      - name: Prepare private browser test fixtures
+        shell: bash
+        run: python scripts/export-training-test-fixtures.py > "$RUNNER_TEMP/training-test-fixtures.json"
+      - run: npx playwright install chromium
+        working-directory: frontend
+      - run: npx playwright test --config playwright.training.config.js
+        env:
+          TRAINING_TEST_FIXTURES: ${{ runner.temp }}/training-test-fixtures.json
+        working-directory: frontend
+      - name: Verify macOS bundle remains unchanged after employee workflows
+        if: runner.os == 'macOS'
+        run: codesign --verify --deep --strict 'dist/Hidden Oasis Accounting Training.app'
+      - name: Stop native training processes
+        if: always()
+        shell: python
+        run: |
+          from pathlib import Path
+          import os, signal, subprocess
+          pidfile=Path(os.environ['RUNNER_TEMP'])/'native-training.pid'
+          if pidfile.exists():
+            pid=int(pidfile.read_text())
+            if os.name=='nt': subprocess.run(['taskkill','/PID',str(pid),'/T','/F'],check=False)
+            else:
+              try: os.kill(pid,signal.SIGTERM)
+              except ProcessLookupError: pass
+      - name: Verify native offline training recovery after employee workflows
+        shell: python
+        run: |
+          from pathlib import Path
+          import os, subprocess, sys
+          executable=Path('dist/Hidden Oasis Accounting Training/Hidden Oasis Accounting Training.exe') if os.name=='nt' else Path('dist/Hidden Oasis Accounting Training.app/Contents/MacOS/Hidden Oasis Accounting Training')
+          temp=Path(os.environ['RUNNER_TEMP'])
+          subprocess.run([sys.executable,'scripts/verify-training-recovery.py','--executable',str(executable),'--data',str(temp/'native-learner-state'/'HiddenOasis'/'accounting-training'),'--work',str(temp/'private-native-recovery')],check=True)
+      - name: Archive native package preserving macOS bundle links
+        shell: python
+        run: |
+          from pathlib import Path
+          import hashlib, json, os, platform, shutil, subprocess
+          name='accounting-training-'+platform.system().lower()+'-'+platform.machine()+'-unsigned'
+          archive=Path('dist')/(name+'.zip')
+          if os.name=='nt': shutil.make_archive(str(archive.with_suffix('')),'zip','dist','Hidden Oasis Accounting Training')
+          else: subprocess.run(['ditto','-c','-k','--keepParent','dist/Hidden Oasis Accounting Training.app',str(archive)],check=True)
+          import sys
+          sys.path.insert(0,'backend')
+          from training.curriculum import LESSONS, VERSION
+          from training.employee_copy import COPY_VERSION
+          release={'source_commit':subprocess.check_output(['git','rev-parse','HEAD'],text=True).strip(),'curriculum_version':VERSION,'employee_copy_version':COPY_VERSION,'lesson_definitions':len(LESSONS),'platform':platform.system(),'architecture':platform.machine(),'signing':'unsigned; macOS ad-hoc signature only','package':archive.name,'sha256':hashlib.sha256(archive.read_bytes()).hexdigest(),'native_recovery':json.loads(Path('dist/TRAINING-RECOVERY-PROOF.json').read_text())}
+          for filename in ('START-HERE.txt','TRAINER.md'):
+            shutil.copy2(Path('docs/training')/filename,Path('dist')/filename)
+          Path('dist/RELEASE.json').write_text(json.dumps(release,indent=2)+'\n')
+          Path('dist/SHA256SUMS.txt').write_text(hashlib.sha256(archive.read_bytes()).hexdigest()+'  '+archive.name+'\n')
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: accounting-training-unsigned-${{ matrix.os }}
+          path: |
+            dist/*.zip
+            dist/SHA256SUMS.txt
+            dist/RELEASE.json
+            dist/TRAINING-RECOVERY-PROOF.json
+            dist/START-HERE.txt
+            dist/TRAINER.md
+            frontend/training-report/
+            frontend/training-test-results/
+            ${{ runner.temp }}/native-training.log

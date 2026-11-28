@@ -14,6 +14,7 @@ export default function AppFrame({ children }) {
   const pathname = usePathname();
   const { loaded, user } = useAppShell();
   const isAuthenticationRoute = pathname === '/login';
+  if(process.env.NEXT_PUBLIC_ACCOUNTING_TRAINING==='1'&&pathname.startsWith('/training'))return children;
 
   if (isAuthenticationRoute) {
     return (

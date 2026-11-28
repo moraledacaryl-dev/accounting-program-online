@@ -62,6 +62,7 @@ import './sidebar.css';
 import './shell-controls.css';
 import './event-calendar-mobile.css';
 import './accounting-workspace.css';
+import AccountingTrainingBoundary from '../components/AccountingTrainingBoundary';
 import ConfirmActionProvider from '../components/ConfirmActionProvider';
 import InputActionProvider from '../components/InputActionProvider';
 import LegacyBrowserCredentialPurge from '../components/LegacyBrowserCredentialPurge';
@@ -81,6 +82,7 @@ export default function RootLayout({ children }) {
             <ConfirmActionProvider>
               <InputActionProvider>
                 <AppFrame>{children}</AppFrame>
+                <AccountingTrainingBoundary />
               </InputActionProvider>
             </ConfirmActionProvider>
           </AppShellProvider>

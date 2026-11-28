@@ -67,3 +67,8 @@ backend/.venv/
 backend/venv/
 __pycache__/
 *.pyc
+build/
+dist/
+*.spec
+frontend/training-report/
+frontend/training-test-results/

@@ -31,7 +31,7 @@ export default function RouteGuard({ children }) {
     if (!user) {
       const returnPath = `${window.location.pathname}${window.location.search}${window.location.hash}`;
       const next = pathname && pathname !== '/' ? `?next=${encodeURIComponent(returnPath)}` : '';
-      window.location.replace(`/login${next}`);
+      window.location.replace(process.env.NEXT_PUBLIC_ACCOUNTING_TRAINING==='1'?'/training':`/login${next}`);
       return;
     }
     if (pathHasAccess(pathname, can)) return;

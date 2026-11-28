@@ -79,7 +79,7 @@ jobs:
       - name: Install pinned Chromium audit tooling
         working-directory: frontend
         run: |
-          npm install --no-save --package-lock=false @playwright/test@1.55.0
+          npm install --no-save --package-lock=false @playwright/test@1.55.1
           for source in /etc/apt/sources.list.d/*; do
             if [ -f "$source" ] && grep -q 'dl.google.com/linux/chrome' "$source"; then sudo rm -f "$source"; fi
           done
